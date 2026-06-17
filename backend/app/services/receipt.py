@@ -25,8 +25,9 @@ def _find_receipt(obj):
 
 
 def _money(v) -> float:
+    # ФНС /scan отдаёт суммы уже в рублях (float) — делить на 100 НЕ нужно.
     try:
-        return round(float(v) / 100, 2)  # копейки -> рубли
+        return round(float(v), 2)
     except (TypeError, ValueError):
         return 0.0
 
