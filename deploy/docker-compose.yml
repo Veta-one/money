@@ -1,24 +1,23 @@
+# Интеграция в существующий Caddy на сервере (сеть my_server_caddy_net).
+# Свой nginx НЕ поднимаем, порты 80/443 не трогаем — их держит caddy_dispatcher.
+# Caddy проксирует money.vetaone.site -> money_app:8000 (см. deploy/caddy-money.conf).
 services:
   app:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    container_name: money_app
     env_file: ../backend/.env
     volumes:
-      - ../backend/data:/app/data       # SQLite + токены ФНС живут тут (бэкапим эту папку)
-    restart: unless-stopped
+      - ../backend/data:/app/data        # SQLite + токены ФНС (эту папку бэкапим)
     expose:
-      - "8000"
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ../frontend/dist:/usr/share/nginx/html:ro   # сборка мини-аппа
-      - /etc/letsencrypt:/etc/letsencrypt:ro          # сертификаты Let's Encrypt
-    depends_on:
-      - app
+      - "8000"                            # только внутри docker-сети, без публикации на хост
+    mem_limit: 512m                       # защита соседних сервисов: при OOM прибьёт НАС
+    memswap_limit: 768m
     restart: unless-stopped
+
+# Подключаемся к уже существующей сети Caddy (создана проектом my_server).
+networks:
+  default:
+    name: my_server_caddy_net
+    external: true

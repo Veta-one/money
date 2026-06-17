@@ -20,11 +20,16 @@ async def lifespan(_app: FastAPI):
     # dev: создаём таблицы автоматически. На проде — alembic.
     Base.metadata.create_all(bind=engine)
     if botmod.bot and settings.public_url:
-        await botmod.bot.set_webhook(
-            f"{settings.public_url}/webhook",
-            secret_token=settings.webhook_secret,
-            drop_pending_updates=True,
-        )
+        # Не валим старт, если TLS/DNS ещё не готовы — вебхук поставим позже.
+        try:
+            await botmod.bot.set_webhook(
+                f"{settings.public_url}/webhook",
+                secret_token=settings.webhook_secret,
+                drop_pending_updates=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger("money").warning("set_webhook отложен: %s", e)
     yield
     if botmod.bot:
         await botmod.bot.session.close()
