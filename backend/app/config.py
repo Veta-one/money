@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     fns_tokens_path: str = "./data/tokens.json"
     fns_proxy: str | None = None
 
-    # LLM (OpenRouter)
-    openrouter_keys: str = ""           # бесплатные ключи через запятую
-    openrouter_paid_key: str = ""
-    gemini_model: str = "google/gemini-2.0-flash-exp:free"
-    paid_model: str = "google/gemini-2.5-pro"
+    # LLM
+    gemini_keys: str = ""               # прямые ключи Google AI, через запятую (ротация на 429)
+    gemini_model: str = "gemini-3.5-flash"
+    openrouter_paid_key: str = ""       # OpenRouter — сложные задачи/аналитика
+    paid_model: str = "google/gemini-3-pro"
 
     # Бэкап
     backup_chat_id: str = ""
@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     expected_monthly_income: float = 0.0
 
     @property
-    def openrouter_key_list(self) -> list[str]:
-        return [k.strip() for k in self.openrouter_keys.split(",") if k.strip()]
+    def gemini_key_list(self) -> list[str]:
+        return [k.strip() for k in self.gemini_keys.split(",") if k.strip()]
 
 
 settings = Settings()
