@@ -17,7 +17,7 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
-       background:var(--bg);color:var(--text);padding:16px 16px 40px;}
+       background:var(--bg);color:var(--text);padding:16px 16px 80px;}
   .greet{color:var(--hint);font-size:14px;margin:2px 0 14px}
   .hero{background:linear-gradient(135deg,var(--accent),#6aa9ff);border-radius:20px;
         padding:20px;color:var(--accent-text);box-shadow:0 8px 24px rgba(0,0,0,.18)}
@@ -33,7 +33,7 @@
   .cat .name{flex:1;font-size:14px}
   .cat .sum{font-weight:700;font-size:14px}
   .bar{height:6px;border-radius:6px;background:var(--accent);margin-top:5px;opacity:.85}
-  .tx{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;
+  .tx,.acc{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;
       padding:12px 14px;margin-bottom:8px}
   .tx .ic{width:38px;height:38px;border-radius:11px;background:var(--bg);display:flex;
           align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
@@ -42,75 +42,131 @@
   .tx .t2{font-size:12px;color:var(--hint);margin-top:2px}
   .tx .amt{font-weight:700;font-size:15px;white-space:nowrap}
   .amt.exp{color:var(--red)} .amt.inc{color:var(--green)}
+  .acc .mid{flex:1;min-width:0}
+  .acc .a1{font-size:14px;font-weight:600}
+  .acc .a2{font-size:12px;color:var(--hint);margin-top:2px}
+  .acc input{width:108px;background:var(--bg);border:1px solid transparent;border-radius:10px;
+             color:var(--text);font-size:15px;font-weight:700;text-align:right;padding:8px 10px}
+  .acc input:focus{border-color:var(--accent);outline:none}
+  .field{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:8px}
+  .field label{display:block;color:var(--hint);font-size:12px;margin-bottom:6px}
+  .field input{width:100%;background:var(--bg);border:1px solid transparent;border-radius:10px;
+               color:var(--text);font-size:17px;font-weight:700;padding:10px 12px}
+  .field input:focus{border-color:var(--accent);outline:none}
   .empty{color:var(--hint);text-align:center;padding:28px 16px;font-size:14px;line-height:1.5}
   .loader{text-align:center;color:var(--hint);padding:60px 0}
   .err{color:var(--red);text-align:center;padding:40px 16px}
+  .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);
+        border-top:1px solid rgba(255,255,255,.06)}
+  .tabs button{flex:1;background:none;border:none;color:var(--hint);font-size:13px;
+               padding:12px 0 14px;font-weight:600}
+  .tabs button.active{color:var(--accent)}
+  .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--accent);
+         color:var(--accent-text);padding:8px 16px;border-radius:20px;font-size:13px;opacity:0;
+         transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
 </style>
 </head>
 <body>
-  <div id="app"><div class="loader">Загрузка…</div></div>
+  <div id="view-dashboard"><div class="loader">Загрузка…</div></div>
+  <div id="view-capital" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div class="tabs">
+    <button id="tab-dashboard" class="active" onclick="switchTab('dashboard')">📊 Дашборд</button>
+    <button id="tab-capital" onclick="switchTab('capital')">💼 Капитал</button>
+  </div>
+  <div class="toast" id="toast"></div>
 <script>
 const tg = window.Telegram?.WebApp;
 try{ tg?.ready(); tg?.expand(); }catch(e){}
-const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n);
-const CUR = '₽';
+const initData = () => tg?.initData || '';
+const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n||0);
+const CUR='₽';
+let loaded = {dashboard:false, capital:false};
 
-function txIcon(t){ return t.type==='income' ? '📥' : t.type==='transfer' ? '🔄' : '🧾'; }
-
-function render(d){
-  const cats = d.by_category||[];
-  const max = Math.max(1, ...cats.map(c=>c.sum));
-  const recent = d.recent||[];
-  document.getElementById('app').innerHTML = `
-    <div class="greet">Привет${d.name? ', '+d.name : ''} 👋</div>
-    <div class="hero">
-      <div class="label">Свободно до конца месяца</div>
-      <div class="big">${fmt(d.safe_to_spend)} ${CUR}</div>
-      <div class="sub">≈ ${fmt(d.per_day)} ${CUR}/день · осталось ${d.days_left} дн.</div>
-    </div>
-    <div class="row">
-      <div class="card"><div class="k">Потрачено в ${d.month}</div><div class="v">${fmt(d.spent)} ${CUR}</div></div>
-      <div class="card"><div class="k">Капитал</div><div class="v">${fmt(d.net_worth)} ${CUR}</div></div>
-    </div>
-    <h2>По категориям</h2>
-    ${cats.length ? cats.map(c=>`
-      <div class="cat">
-        <div style="flex:1">
-          <div style="display:flex"><div class="name">${c.name}</div><div class="sum">${fmt(c.sum)} ${CUR}</div></div>
-          <div class="bar" style="width:${Math.round(c.sum/max*100)}%"></div>
-        </div>
-      </div>`).join('') :
-      `<div class="empty">Пока нет трат за месяц.<br>Пришли боту фото чека, текст или голосовое 🎙️</div>`}
-    <h2>Последние операции</h2>
-    ${recent.length ? recent.map(t=>`
-      <div class="tx">
-        <div class="ic">${txIcon(t)}</div>
-        <div class="mid">
-          <div class="t1">${t.merchant || (t.type==='income'?'Доход':'Операция')}</div>
-          <div class="t2">${new Date(t.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
-        </div>
-        <div class="amt ${t.type==='income'?'inc':'exp'}">${t.type==='income'?'+':'−'}${fmt(Math.abs(t.amount))} ${t.currency==='RUB'?CUR:t.currency}</div>
-      </div>`).join('') :
-      `<div class="empty">Операций пока нет.</div>`}
-  `;
+async function api(path, opts){
+  const o = opts||{};
+  o.headers = Object.assign({'X-Telegram-Init-Data': initData(), 'Content-Type':'application/json'}, o.headers||{});
+  const r = await fetch(path, o);
+  if(r.status===401||r.status===403) throw new Error('AUTH');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
 }
+function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1500); }
+function authErr(view){ document.getElementById('view-'+view).innerHTML='<div class="err">Доступ только владельцу.<br>Открой из бота.</div>'; }
 
-async function load(){
-  try{
-    const r = await fetch('/api/dashboard', {headers:{'X-Telegram-Init-Data': tg?.initData || ''}});
-    if(r.status===401 || r.status===403){
-      document.getElementById('app').innerHTML = '<div class="err">Доступ только для владельца.<br>Открой приложение из бота.</div>';
-      return;
-    }
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const d = await r.json();
-    d.name = tg?.initDataUnsafe?.user?.first_name || '';
-    render(d);
-  }catch(e){
-    document.getElementById('app').innerHTML = '<div class="err">Ошибка загрузки: '+e.message+'</div>';
+function switchTab(t){
+  for(const x of ['dashboard','capital']){
+    document.getElementById('view-'+x).style.display = x===t?'block':'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===t);
   }
+  if(t==='dashboard') loadDashboard();
+  if(t==='capital') loadCapital();
 }
-load();
+
+const txIcon = t => t.type==='income'?'📥':t.type==='transfer'?'🔄':'🧾';
+
+async function loadDashboard(){
+  try{
+    const d = await api('/api/dashboard');
+    const cats=d.by_category||[], max=Math.max(1,...cats.map(c=>c.sum)), recent=d.recent||[];
+    d.name = tg?.initDataUnsafe?.user?.first_name || '';
+    document.getElementById('view-dashboard').innerHTML = `
+      <div class="greet">Привет${d.name?', '+d.name:''} 👋</div>
+      <div class="hero">
+        <div class="label">Свободно до конца месяца</div>
+        <div class="big">${fmt(d.safe_to_spend)} ${CUR}</div>
+        <div class="sub">≈ ${fmt(d.per_day)} ${CUR}/день · осталось ${d.days_left} дн.</div>
+      </div>
+      <div class="row">
+        <div class="card"><div class="k">Потрачено в ${d.month}</div><div class="v">${fmt(d.spent)} ${CUR}</div></div>
+        <div class="card"><div class="k">Капитал</div><div class="v">${fmt(d.net_worth)} ${CUR}</div></div>
+      </div>
+      <h2>По категориям</h2>
+      ${cats.length?cats.map(c=>`<div class="cat"><div style="flex:1">
+        <div style="display:flex"><div class="name">${c.name}</div><div class="sum">${fmt(c.sum)} ${CUR}</div></div>
+        <div class="bar" style="width:${Math.round(c.sum/max*100)}%"></div></div></div>`).join('')
+        :`<div class="empty">Пока нет трат за месяц.<br>Пришли боту чек, текст или голосовое 🎙️</div>`}
+      <h2>Последние операции</h2>
+      ${recent.length?recent.map(t=>`<div class="tx"><div class="ic">${txIcon(t)}</div>
+        <div class="mid"><div class="t1">${t.merchant||(t.type==='income'?'Доход':'Операция')}</div>
+        <div class="t2">${new Date(t.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
+        <div class="amt ${t.type==='income'?'inc':'exp'}">${t.type==='income'?'+':'−'}${fmt(Math.abs(t.amount))} ${t.currency==='RUB'?CUR:t.currency}</div></div>`).join('')
+        :`<div class="empty">Операций пока нет.</div>`}`;
+  }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('view-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+
+async function loadCapital(){
+  try{
+    const [a, s] = await Promise.all([api('/api/accounts'), api('/api/settings')]);
+    const accs = a.accounts||[];
+    document.getElementById('view-capital').innerHTML = `
+      <div class="hero"><div class="label">Чистый капитал</div>
+        <div class="big">${fmt(a.net_worth)} ${CUR}</div>
+        <div class="sub">всё сведено к рублю по курсу ЦБ</div></div>
+      <h2>Счета</h2>
+      ${accs.map(ac=>`<div class="acc"><div class="mid">
+        <div class="a1">${ac.name}</div>
+        <div class="a2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
+        <input type="number" inputmode="decimal" value="${ac.balance}"
+               onchange="saveBalance(${ac.id}, this.value)"></div>`).join('')}
+      <h2>Доход для «свободно в месяц»</h2>
+      <div class="field"><label>Ожидаемый доход в месяц, ₽</label>
+        <input type="number" inputmode="decimal" value="${s.expected_monthly_income||0}"
+               onchange="saveIncome(this.value)"></div>
+      <div class="empty" style="padding:14px">Меняй балансы — net worth пересчитается. Крипта/USD сводятся к рублю автоматически.</div>`;
+  }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('view-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+
+async function saveBalance(id, val){
+  try{ await api('/api/accounts/'+id, {method:'POST', body:JSON.stringify({balance:parseFloat(val)||0})}); toast('Сохранено'); loadCapital(); }
+  catch(e){ toast('Ошибка'); }
+}
+async function saveIncome(val){
+  try{ await api('/api/settings', {method:'POST', body:JSON.stringify({expected_monthly_income:parseFloat(val)||0})}); toast('Сохранено'); }
+  catch(e){ toast('Ошибка'); }
+}
+
+loadDashboard();
 </script>
 </body>
 </html>

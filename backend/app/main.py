@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from aiogram.types import Update
 
@@ -17,6 +18,8 @@ from .config import settings
 from .db import Base, engine, get_session
 from .security import current_user
 from .services.dashboard import get_dashboard
+from .services.fx import to_rub
+from .services.settings_store import get_setting, set_setting
 
 
 @asynccontextmanager
@@ -57,6 +60,47 @@ async def me(user: dict = Depends(current_user)):
 async def dashboard(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     """Сводка для дашборда (только владелец)."""
     return get_dashboard(db)
+
+
+@app.get("/api/accounts")
+async def accounts(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    rows = (db.query(models.Account).filter(models.Account.archived.is_(False))
+            .order_by(models.Account.owner, models.Account.name).all())
+    out = [{"id": a.id, "name": a.name, "type": a.type, "currency": a.currency,
+            "owner": a.owner, "balance": a.balance,
+            "rub": to_rub(a.balance, a.currency, db)} for a in rows]
+    return {"accounts": out, "net_worth": round(sum(x["rub"] for x in out), 2)}
+
+
+class BalanceIn(BaseModel):
+    balance: float
+
+
+@app.post("/api/accounts/{acc_id}")
+async def set_balance(acc_id: int, body: BalanceIn,
+                      user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    acc = db.get(models.Account, acc_id)
+    if not acc:
+        raise HTTPException(404, "no account")
+    acc.balance = body.balance
+    db.commit()
+    return {"ok": True}
+
+
+class SettingsIn(BaseModel):
+    expected_monthly_income: float
+
+
+@app.get("/api/settings")
+async def read_settings(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return {"expected_monthly_income": float(get_setting(db, "expected_monthly_income") or 0)}
+
+
+@app.post("/api/settings")
+async def write_settings(body: SettingsIn,
+                         user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    set_setting(db, "expected_monthly_income", body.expected_monthly_income)
+    return {"ok": True}
 
 
 @app.post("/webhook")

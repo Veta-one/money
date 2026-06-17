@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..config import settings
+from .fx import to_rub
+from .settings_store import get_setting
 
 
 def get_dashboard(db: Session) -> dict:
@@ -43,12 +45,11 @@ def get_dashboard(db: Session) -> dict:
         "currency": t.currency, "merchant": t.merchant or "", "type": t.type,
     } for t in recent]
 
-    net_worth = float(
-        db.query(func.coalesce(func.sum(models.Account.balance), 0.0))
-        .filter(models.Account.archived.is_(False)).scalar() or 0.0
-    )
+    accounts = db.query(models.Account).filter(models.Account.archived.is_(False)).all()
+    net_worth = sum(to_rub(a.balance, a.currency, db) for a in accounts)
 
-    expected = settings.expected_monthly_income or 0.0
+    exp = get_setting(db, "expected_monthly_income")
+    expected = float(exp) if exp is not None else (settings.expected_monthly_income or 0.0)
     safe_to_spend = round(max(expected - spent, 0.0), 2)
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     days_left = max(days_in_month - now.day + 1, 1)
