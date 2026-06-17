@@ -4,15 +4,19 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 from aiogram.types import Update
 
 from . import bot as botmod
 from . import models  # noqa: F401  — регистрируем таблицы в metadata
 from .config import settings
-from .db import Base, engine
+from .db import Base, engine, get_session
 from .security import current_user
+from .services.dashboard import get_dashboard
 
 
 @asynccontextmanager
@@ -49,6 +53,12 @@ async def me(user: dict = Depends(current_user)):
     return {"user": user}
 
 
+@app.get("/api/dashboard")
+async def dashboard(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """Сводка для дашборда (только владелец)."""
+    return get_dashboard(db)
+
+
 @app.post("/webhook")
 async def telegram_webhook(
     request: Request,
@@ -61,3 +71,9 @@ async def telegram_webhook(
     update = Update.model_validate(await request.json(), context={"bot": botmod.bot})
     await botmod.dp.feed_update(botmod.bot, update)
     return {"ok": True}
+
+
+# Статика мини-аппа — ПОСЛЕ всех /api и /webhook (mount на "/" перехватывает остальное).
+_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
+if _FRONTEND.is_dir():
+    app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="static")

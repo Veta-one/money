@@ -12,6 +12,7 @@ RUN pip install -r requirements.txt
 
 COPY backend/ .
 COPY categories.json ./categories.json
+COPY frontend/ ./frontend/
 
 RUN useradd -m appuser && mkdir -p /app/data && chown -R appuser /app
 USER appuser
