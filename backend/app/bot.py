@@ -1,33 +1,170 @@
 """
-Telegram-бот (aiogram, webhook). Отвечает ТОЛЬКО владельцу (OWNER_TG_ID),
-всех остальных молча игнорирует. Полная обработка ввода — Фаза 1.
+Telegram-бот (aiogram, webhook). Принимает фото чека / ценник / текст / голос,
+разбирает и пишет в БД. Отвечает ТОЛЬКО владельцу (OWNER_TG_ID).
 """
 from __future__ import annotations
 
-from aiogram import Bot, Dispatcher
+import logging
+from io import BytesIO
+
+from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
-from aiogram.types import Message
+from aiogram.types import (CallbackQuery, InlineKeyboardButton,
+                           InlineKeyboardMarkup, Message)
 
+from . import models
 from .config import settings
+from .db import SessionLocal
+from .services import ingest
+from .services.categorize import learn_rule
 
+log = logging.getLogger("money.bot")
 dp = Dispatcher()
 bot: Bot | None = Bot(settings.bot_token) if settings.bot_token else None
 
 
-def _is_owner(m: Message) -> bool:
-    return bool(m.from_user) and m.from_user.id == settings.owner_tg_id
+def _owner(obj) -> bool:
+    u = getattr(obj, "from_user", None)
+    return bool(u) and u.id == settings.owner_tg_id
 
+
+async def _download(file_id: str) -> bytes:
+    f = await bot.get_file(file_id)
+    buf = BytesIO()
+    await bot.download_file(f.file_path, buf)
+    return buf.getvalue()
+
+
+def _kb(res: dict) -> InlineKeyboardMarkup | None:
+    if not res.get("tx_id"):
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✏️ Категория", callback_data=f"editcat:{res['tx_id']}")]])
+
+
+def _cat_keyboard(db, tx_id: int) -> InlineKeyboardMarkup:
+    cats = (db.query(models.Category)
+            .filter(models.Category.type == "expense", models.Category.archived.is_(False))
+            .order_by(models.Category.name).all())
+    rows, row = [], []
+    for c in cats:
+        row.append(InlineKeyboardButton(text=c.name, callback_data=f"setcat:{tx_id}:{c.id}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _reply(note: Message, res: dict) -> None:
+    await note.edit_text(res.get("text") or "Готово", parse_mode="HTML", reply_markup=_kb(res))
+
+
+# ---------- команды и приём ----------
 
 @dp.message(CommandStart())
-async def on_start(m: Message) -> None:
-    if not _is_owner(m):
+async def on_start(m: Message):
+    if not _owner(m):
         return
-    await m.answer("Привет! Я твой финансовый помощник 💸\n"
-                   "Кидай фото чека, текст или голосовое — со временем разберу всё сам.")
+    await m.answer(
+        "Привет! Я твой финансовый помощник 💸\n\n"
+        "Кидай:\n• 🧾 фото чека (с QR) — разберу по товарам\n"
+        "• 📷 ценник/квитанцию — пойму нейросетью\n"
+        "• ✍️ текст: «такси 300», «зарплата 135000»\n"
+        "• 🎙️ голосовое — расшифрую\n\n"
+        "Дашборд — кнопка «💰 MONEY» слева от поля ввода.")
 
 
-@dp.message()
-async def on_any(m: Message) -> None:
-    if not _is_owner(m):
+@dp.message(F.photo)
+async def on_photo(m: Message):
+    if not _owner(m):
         return
-    await m.answer("Принял ✅ Полная обработка ввода появится на Фазе 1.")
+    note = await m.answer("Обрабатываю фото… ⏳")
+    try:
+        data = await _download(m.photo[-1].file_id)
+        await _reply(note, await ingest.ingest_photo(data))
+    except Exception as e:  # noqa: BLE001
+        log.exception("photo")
+        await note.edit_text(f"⚠️ Не смог обработать фото: {e}")
+
+
+@dp.message(F.document)
+async def on_document(m: Message):
+    if not _owner(m):
+        return
+    if not (m.document.mime_type or "").startswith("image/"):
+        await m.answer("Пришли фото чека, текст или голосовое.")
+        return
+    note = await m.answer("Обрабатываю файл… ⏳")
+    try:
+        data = await _download(m.document.file_id)
+        await _reply(note, await ingest.ingest_photo(data))
+    except Exception as e:  # noqa: BLE001
+        log.exception("document")
+        await note.edit_text(f"⚠️ Не смог обработать файл: {e}")
+
+
+@dp.message(F.voice | F.audio)
+async def on_voice(m: Message):
+    if not _owner(m):
+        return
+    note = await m.answer("Слушаю… 🎙️")
+    try:
+        fid = m.voice.file_id if m.voice else m.audio.file_id
+        await _reply(note, await ingest.ingest_voice(await _download(fid)))
+    except Exception as e:  # noqa: BLE001
+        log.exception("voice")
+        await note.edit_text(f"⚠️ Не разобрал голос: {e}")
+
+
+@dp.message(F.text)
+async def on_text(m: Message):
+    if not _owner(m):
+        return
+    note = await m.answer("Записываю… ✍️")
+    try:
+        await _reply(note, await ingest.ingest_text(m.text))
+    except Exception as e:  # noqa: BLE001
+        log.exception("text")
+        await note.edit_text(f"⚠️ Не понял запись: {e}")
+
+
+# ---------- правка категории ----------
+
+@dp.callback_query(F.data.startswith("editcat:"))
+async def cb_editcat(cq: CallbackQuery):
+    if not _owner(cq):
+        return
+    tx_id = int(cq.data.split(":")[1])
+    db = SessionLocal()
+    try:
+        kb = _cat_keyboard(db, tx_id)
+    finally:
+        db.close()
+    await cq.message.edit_reply_markup(reply_markup=kb)
+    await cq.answer("Выбери категорию")
+
+
+@dp.callback_query(F.data.startswith("setcat:"))
+async def cb_setcat(cq: CallbackQuery):
+    if not _owner(cq):
+        return
+    _, tx_id, cat_id = cq.data.split(":")
+    tx_id, cat_id = int(tx_id), int(cat_id)
+    db = SessionLocal()
+    try:
+        tx = db.get(models.Transaction, tx_id)
+        if not tx:
+            await cq.answer("Не найдено")
+            return
+        tx.category_id = cat_id
+        tx.status = "confirmed"
+        db.commit()
+        inn = tx.receipt.inn if tx.receipt else None
+        learn_rule(db, cat_id, inn=inn, pattern=tx.merchant)   # запоминаем правило
+        cat = db.get(models.Category, cat_id)
+        await cq.message.edit_reply_markup(reply_markup=None)
+        await cq.answer(f"✅ {cat.name if cat else 'ок'} — запомнил")
+    finally:
+        db.close()
