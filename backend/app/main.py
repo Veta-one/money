@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -19,6 +20,7 @@ from .db import Base, engine, get_session
 from .security import current_user
 from .services.dashboard import get_dashboard
 from .services.fx import to_rub
+from .services.planning import goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
 
 
@@ -100,6 +102,105 @@ async def read_settings(user: dict = Depends(current_user), db: Session = Depend
 async def write_settings(body: SettingsIn,
                          user: dict = Depends(current_user), db: Session = Depends(get_session)):
     set_setting(db, "expected_monthly_income", body.expected_monthly_income)
+    return {"ok": True}
+
+
+# ---------- цели ----------
+
+class GoalIn(BaseModel):
+    name: str
+    target_amount: float
+    monthly_plan: float = 0
+    current_amount: float = 0
+    target_date: str | None = None
+
+
+class GoalPatch(BaseModel):
+    current_amount: float | None = None
+    monthly_plan: float | None = None
+    target_amount: float | None = None
+    target_date: str | None = None
+    status: str | None = None
+
+
+@app.get("/api/goals")
+async def list_goals(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    goals = db.query(models.Goal).filter(models.Goal.status != "done").all()
+    return {"goals": [goal_view(g) for g in goals], "suggest": suggest_goals(db)}
+
+
+@app.post("/api/goals")
+async def create_goal(body: GoalIn, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    g = models.Goal(
+        name=body.name, target_amount=body.target_amount, monthly_plan=body.monthly_plan,
+        current_amount=body.current_amount,
+        target_date=date.fromisoformat(body.target_date) if body.target_date else None,
+        status="active")
+    db.add(g)
+    db.commit()
+    return goal_view(g)
+
+
+@app.post("/api/goals/{goal_id}")
+async def patch_goal(goal_id: int, body: GoalPatch,
+                     user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    g = db.get(models.Goal, goal_id)
+    if not g:
+        raise HTTPException(404, "no goal")
+    for field in ("current_amount", "monthly_plan", "target_amount", "status"):
+        v = getattr(body, field)
+        if v is not None:
+            setattr(g, field, v)
+    if body.target_date is not None:
+        g.target_date = date.fromisoformat(body.target_date) if body.target_date else None
+    db.commit()
+    return goal_view(g)
+
+
+@app.delete("/api/goals/{goal_id}")
+async def delete_goal(goal_id: int, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    g = db.get(models.Goal, goal_id)
+    if g:
+        db.delete(g)
+        db.commit()
+    return {"ok": True}
+
+
+# ---------- регулярные платежи ----------
+
+class RecurringIn(BaseModel):
+    name: str
+    amount: float
+    type: str = "expense"
+    period: str = "monthly"
+    day: int | None = None
+
+
+@app.get("/api/recurring")
+async def list_recurring(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    rows = db.query(models.Recurring).filter(models.Recurring.active.is_(True)).all()
+    return {"recurring": [{"id": r.id, "name": r.name, "amount": r.amount, "type": r.type,
+                           "period": r.period, "day": r.day} for r in rows]}
+
+
+@app.post("/api/recurring")
+async def create_recurring(body: RecurringIn, user: dict = Depends(current_user),
+                           db: Session = Depends(get_session)):
+    r = models.Recurring(name=body.name, amount=body.amount,
+                         type=body.type if body.type in ("expense", "income") else "expense",
+                         period=body.period, day=body.day, active=True)
+    db.add(r)
+    db.commit()
+    return {"id": r.id}
+
+
+@app.delete("/api/recurring/{rec_id}")
+async def delete_recurring(rec_id: int, user: dict = Depends(current_user),
+                           db: Session = Depends(get_session)):
+    r = db.get(models.Recurring, rec_id)
+    if r:
+        db.delete(r)
+        db.commit()
     return {"ok": True}
 
 

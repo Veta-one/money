@@ -65,14 +65,18 @@
          color:var(--accent-text);padding:8px 16px;border-radius:20px;font-size:13px;opacity:0;
          transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
+  .chip{background:var(--accent);color:var(--accent-text);border:none;border-radius:12px;padding:9px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+  .inp{width:100%;background:var(--bg);border:none;border-radius:10px;color:var(--text);padding:10px;font-size:15px}
 </style>
 </head>
 <body>
   <div id="view-dashboard"><div class="loader">Загрузка…</div></div>
   <div id="view-capital" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div id="view-goals" style="display:none"><div class="loader">Загрузка…</div></div>
   <div class="tabs">
     <button id="tab-dashboard" class="active" onclick="switchTab('dashboard')">📊 Дашборд</button>
     <button id="tab-capital" onclick="switchTab('capital')">💼 Капитал</button>
+    <button id="tab-goals" onclick="switchTab('goals')">🎯 Цели</button>
   </div>
   <div class="toast" id="toast"></div>
 <script>
@@ -81,7 +85,7 @@ try{ tg?.ready(); tg?.expand(); }catch(e){}
 const initData = () => tg?.initData || '';
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n||0);
 const CUR='₽';
-let loaded = {dashboard:false, capital:false};
+let _suggestions = [];
 
 async function api(path, opts){
   const o = opts||{};
@@ -95,12 +99,13 @@ function toast(t){ const el=document.getElementById('toast'); el.textContent=t; 
 function authErr(view){ document.getElementById('view-'+view).innerHTML='<div class="err">Доступ только владельцу.<br>Открой из бота.</div>'; }
 
 function switchTab(t){
-  for(const x of ['dashboard','capital']){
+  for(const x of ['dashboard','capital','goals']){
     document.getElementById('view-'+x).style.display = x===t?'block':'none';
     document.getElementById('tab-'+x).classList.toggle('active', x===t);
   }
   if(t==='dashboard') loadDashboard();
   if(t==='capital') loadCapital();
+  if(t==='goals') loadGoals();
 }
 
 const txIcon = t => t.type==='income'?'📥':t.type==='transfer'?'🔄':'🧾';
@@ -165,6 +170,68 @@ async function saveIncome(val){
   try{ await api('/api/settings', {method:'POST', body:JSON.stringify({expected_monthly_income:parseFloat(val)||0})}); toast('Сохранено'); }
   catch(e){ toast('Ошибка'); }
 }
+
+async function loadGoals(){
+  try{
+    const [g, r] = await Promise.all([api('/api/goals'), api('/api/recurring')]);
+    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[];
+    _suggestions = sug.suggestions||[];
+    let h = `<div class="hero"><div class="label">Можешь откладывать в месяц</div>
+      <div class="big">${fmt(sug.capacity)} ${CUR}</div>
+      <div class="sub">доход − обязательные − траты</div></div>`;
+    h += `<h2>Предложения</h2><div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 2px">`;
+    h += _suggestions.map((s,i)=>`<button class="chip" onclick="createSug(${i})">+ ${s.name} · ${fmt(s.target_amount)} ${CUR}</button>`).join('');
+    h += `</div>`;
+    h += `<h2>Мои цели</h2>`;
+    h += goals.length ? goals.map(go=>`<div class="card" style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between"><b>${go.name}</b><span>${fmt(go.current_amount)} / ${fmt(go.target_amount)} ${CUR}</span></div>
+        <div class="bar" style="width:${go.pct}%;margin-top:8px"></div>
+        <div class="a2" style="color:var(--hint);font-size:12px;margin-top:8px">${go.pct}%${go.eta?' · план '+fmt(go.monthly_plan)+' ₽/мес → '+new Date(go.eta).toLocaleDateString('ru-RU',{month:'long',year:'numeric'}):' · добавь план/мес'}</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input type="number" inputmode="decimal" placeholder="внести ₽" id="add-${go.id}" class="inp" style="flex:1">
+          <button class="chip" onclick="addToGoal(${go.id},${go.current_amount})">Внести</button>
+          <button class="chip" style="background:var(--card)" onclick="delGoal(${go.id})">🗑</button>
+        </div></div>`).join('') : `<div class="empty">Целей пока нет — выбери предложенную выше или добавь свою.</div>`;
+    h += `<h2>Добавить свою</h2><div class="card">
+        <input id="ng-name" placeholder="Название" class="inp" style="margin-bottom:8px">
+        <div style="display:flex;gap:8px">
+          <input id="ng-target" type="number" inputmode="decimal" placeholder="Сумма ₽" class="inp" style="flex:1">
+          <input id="ng-plan" type="number" inputmode="decimal" placeholder="В мес ₽" class="inp" style="flex:1">
+        </div>
+        <button class="chip" style="margin-top:10px;width:100%" onclick="addGoalForm()">Создать цель</button></div>`;
+    h += `<h2>Регулярные платежи</h2>`;
+    h += rec.length ? rec.map(x=>`<div class="acc"><div class="mid"><div class="a1">${x.name}</div>
+        <div class="a2">${x.type==='income'?'доход':'расход'} · в месяц</div></div>
+        <div style="display:flex;align-items:center;gap:10px"><b>${fmt(x.amount)} ${CUR}</b>
+        <button class="chip" style="background:var(--card)" onclick="delRec(${x.id})">🗑</button></div></div>`).join('')
+        : `<div class="empty" style="padding:14px">Добавь обязательное (ЖКХ, связь, подписки) — уменьшит «свободно в месяц».</div>`;
+    h += `<div class="card" style="margin-top:8px"><div style="display:flex;gap:8px">
+        <input id="nr-name" placeholder="Напр.: ЖКХ" class="inp" style="flex:1.4">
+        <input id="nr-amount" type="number" inputmode="decimal" placeholder="₽/мес" class="inp" style="flex:1">
+        <button class="chip" onclick="addRec()">+</button></div></div>`;
+    document.getElementById('view-goals').innerHTML = h;
+  }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('view-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+async function createSug(i){ try{ await api('/api/goals',{method:'POST',body:JSON.stringify(_suggestions[i])}); toast('Цель создана'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function addGoalForm(){
+  const name=document.getElementById('ng-name').value.trim();
+  const target=parseFloat(document.getElementById('ng-target').value);
+  const plan=parseFloat(document.getElementById('ng-plan').value)||0;
+  if(!name||!target){toast('Нужны имя и сумма');return;}
+  try{ await api('/api/goals',{method:'POST',body:JSON.stringify({name,target_amount:target,monthly_plan:plan})}); toast('Создано'); loadGoals(); }catch(e){toast('Ошибка');}
+}
+async function addToGoal(id,cur){
+  const v=parseFloat(document.getElementById('add-'+id).value); if(!v){toast('Введи сумму');return;}
+  try{ await api('/api/goals/'+id,{method:'POST',body:JSON.stringify({current_amount:cur+v})}); toast('Внесено'); loadGoals(); }catch(e){toast('Ошибка');}
+}
+async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function addRec(){
+  const name=document.getElementById('nr-name').value.trim();
+  const amount=parseFloat(document.getElementById('nr-amount').value);
+  if(!name||!amount){toast('Нужны имя и сумма');return;}
+  try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name,amount,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');}
+}
+async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
 
 loadDashboard();
 </script>

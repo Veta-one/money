@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from .fx import to_rub
+from .planning import goals_monthly_plan, obligatory_monthly
 from .settings_store import get_setting
 
 
@@ -50,7 +51,9 @@ def get_dashboard(db: Session) -> dict:
 
     exp = get_setting(db, "expected_monthly_income")
     expected = float(exp) if exp is not None else (settings.expected_monthly_income or 0.0)
-    safe_to_spend = round(max(expected - spent, 0.0), 2)
+    obligatory = obligatory_monthly(db)
+    goals_plan = goals_monthly_plan(db)
+    safe_to_spend = round(max(expected - spent - obligatory - goals_plan, 0.0), 2)
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     days_left = max(days_in_month - now.day + 1, 1)
     per_day = round(safe_to_spend / days_left, 2)
@@ -65,5 +68,8 @@ def get_dashboard(db: Session) -> dict:
         "safe_to_spend": safe_to_spend,
         "per_day": per_day,
         "days_left": days_left,
+        "expected_income": round(expected, 2),
+        "obligatory": obligatory,
+        "goals_plan": goals_plan,
         "currency": settings.base_currency,
     }
