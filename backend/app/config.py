@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # LLM
     gemini_keys: str = ""               # прямые ключи Google AI, через запятую (ротация на 429)
-    gemini_model: str = "gemini-3.5-flash"
+    gemini_model: str = "gemini-2.5-flash"
     openrouter_paid_key: str = ""       # OpenRouter — сложные задачи/аналитика
     paid_model: str = "google/gemini-3-pro"
 

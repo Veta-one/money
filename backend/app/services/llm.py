@@ -20,6 +20,9 @@ log = logging.getLogger("money.llm")
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# 429 — лимит ключа; 5xx — модель перегружена/недоступна. И то и другое → пробуем следующий ключ.
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
 
 class GeminiPool:
     """Пул ключей Google AI: round-robin + переключение на следующий ключ при 429."""
@@ -46,15 +49,15 @@ class GeminiPool:
                     f"{GEMINI_BASE}/models/{model}:generateContent",
                     params={"key": key}, json=body,
                 )
-                if r.status_code == 429:          # лимит ключа — следующий
-                    last_status = 429
+                if r.status_code in _RETRY_STATUSES:   # лимит/перегрузка — следующий ключ
+                    last_status = r.status_code
                     continue
                 r.raise_for_status()
                 cands = r.json().get("candidates") or []
                 if not cands:
                     raise RuntimeError("Gemini вернул пустой ответ")
                 return "".join(p.get("text", "") for p in cands[0].get("content", {}).get("parts", []))
-        raise RuntimeError(f"Все Gemini-ключи упёрлись в лимит (последний статус {last_status})")
+        raise RuntimeError(f"Gemini недоступен по всем ключам (последний статус {last_status})")
 
     async def text(self, prompt: str, model: str | None = None) -> str:
         return await self._generate([{"text": prompt}], model)
