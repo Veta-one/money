@@ -652,7 +652,7 @@ async function saveTx(){
 // ---- аналитика ----
 async function loadAnalytics(){
   try{
-    const [d,b]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets')]);
+    const [d,b,ch]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup')]);
     _bud=b.items||[];
     const t=d.totals||{}, cf=d.cashflow||[], cmp=d.compare||[], bc=d.by_category||[], tm=d.top_merchants||[], subs=d.subscriptions||{items:[]};
     const pc=(v,l)=>`<button class="chip${_anPeriod===v?' on':''}" onclick="setAnPeriod('${v}')">${l}</button>`;
@@ -671,9 +671,17 @@ async function loadAnalytics(){
         <span class="nm">${c.name}</span><span class="am" style="color:${col}">${up?'+':'−'}${fmt(Math.abs(c.delta))} ${CUR}</span></div>
         <div class="t2" style="margin-top:4px;color:var(--muted)">${fmt(c.prev)} → ${fmt(c.cur)} ${CUR}${c.delta_pct!=null?' · '+(up?'+':'')+c.delta_pct+'%':' · новое'}</div></div>`}).join(''):`<div class="empty">Нет данных для сравнения.</div>`;
     const bcMax=Math.max(1,...bc.map(c=>c.sum));
+    const chHtml=`<div class="card">
+      <div style="display:flex;text-align:center">
+        <div style="flex:1"><div class="v" style="color:${ch.savings_rate>=30?'var(--green)':ch.savings_rate>=10?'var(--ink)':'var(--red)'}">${ch.savings_rate}%</div><div class="t2" style="color:var(--muted)">сбережения</div></div>
+        <div style="flex:1"><div class="v">${ch.cushion_months!=null?ch.cushion_months:'—'}</div><div class="t2" style="color:var(--muted)">подушка, мес</div></div>
+        <div style="flex:1"><div class="v">${ch.usd_share!=null?ch.usd_share+'/'+ch.rub_share:'—'}</div><div class="t2" style="color:var(--muted)">USD/RUB %</div></div></div>
+      ${(ch.recommendations||[]).length?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">`+(ch.recommendations||[]).map(r=>{const col=r.l==='bad'?'var(--red)':r.l==='good'?'var(--green)':r.l==='warn'?'#ff8a3d':'var(--muted)';return `<div style="display:flex;gap:8px;padding:4px 0;font-size:13px;line-height:1.35"><span style="color:${col};font-size:15px;line-height:1.2">●</span><span style="flex:1">${r.t}</span></div>`}).join('')+`</div>`:''}</div>`;
     document.getElementById('v-analytics').innerHTML=`
       <div class="head"><div class="hi">Аналитика</div></div>
-      <h2 style="margin-top:6px">Бюджет · ${new Date(b.month+'-01').toLocaleDateString('ru-RU',{month:'long'})}</h2>
+      <h2 style="margin-top:6px">Финансовое здоровье</h2>
+      ${chHtml}
+      <h2>Бюджет · ${new Date(b.month+'-01').toLocaleDateString('ru-RU',{month:'long'})}</h2>
       ${budCard}
       <div class="catlist" style="margin-top:10px">${budItems}</div>
       <h2>Тренды по периодам</h2>

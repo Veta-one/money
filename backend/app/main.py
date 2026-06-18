@@ -29,6 +29,7 @@ from .services.backup import make_and_send_backup
 from .services.budget import budget_overview
 from .services.capital import capital_overview
 from .services.categorize import learn_rule
+from .services.checkup import financial_checkup
 from .services.dashboard import get_dashboard, needs_review
 from .services.deposits import deposits_overview
 from .services.digests import send_digest
@@ -117,6 +118,11 @@ async def trends(user: dict = Depends(current_user), db: Session = Depends(get_s
 async def analytics(period: str = "month", user: dict = Depends(current_user),
                     db: Session = Depends(get_session)):
     return analytics_overview(db, period)
+
+
+@app.get("/api/checkup")
+async def checkup(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return financial_checkup(db)
 
 
 @app.get("/api/transactions")
