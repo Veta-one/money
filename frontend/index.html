@@ -83,6 +83,13 @@
   .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff;
     padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
+  .ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;z-index:50}
+  .sheet{background:var(--card);width:100%;border-radius:24px 24px 0 0;padding:18px 16px 30px;max-height:82vh;overflow:auto}
+  .sheeth{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .drow{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .drow:last-child{border-bottom:none}
+  .catchip{background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex:none}
+  .catgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -95,12 +102,13 @@
     <button id="t-goals" onclick="tab('goals')"></button>
   </div>
   <div class="toast" id="toast"></div>
+  <div id="ov" class="ov" style="display:none" onclick="if(event.target.id==='ov')closeOv()"><div id="sheet" class="sheet"></div></div>
 <script>
 const tg = window.Telegram?.WebApp;
 try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgroundColor?.('#f3f4f6'); }catch(e){}
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const CUR='₽';
-let _sug=[];
+let _sug=[], _cats=[], _pickKind=null, _pickId=null;
 
 // ---- Tabler icons ----
 const P = {
@@ -113,6 +121,7 @@ const P = {
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
   pencil:'<path d="M4 20h4l10.5 -10.5a2.1 2.1 0 0 0 -3 -3l-10.5 10.5v3"/><path d="M13.5 6.5l3 3"/>',
   trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
+  x:'<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
 };
 function icon(n, sz, col){ return `<svg class="ic" width="${sz||22}" height="${sz||22}" viewBox="0 0 24 24" fill="none" stroke="${col||'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`; }
 
@@ -180,7 +189,7 @@ async function loadDashboard(){
         <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div></div>`).join('')+`</div>`
         :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
       <h2>Последние операции</h2>
-      ${rec.length?rec.map(x=>{const col=color(x.merchant||'op');return `<div class="row">
+      ${rec.length?rec.map(x=>{const col=color(x.merchant||'op');return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(x.type==='income'?'coin':x.type==='transfer'?'swap':'receipt',20)}</div>
         <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
         <div class="t2">${new Date(x.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
@@ -262,6 +271,40 @@ async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); 
 async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
   if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
+
+// ---- детали операции + правка категорий ----
+async function openTx(id){
+  try{
+    const d=await api('/api/tx/'+id);
+    if(!_cats.length){ _cats=(await api('/api/categories')).categories||[]; }
+    renderDetail(d);
+  }catch(e){ toast('Ошибка'); }
+}
+function renderDetail(d){
+  const items=d.items||[];
+  const rows = items.length
+    ? items.map(it=>`<div class="drow"><div class="mid"><div class="t1">${it.name}</div><div class="t2">${fmt(it.sum)} ${CUR}</div></div>
+        <button class="catchip" onclick="openPick('item',${it.id})">${it.category||'выбрать'}</button></div>`).join('')
+    : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>
+        <button class="catchip" onclick="openPick('tx',${d.id})">${d.category||'выбрать'}</button></div>`;
+  document.getElementById('sheet').innerHTML=`<div class="sheeth">
+      <div><div class="t1">${d.merchant||'Операция'}</div><div class="t2">${fmt(Math.abs(d.amount))} ${CUR} · ${new Date(d.dt).toLocaleDateString('ru-RU')}</div></div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}`;
+  document.getElementById('ov').style.display='flex';
+}
+function openPick(kind,id){ _pickKind=kind; _pickId=id;
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Выбери категорию</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="catgrid">`+_cats.map(c=>`<button class="chip" onclick="pickCat(${c.id})">${c.name}</button>`).join('')+`</div>`;
+}
+async function pickCat(cid){
+  try{
+    const url=_pickKind==='item'?'/api/items/'+_pickId:'/api/tx/'+_pickId;
+    await api(url,{method:'POST',body:JSON.stringify({category_id:cid})});
+    toast('Сохранено'); closeOv(); loadDashboard();
+  }catch(e){ toast('Ошибка'); }
+}
+function closeOv(){ document.getElementById('ov').style.display='none'; }
 
 loadDashboard();
 </script>

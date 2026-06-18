@@ -20,6 +20,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine, get_session
 from .security import current_user
 from .services.backup import make_and_send_backup
+from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
@@ -248,6 +249,76 @@ async def telegram_webhook(
         raise HTTPException(403, "bad webhook secret")
     update = Update.model_validate(await request.json(), context={"bot": botmod.bot})
     await botmod.dp.feed_update(botmod.bot, update)
+    return {"ok": True}
+
+
+# ---------- детали операции и правка категорий ----------
+
+def _recompute_tx_category(tx) -> None:
+    sums: dict[int, float] = {}
+    for it in tx.items:
+        if it.category_id:
+            sums[it.category_id] = sums.get(it.category_id, 0.0) + (it.sum or 0.0)
+    if sums:
+        tx.category_id = max(sums, key=sums.get)
+
+
+@app.get("/api/categories")
+async def list_categories(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    cats = (db.query(models.Category)
+            .filter(models.Category.type == "expense", models.Category.archived.is_(False))
+            .order_by(models.Category.name).all())
+    return {"categories": [{"id": c.id, "name": c.name} for c in cats]}
+
+
+@app.get("/api/tx/{tx_id}")
+async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    t = db.get(models.Transaction, tx_id)
+    if not t:
+        raise HTTPException(404, "no tx")
+
+    def cname(cid):
+        c = db.get(models.Category, cid) if cid else None
+        return c.name if c else None
+
+    items = [{"id": it.id, "name": it.name, "sum": it.sum, "qty": it.qty,
+              "category_id": it.category_id, "category": cname(it.category_id)} for it in t.items]
+    return {"id": t.id, "merchant": t.merchant, "amount": t.amount, "currency": t.currency,
+            "dt": t.datetime.isoformat(), "type": t.type, "source": t.source,
+            "category_id": t.category_id, "category": cname(t.category_id), "items": items}
+
+
+class CatIn(BaseModel):
+    category_id: int
+
+
+@app.post("/api/tx/{tx_id}")
+async def set_tx_category(tx_id: int, body: CatIn,
+                          user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    t = db.get(models.Transaction, tx_id)
+    if not t:
+        raise HTTPException(404, "no tx")
+    t.category_id = body.category_id
+    t.status = "confirmed"
+    db.commit()
+    learn_rule(db, body.category_id, inn=(t.receipt.inn if t.receipt else None), pattern=t.merchant)
+    return {"ok": True}
+
+
+@app.post("/api/items/{item_id}")
+async def set_item_category(item_id: int, body: CatIn,
+                            user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    it = db.get(models.TransactionItem, item_id)
+    if not it:
+        raise HTTPException(404, "no item")
+    it.category_id = body.category_id
+    db.commit()
+    tx = db.get(models.Transaction, it.transaction_id)
+    if tx:
+        _recompute_tx_category(tx)
+        db.commit()
+        learn_rule(db, body.category_id,
+                   inn=(tx.receipt.inn if tx.receipt else None), pattern=it.name)
     return {"ok": True}
 
 
