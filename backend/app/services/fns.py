@@ -52,6 +52,17 @@ def _parse(resp: httpx.Response) -> dict:
     return data
 
 
+def _is_auth_error(status: int, e: "LkdrError") -> bool:
+    """Похоже на протухший токен → стоит обновить по refresh и повторить."""
+    if status in (401, 403):
+        return True
+    code = (getattr(e, "code", "") or "").lower()
+    msg = (getattr(e, "message", "") or "").lower()
+    if any(k in code for k in ("auth", "token", "unauthor")):
+        return True
+    return any(k in msg for k in ("истек", "истёк", "срок действия", "expired", "авториз"))
+
+
 class LkdrClient:
     def __init__(self, tokens_path: str | None = None, proxy: str | None = None):
         self.tokens_path = Path(tokens_path or settings.fns_tokens_path)
@@ -163,6 +174,9 @@ class LkdrClient:
 
     def scan(self, qr: dict[str, str], _retried: bool = False) -> dict:
         if not self.token:
+            if self.refresh_token and not _retried:
+                self.refresh()
+                return self.scan(qr, _retried=True)
             raise RuntimeError("нет access-токена")
         with self._client() as c:
             resp = c.post(SCAN_URL, json=self.qr_to_scan_payload(qr),
@@ -170,8 +184,8 @@ class LkdrClient:
         try:
             return _parse(resp)
         except LkdrError as e:
-            if not _retried and e.code == "authentication.failed" and self.refresh_token:
-                self.refresh()
+            if not _retried and self.refresh_token and _is_auth_error(resp.status_code, e):
+                self.refresh()                       # access протух → обновляем по refresh и повторяем
                 return self.scan(qr, _retried=True)
             raise
 

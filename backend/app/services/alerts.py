@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import date, datetime, timedelta
 
@@ -84,3 +85,23 @@ async def nudge_job() -> None:
             await bot.send_message(settings.owner_tg_id, msg, parse_mode="HTML")
         except Exception:  # noqa: BLE001
             pass
+
+
+async def fns_refresh_job() -> None:
+    """Планировщик: держим access-токен ФНС тёплым; если refresh умер — зовём на вход."""
+    from .fns import LkdrClient
+    try:
+        client = LkdrClient()
+        if not client.refresh_token:
+            return
+        await asyncio.to_thread(client.refresh)
+    except Exception as e:  # noqa: BLE001
+        from ..bot import bot
+        if bot:
+            try:
+                await bot.send_message(
+                    settings.owner_tg_id,
+                    f"🔑 ФНС: автообновление токена не прошло ({e}). Нужен повторный вход — "
+                    "пришли свежие token + refreshToken из браузера.")
+            except Exception:  # noqa: BLE001
+                pass

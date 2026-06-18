@@ -61,8 +61,12 @@ async def _ingest_receipt(qr: dict) -> dict:
         try:
             scan = await asyncio.to_thread(client.scan, qr)
         except LkdrError as e:
-            if e.code == "authentication.failed":
-                return {"status": "error", "text": "🔑 Токен ФНС протух — нужны свежие."}
+            code = (e.code or "").lower()
+            msg = (e.message or "")
+            if any(k in code for k in ("auth", "token")) or any(
+                    k in msg.lower() for k in ("истек", "истёк", "срок действия", "авториз")):
+                return {"status": "error",
+                        "text": "🔑 Токены ФНС истекли и автообновление не помогло — нужен повторный вход: пришли свежие token + refreshToken из браузера."}
             return {"status": "error", "text": f"ФНС: {e.message or e.code}"}
         parsed = receipt_parser.parse_scan(scan)
         if not parsed or not parsed["items"]:
