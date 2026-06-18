@@ -36,7 +36,7 @@ from .services.digests import send_digest
 from .services.income import income_overview, learn_income_alias
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
                               take_networth_snapshot)
-from .services.fx import compute_net_worth, get_usd_rub, to_rub
+from .services.fx import compute_net_worth, get_usd_rub, to_rub, usd_history
 from .services.planning import detect_recurring, goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
 
@@ -225,6 +225,19 @@ async def accounts(user: dict = Depends(current_user), db: Session = Depends(get
 @app.get("/api/capital")
 async def capital(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     return capital_overview(db)
+
+
+@app.get("/api/fx/history")
+async def fx_history(currency: str = "USD", days: int = 365,
+                     user: dict = Depends(current_user),
+                     db: Session = Depends(get_session)):
+    days = max(7, min(int(days), 365 * 5))
+    cur = (currency or "USD").upper()
+    if cur != "USD":
+        return {"currency": cur, "days": days, "points": [], "latest": None}
+    pts = usd_history(db, days)
+    return {"currency": "USD", "days": days, "points": pts,
+            "latest": pts[-1]["rate"] if pts else None}
 
 
 class TargetIn(BaseModel):
