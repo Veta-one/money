@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from aiogram.types import Update
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -260,6 +260,45 @@ async def ai_ask_endpoint(body: AskIn,
                           user: dict = Depends(current_user),
                           db: Session = Depends(get_session)):
     return await ai_ask(db, body.question)
+
+
+@app.get("/api/receipts")
+async def receipts_list(q: str = "", limit: int = 30, offset: int = 0,
+                        user: dict = Depends(current_user),
+                        db: Session = Depends(get_session)):
+    """Чеки ФНС с item-level поиском. Новые первыми. По q ищем по позициям и магазину."""
+    limit = max(1, min(int(limit), 60))
+    base_q = (db.query(models.Receipt)
+              .join(models.Transaction, models.Transaction.id == models.Receipt.transaction_id))
+    if q:
+        like = f"%{q.strip().lower()}%"
+        # подмножество транзакций с попаданием по имени позиции или магазина
+        sub = (db.query(models.TransactionItem.transaction_id)
+               .filter(func.lower(models.TransactionItem.name).like(like))).subquery()
+        base_q = base_q.filter(or_(
+            models.Transaction.id.in_(sub),
+            func.lower(models.Receipt.kkt_owner).like(like),
+            func.lower(models.Transaction.merchant).like(like),
+        ))
+    count = base_q.count()
+    rows = (base_q.order_by(models.Transaction.datetime.desc())
+            .offset(offset).limit(limit).all())
+    out = []
+    for r in rows:
+        t = r.transaction
+        items = sorted(t.items, key=lambda i: -(i.sum or 0))[:50]
+        out.append({
+            "id": r.id, "tx_id": t.id,
+            "dt": t.datetime.isoformat(),
+            "merchant": r.kkt_owner or t.merchant or "—",
+            "place": r.retail_place,
+            "total": round(t.base_amount_rub or 0, 2),
+            "n_items": len(t.items),
+            "items": [{"name": i.name, "qty": i.qty, "price": i.price, "sum": i.sum}
+                      for i in items],
+        })
+    return {"q": q, "count": count, "offset": offset, "limit": limit,
+            "has_more": offset + limit < count, "receipts": out}
 
 
 class TargetIn(BaseModel):

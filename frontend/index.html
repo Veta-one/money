@@ -918,10 +918,13 @@ async function loadAnalytics(){
       <span class="nm">${it.name}${it.manual?'':' <span class="muted" style="font-size:11px">авто</span>'}</span>
       <span class="am" style="${it.over?'color:var(--red)':''}">${fmt(it.spent)} / ${fmt(it.budget)} ${CUR}</span></div>
       <div class="track"><i style="width:${Math.min(100,it.pct)}%;background:${it.over?'var(--red)':color(it.name)}"></i></div></div>`).join(''):`<div class="empty">Пока нечего бюджетировать.</div>`;
-    const cmpHtml=cmp.length?cmp.map(c=>{const up=c.delta>0,col=up?'var(--red)':'var(--green)';return `<div class="cat"><div class="top">
+    const cmpHtml=cmp.length?cmp.map(c=>{const up=c.delta>0,col=up?'var(--red)':'var(--green)';
+      const yoyHtml=(c.yoy>0)?`<div class="t2" style="margin-top:2px;color:var(--muted)">год назад: ${fmt(c.yoy)} ${CUR}${c.yoy_delta_pct!=null?` · <span style="color:${c.yoy_delta_pct>=0?'var(--red)':'var(--green)'};font-weight:600">${c.yoy_delta_pct>=0?'+':''}${c.yoy_delta_pct}% к году</span>`:''}</div>`:'';
+      return `<div class="cat"><div class="top">
         <span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
         <span class="nm">${c.name}</span><span class="am" style="color:${col}">${up?'+':'−'}${fmt(Math.abs(c.delta))} ${CUR}</span></div>
-        <div class="t2" style="margin-top:4px;color:var(--muted)">${fmt(c.prev)} → ${fmt(c.cur)} ${CUR}${c.delta_pct!=null?' · '+(up?'+':'')+c.delta_pct+'%':' · новое'}</div></div>`}).join(''):`<div class="empty">Нет данных для сравнения.</div>`;
+        <div class="t2" style="margin-top:4px;color:var(--muted)">${fmt(c.prev)} → ${fmt(c.cur)} ${CUR}${c.delta_pct!=null?' · '+(up?'+':'')+c.delta_pct+'%':' · новое'}</div>
+        ${yoyHtml}</div>`}).join(''):`<div class="empty">Нет данных для сравнения.</div>`;
     const bcMax=Math.max(1,...bc.map(c=>c.sum));
     const chHtml=`<div class="card">
       <div style="display:flex;text-align:center">
@@ -1255,11 +1258,69 @@ async function openSettings(){
       <div class="t2" style="color:var(--muted);margin-top:8px">Дайджесты: каждый день 21:00, воскресенье 20:00, 1-го числа 10:00. Нудж продлений — 10:30.</div></div>
     <h2>Категории</h2>
     <button class="btn full" onclick="openCatMgr()">Управление категориями</button>
+    <h2>Чеки ФНС</h2>
+    <button class="btn full" onclick="openReceipts()">Поиск по чекам ${icon('search',16,'#fff')}</button>
+    <div class="t2" style="margin:6px 4px 0;color:var(--muted)">Найди где покупал любую позицию — «хлеб», «молоко», «шампунь». Все распознанные чеки с разбивкой по товарам.</div>
     <h2>О приложении</h2>
     <div class="card"><div class="t2">MONEY · личный финансовый помощник<br>Бот: @money_veta_bot<br>Открыть в браузере: <a href="https://money.vetaone.site" style="color:var(--ink);font-weight:600">money.vetaone.site</a></div></div>`;
   document.getElementById('ov').style.display='flex';
 }
 async function saveBig(){ try{ await api('/api/kv/alert_big',{method:'POST',body:JSON.stringify({value:document.getElementById('st-big').value})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
+
+// ===== Поиск по чекам ФНС =====
+let _rcpExpand=new Set();
+let _rcpQ='', _rcpData=null, _rcpDebTimer;
+async function openReceipts(){
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Чеки ФНС</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="srch" style="margin-bottom:10px">${icon('search',18)}<input id="rcp-q" placeholder="«хлеб», «молоко», магазин..." value="${_rcpQ.replace(/"/g,'&quot;')}"></div>
+    <div id="rcp-list"><div class="empty">Загрузка…</div></div>`;
+  document.getElementById('ov').style.display='flex';
+  const inp=document.getElementById('rcp-q');
+  inp.addEventListener('input',e=>{ clearTimeout(_rcpDebTimer); _rcpDebTimer=setTimeout(()=>{ _rcpQ=e.target.value.trim(); loadReceipts(); },250); });
+  loadReceipts();
+}
+async function loadReceipts(){
+  try{
+    const url='/api/receipts?limit=30&q='+encodeURIComponent(_rcpQ);
+    _rcpData=await api(url);
+    renderReceipts();
+  }catch(e){ document.getElementById('rcp-list').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+function renderReceipts(){
+  const d=_rcpData||{receipts:[]};
+  const list=document.getElementById('rcp-list'); if(!list) return;
+  if(!d.receipts.length){
+    list.innerHTML=`<div class="empty"><div class="ttl">${_rcpQ?'Ничего не найдено':'Чеков пока нет'}</div>${_rcpQ?'Уточни запрос или поищи по магазину.':'Скинь боту фото чека с QR — он сам распознает.'}</div>`;
+    return;
+  }
+  list.innerHTML=`<div style="font-size:12px;color:var(--muted);margin:0 2px 8px">${d.count} чек${d.count%10===1&&d.count!==11?'':d.count%10>=2&&d.count%10<=4&&!(d.count%100>=12&&d.count%100<=14)?'а':'ов'} · показано ${d.receipts.length}</div>`+
+    d.receipts.map(r=>{
+      const col=color(r.merchant), isOpen=_rcpExpand.has(r.id);
+      const date=new Date(r.dt).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'2-digit'});
+      const time=new Date(r.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      const items=isOpen?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">${r.items.map(it=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:13px">
+        <span style="flex:1;min-width:0">${(it.name||'').replace(/</g,'&lt;')}${it.qty>1?` <span class="muted" style="font-size:11px">× ${it.qty}</span>`:''}</span>
+        <span style="font-weight:700;white-space:nowrap">${fmt(it.sum||0)} ₽</span></div>`).join('')}</div>`:'';
+      return `<div class="row" style="display:block;cursor:pointer" onclick="rcpToggle(${r.id})">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="sq" style="background:${tint(col)};color:${col}">${icon('receipt',20)}</div>
+          <div class="mid"><div class="t1">${r.merchant}</div><div class="t2">${date}, ${time} · ${r.n_items} поз.</div></div>
+          <div class="amt">${fmt(r.total)} ${CUR}</div>
+        </div>${items}</div>`;
+    }).join('')+
+    (d.has_more?`<button class="btn full" style="margin-top:8px" onclick="rcpMore()">Показать ещё</button>`:'');
+}
+function rcpToggle(id){ if(_rcpExpand.has(id)) _rcpExpand.delete(id); else _rcpExpand.add(id); renderReceipts(); }
+async function rcpMore(){
+  const offset=(_rcpData?.receipts?.length||0)+(_rcpData?.offset||0);
+  try{
+    const more=await api('/api/receipts?limit=30&offset='+offset+'&q='+encodeURIComponent(_rcpQ));
+    _rcpData.receipts=_rcpData.receipts.concat(more.receipts);
+    _rcpData.has_more=more.has_more;
+    renderReceipts();
+  }catch(e){toast('Ошибка');}
+}
 
 async function openCatMgr(){
   await loadCats(); await loadIncCats();

@@ -92,13 +92,19 @@ def analytics_overview(db: Session, period: str = "month") -> dict:
 
     cur = _sum_by_category(db, start, end)
     prev = _sum_by_category(db, prev_start, prev_end)
+    # год-к-году: тот же период годом ранее
+    yoy = _sum_by_category(db, start - relativedelta(years=1), end - relativedelta(years=1))
     compare = []
-    for n in set(cur) | set(prev):
-        c, p = round(cur.get(n, 0.0), 2), round(prev.get(n, 0.0), 2)
-        if c <= 0 and p <= 0:
+    for n in set(cur) | set(prev) | set(yoy):
+        c, p, y = round(cur.get(n, 0.0), 2), round(prev.get(n, 0.0), 2), round(yoy.get(n, 0.0), 2)
+        if c <= 0 and p <= 0 and y <= 0:
             continue
-        compare.append({"name": n, "cur": c, "prev": p, "delta": round(c - p, 2),
-                        "delta_pct": round((c - p) / p * 100) if p > 0 else None})
+        compare.append({
+            "name": n, "cur": c, "prev": p, "delta": round(c - p, 2),
+            "delta_pct": round((c - p) / p * 100) if p > 0 else None,
+            "yoy": y,
+            "yoy_delta_pct": round((c - y) / y * 100) if y > 0 else None,
+        })
     compare.sort(key=lambda x: -abs(x["delta"]))
 
     by_category = sorted(({"name": n, "sum": round(v, 2)} for n, v in cur.items() if v > 0),
