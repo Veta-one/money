@@ -5,7 +5,7 @@ import calendar
 from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -14,6 +14,25 @@ from .analytics import _sum_by_category
 from .fx import compute_net_worth
 from .income import expected_income_monthly
 from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
+
+
+def needs_review(t) -> bool:
+    """Операция «на разбор»: расход без категории; доход без категории/источника; статус needs_review."""
+    if t.status == "needs_review":
+        return True
+    if t.type == "expense" and not t.category_id:
+        return True
+    if t.type == "income" and (not t.category_id or not t.recurring_id):
+        return True
+    return False
+
+
+_REVIEW_FILTER = or_(
+    models.Transaction.status == "needs_review",
+    and_(models.Transaction.type == "expense", models.Transaction.category_id.is_(None)),
+    and_(models.Transaction.type == "income",
+         or_(models.Transaction.category_id.is_(None), models.Transaction.recurring_id.is_(None))),
+)
 
 
 def get_dashboard(db: Session) -> dict:
@@ -39,8 +58,8 @@ def get_dashboard(db: Session) -> dict:
 
     spent_prev = _sum_between("expense", prev_start, month_start)
     income_prev = _sum_between("income", prev_start, month_start)
-    needs_review = int(db.query(func.count(models.Transaction.id))
-                       .filter(models.Transaction.status == "needs_review").scalar() or 0)
+    review_count = int(db.query(func.count(models.Transaction.id))
+                       .filter(_REVIEW_FILTER).scalar() or 0)
     prev_cat = _sum_by_category(db, prev_start, month_start)
 
     cat_rows = (
@@ -71,7 +90,7 @@ def get_dashboard(db: Session) -> dict:
         "id": t.id, "dt": t.datetime.isoformat(), "amount": round(t.amount, 2),
         "currency": t.currency, "base_rub": round(t.base_amount_rub or 0.0, 2),
         "merchant": t.merchant or "", "type": t.type,
-        "category": _cn(t.category_id),
+        "category": _cn(t.category_id), "review": needs_review(t),
     } for t in recent]
 
     net_worth = compute_net_worth(db)
@@ -96,7 +115,7 @@ def get_dashboard(db: Session) -> dict:
         "income_prev": round(income_prev, 2),
         "saved": round(income - spent, 2),
         "saved_prev": round(income_prev - spent_prev, 2),
-        "needs_review": needs_review,
+        "needs_review": review_count,
         "by_category": by_category,
         "recent": recent_out,
         "net_worth": round(net_worth, 2),

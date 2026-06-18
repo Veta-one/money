@@ -57,6 +57,7 @@
   .row .t2{font-size:12px;color:var(--muted);margin-top:2px}
   .amt{font-size:15px;font-weight:700;white-space:nowrap}
   .amt.exp{color:var(--text)} .amt.inc{color:var(--green)}
+  .row.rev{box-shadow:inset 3px 0 0 #ff8a3d}
   .num{width:118px;background:var(--bg);border:1.5px solid transparent;border-radius:12px;color:var(--text);
     font-size:15px;font-weight:700;text-align:right;padding:9px 11px}
   .num:focus{border-color:var(--ink);outline:none}
@@ -310,9 +311,9 @@ async function loadDashboard(){
         <div class="card"><div class="k">Отложено</div><div class="v" style="color:${d.saved>=0?'var(--green)':'var(--red)'}">${d.saved>=0?'+':'−'}${fmt(Math.abs(d.saved))}<span class="cur">${CUR}</span></div><div style="margin-top:4px">${dBadge(d.saved,d.saved_prev,false)}</div></div>
         <div class="card" onclick="tab('capital')" style="cursor:pointer"><div class="k">Капитал</div><div class="v">${fmt(d.net_worth)}<span class="cur">${CUR}</span></div><div style="margin-top:4px">${dBadgeAbs(d.net_worth_delta,false)}</div></div>
       </div>
-      ${d.needs_review>0?`<div class="row" style="cursor:pointer;margin-top:12px;background:#fff7ec;border:1.5px solid #ffd9a0" onclick="tab('ops')">
+      ${d.needs_review>0?`<div class="row" style="cursor:pointer;margin-top:12px;background:#fff7ec;border:1.5px solid #ffd9a0" onclick="openReviewOps()">
         <div class="sq" style="background:${tint('#ff8a3d')};color:#ff8a3d">${icon('receipt',20)}</div>
-        <div class="mid"><div class="t1">${d.needs_review} ${plural(d.needs_review,'трата ждёт','траты ждут','трат ждут')} разбора</div><div class="t2">нажми, чтобы проверить категории</div></div>
+        <div class="mid"><div class="t1">${d.needs_review} ${plural(d.needs_review,'операция ждёт','операции ждут','операций ждут')} разбора</div><div class="t2">нажми — расставить категории и источники</div></div>
         <div class="amt" style="color:#c77700">→</div></div>`:''}
       ${d.forecast_total>0?`<div class="card" style="margin-top:12px"><div class="k">Прогноз трат в этом месяце</div>
         <div class="v">≈ ${fmt(d.forecast_total)}<span class="cur">${CUR}</span></div>
@@ -487,7 +488,7 @@ async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/
 async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 
 // ---- операции (список + фильтры) ----
-let _ops={period:'this', type:'', cat:'', q:'', offset:0, items:[], more:false, count:0, se:0, si:0};
+let _ops={period:'this', type:'', cat:'', q:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0};
 function ym(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function opsQS(){
   const p=new URLSearchParams(), now=new Date();
@@ -496,6 +497,7 @@ function opsQS(){
   if(_ops.type) p.set('type',_ops.type);
   if(_ops.cat) p.set('category_id',_ops.cat);
   if(_ops.q) p.set('q',_ops.q);
+  if(_ops.review) p.set('review','1');
   p.set('limit','50'); p.set('offset',String(_ops.offset));
   return p.toString();
 }
@@ -513,10 +515,11 @@ function txRow(x){
   const key=x.category||x.merchant||'op', col=color(key);
   const inn=x.type==='income'||x.amount<0;
   const ic=x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);
-  return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
+  const sub=`${new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}${x.category?' · '+x.category:''}${x.review?' · <span style="color:#ff8a3d;font-weight:700">разобрать</span>':''}`;
+  return `<div class="row${x.review?' rev':''}" onclick="openTx(${x.id})" style="cursor:pointer">
     <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
     <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
-    <div class="t2">${new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}${x.category?' · '+x.category:''}</div></div>
+    <div class="t2">${sub}</div></div>
     <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`;
 }
 function groupedTx(items){
@@ -536,10 +539,10 @@ function renderOps(){
   const pc=(v,t)=>`<button class="chip${o.period===v?' on':''}" onclick="opsSet('period','${v}')">${t}</button>`;
   const tc=(v,t)=>`<button class="chip${o.type===v?' on':''}" onclick="opsSet('type','${v}')">${t}</button>`;
   const catName=o.cat?((_cats.find(c=>String(c.id)===String(o.cat))||{}).name||'Категория'):'Все категории';
-  const nActive=(o.period!=='this'?1:0)+(o.type?1:0)+(o.cat?1:0)+(o.q?1:0);
+  const nActive=(o.period!=='this'?1:0)+(o.type?1:0)+(o.cat?1:0)+(o.q?1:0)+(o.review?1:0);
   const panel=_opsFiltOpen?`
     <div class="filt">${pc('this','Этот месяц')}${pc('last','Прошлый')}${pc('all','Всё время')}</div>
-    <div class="filt">${tc('','Все')}${tc('expense','Расходы')}${tc('income','Доходы')}${tc('transfer','Переводы')}</div>
+    <div class="filt">${tc('','Все')}${tc('expense','Расходы')}${tc('income','Доходы')}${tc('transfer','Переводы')}<button class="chip${o.review?' on':''}" onclick="opsSet('review',${o.review?0:1})">На разбор</button></div>
     <button class="inp" style="display:flex;align-items:center;justify-content:space-between;text-align:left;margin-bottom:8px" onclick="openOpsCat()"><span>${catName}</span>${icon('chev',16,'#8b909a')}</button>
     <div class="srch" style="margin-bottom:12px">${icon('search',18)}<input placeholder="Поиск по продавцу" value="${(o.q||'').replace(/"/g,'&quot;')}" onchange="opsSet('q',this.value.trim())"></div>`:'';
   const listHtml=o.items.length?groupedTx(o.items):`<div class="empty">Ничего не найдено по этим фильтрам.</div>`;
@@ -567,7 +570,8 @@ async function openOpsCat(){
 function opsPickCat(id){ _ops.cat=id; _ops.offset=0; _ops.items=[]; closeOv(); loadOps(); }
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
-function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
+function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
+function openReviewOps(){ _ops={period:'all', type:'', cat:'', q:'', review:1, offset:0, items:[], more:false, count:0, se:0, si:0}; _opsFiltOpen=true; tab('ops'); }
 async function openTxForm(){
   if(!_cats.length){ try{_cats=(await api('/api/categories')).categories||[];}catch(e){} }
   if(!_incCats.length){ try{_incCats=(await api('/api/categories?type=income')).categories||[];}catch(e){} }

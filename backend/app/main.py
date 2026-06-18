@@ -28,7 +28,7 @@ from .services.backup import make_and_send_backup
 from .services.budget import budget_overview
 from .services.capital import capital_overview
 from .services.categorize import learn_rule
-from .services.dashboard import get_dashboard
+from .services.dashboard import get_dashboard, needs_review
 from .services.digests import send_digest
 from .services.income import income_overview, learn_income_alias
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
@@ -128,6 +128,7 @@ async def list_transactions(
     q: str | None = None,
     min_amount: float | None = None,
     max_amount: float | None = None,
+    review: int | None = None,
     limit: int = 50,
     offset: int = 0,
     user: dict = Depends(current_user),
@@ -171,6 +172,8 @@ async def list_transactions(
         ql = q.strip().lower()
         rows = [r for r in rows
                 if ql in (r.merchant or "").lower() or ql in (r.note or "").lower()]
+    if review:
+        rows = [r for r in rows if needs_review(r)]
 
     sum_expense = round(sum(r.base_amount_rub or 0.0 for r in rows if r.type == "expense"), 2)
     sum_income = round(sum(r.base_amount_rub or 0.0 for r in rows if r.type == "income"), 2)
@@ -184,6 +187,7 @@ async def list_transactions(
         "type": t.type, "merchant": t.merchant or "",
         "category": cat_map.get(t.category_id), "category_id": t.category_id,
         "account_id": t.account_id, "source": t.source, "status": t.status,
+        "review": needs_review(t),
     } for t in page]
     return {
         "transactions": out, "count": count,
