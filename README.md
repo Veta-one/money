@@ -4,10 +4,29 @@ Telegram-бот + веб мини-апп для учёта личных фина
 Принимает чеки (фото с QR → ФНС), текст, голос и банковские выписки, сам всё
 категоризирует нейросетью и показывает дашборд: траты, капитал, цели, прогнозы.
 
-- Бот: **@money_veta_bot** · Мини-апп: **https://money.vetaone.site** · Репозиторий: private `Veta-one/money`
+- Бот: **@money_veta_bot** · Мини-апп: **https://money.vetaone.site**
 - Боевой сервер: `166.88.159.91` (контейнер `money_app` за общим Caddy)
 
 > README — актуальное состояние сервиса. [SPEC.md](SPEC.md) — исходная спецификация/видение.
+
+---
+
+## Скриншоты
+
+<sub>На демо-данных. Реальные цифры/имена в репозиторий не попадают — БД с операциями, токены и фото чеков защищены `.gitignore`.</sub>
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/screens/01-dashboard.png" alt="Главная: safe-to-spend, цифры месяца, прогноз, график трат"/><br/><sub align="center"><b>Главная</b> · safe-to-spend, цифры месяца с Δ, прогноз, график</sub></td>
+    <td width="33%" valign="top"><img src="docs/screens/02-operations.png" alt="Операции: список с фильтрами и группировкой по дням"/><br/><sub align="center"><b>Операции</b> · фильтры, группировка по дням, итог по выборке</sub></td>
+    <td width="33%" valign="top"><img src="docs/screens/03-analytics.png" alt="Аналитика: финансовое здоровье и инсайты"/><br/><sub align="center"><b>Аналитика</b> · чекап + «Что я заметил»</sub></td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/screens/04-income.png" alt="Доходы: источники, план-факт, нудж продления"/><br/><sub align="center"><b>Доходы</b> · источники, план-факт, продление</sub></td>
+    <td width="33%" valign="top"><img src="docs/screens/05-capital.png" alt="Капитал: net worth, курс USD/RUB за год, разбивка прироста"/><br/><sub align="center"><b>Капитал</b> · net worth, курс USD/RUB за год, разбивка</sub></td>
+    <td width="33%" valign="top"><img src="docs/screens/06-goals.png" alt="Цели: прогресс, прогноз, регулярные платежи"/><br/><sub align="center"><b>Цели</b> · прогресс, прогноз, регулярные платежи</sub></td>
+  </tr>
+</table>
 
 ---
 
