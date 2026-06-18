@@ -694,10 +694,14 @@ async function loadAnalytics(){
         <div style="flex:1"><div class="v">${ch.cushion_months!=null?ch.cushion_months:'—'}</div><div class="t2" style="color:var(--muted)">подушка, мес</div></div>
         <div style="flex:1"><div class="v">${ch.usd_share!=null?ch.usd_share+'/'+ch.rub_share:'—'}</div><div class="t2" style="color:var(--muted)">USD/RUB %</div></div></div>
       ${(ch.recommendations||[]).length?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">`+(ch.recommendations||[]).map(r=>{const col=r.l==='bad'?'var(--red)':r.l==='good'?'var(--green)':r.l==='warn'?'#ff8a3d':'var(--muted)';return `<div style="display:flex;gap:8px;padding:4px 0;font-size:13px;line-height:1.35"><span style="color:${col};font-size:15px;line-height:1.2">●</span><span style="flex:1">${r.t}</span></div>`}).join('')+`</div>`:''}</div>`;
+    const insIcon={anomaly:'flame',velocity:'chart',biggest:'coin',sub_stale:'tv',sub_hike:'tv',goal_pace:'target',bills:'receipt'};
+    const insHtml=(ch.insights||[]).length?`<h2>Что я заметил</h2>`+(ch.insights||[]).map(it=>{const col=it.l==='bad'?'var(--red)':it.l==='good'?'var(--green)':it.l==='warn'?'#ff8a3d':'#2f8bff';return `<div class="row" style="align-items:flex-start;padding:14px"><div class="sq" style="background:${tint(col)};color:${col}">${icon(insIcon[it.kind]||'tag',20)}</div>
+      <div class="mid"><div class="t1">${it.title}</div><div class="t2" style="white-space:normal;line-height:1.45">${it.text}</div></div></div>`}).join(''):'';
     document.getElementById('v-analytics').innerHTML=`
       <div class="head"><div class="hi">Аналитика</div></div>
       <h2 style="margin-top:6px">Финансовое здоровье</h2>
       ${chHtml}
+      ${insHtml}
       <h2>Бюджет · ${new Date(b.month+'-01').toLocaleDateString('ru-RU',{month:'long'})}</h2>
       ${budCard}
       <div class="catlist" style="margin-top:10px">${budItems}</div>
