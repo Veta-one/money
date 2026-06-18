@@ -184,7 +184,7 @@ async function loadDashboard(){
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(x.type==='income'?'coin':x.type==='transfer'?'swap':'receipt',20)}</div>
         <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
         <div class="t2">${new Date(x.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
-        <div class="amt ${x.type==='income'?'inc':'exp'}">${x.type==='income'?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`).join('')
+        <div class="amt ${x.type==='income'?'inc':'exp'}">${x.type==='income'?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`}).join('')
         :`<div class="empty">Операций пока нет.</div>`}`;
   }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
