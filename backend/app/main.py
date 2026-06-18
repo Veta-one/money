@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from aiogram.types import Update
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from . import bot as botmod
 from . import models  # noqa: F401  — регистрируем таблицы в metadata
@@ -19,9 +20,12 @@ from .config import settings
 from .db import Base, engine, get_session
 from .security import current_user
 from .services.dashboard import get_dashboard
+from .services.digests import send_digest
 from .services.fx import to_rub
 from .services.planning import goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
+
+scheduler = AsyncIOScheduler(timezone=settings.timezone)
 
 
 @asynccontextmanager
@@ -39,7 +43,17 @@ async def lifespan(_app: FastAPI):
         except Exception as e:  # noqa: BLE001
             import logging
             logging.getLogger("money").warning("set_webhook отложен: %s", e)
+    if botmod.bot:
+        scheduler.add_job(send_digest, "cron", args=["daily"], hour=21, minute=0,
+                          id="daily", replace_existing=True)
+        scheduler.add_job(send_digest, "cron", args=["weekly"], day_of_week="sun", hour=20,
+                          minute=0, id="weekly", replace_existing=True)
+        scheduler.add_job(send_digest, "cron", args=["monthly"], day=1, hour=10, minute=0,
+                          id="monthly", replace_existing=True)
+        scheduler.start()
     yield
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
     if botmod.bot:
         await botmod.bot.session.close()
 

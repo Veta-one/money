@@ -8,7 +8,7 @@ import logging
 from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
 
@@ -17,6 +17,7 @@ from .config import settings
 from .db import SessionLocal
 from .services import ingest
 from .services.categorize import learn_rule
+from .services.digests import build_daily, build_monthly, build_weekly
 
 log = logging.getLogger("money.bot")
 dp = Dispatcher()
@@ -73,7 +74,35 @@ async def on_start(m: Message):
         "• 📷 ценник/квитанцию — пойму нейросетью\n"
         "• ✍️ текст: «такси 300», «зарплата 135000»\n"
         "• 🎙️ голосовое — расшифрую\n\n"
+        "Отчёты: /report (день) · /week · /month\n"
         "Дашборд — кнопка «💰 MONEY» слева от поля ввода.")
+
+
+async def _send_report(m: Message, builder) -> None:
+    db = SessionLocal()
+    try:
+        text = builder(db)
+    finally:
+        db.close()
+    await m.answer(text, parse_mode="HTML")
+
+
+@dp.message(Command("report", "day"))
+async def on_report(m: Message):
+    if _owner(m):
+        await _send_report(m, build_daily)
+
+
+@dp.message(Command("week"))
+async def on_week(m: Message):
+    if _owner(m):
+        await _send_report(m, build_weekly)
+
+
+@dp.message(Command("month"))
+async def on_month(m: Message):
+    if _owner(m):
+        await _send_report(m, build_monthly)
 
 
 @dp.message(F.photo)
