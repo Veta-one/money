@@ -875,7 +875,8 @@ function renderTxForm(){
       <input id="tf-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма" style="flex:2" value="${_txf.amount||''}">
       <select id="tf-c" class="inp" style="flex:1"><option value="RUB"${_txf.cur==='USD'?'':' selected'}>RUB</option><option value="USD"${_txf.cur==='USD'?' selected':''}>USD</option></select></div>
     ${_txf.type!=='transfer'?`<select id="tf-cat" class="inp" style="margin-bottom:8px"><option value="">Категория (необязательно)</option>${cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`:''}
-    <input id="tf-m" class="inp" placeholder="${_txf.type==='transfer'?'Описание перевода':isInc?'Источник/откуда':'Продавец/описание'}" style="margin-bottom:8px" value="${(_txf.merchant||'').replace(/"/g,'&quot;')}">
+    <input id="tf-m" class="inp" placeholder="${_txf.type==='transfer'?'Описание перевода':isInc?'Источник/откуда':'Продавец (Пятёрочка, Лукойл…)'}" oninput="txfSuggest(this.value)" autocomplete="off" style="margin-bottom:8px" value="${(_txf.merchant||'').replace(/"/g,'&quot;')}">
+    <div id="tf-sug" style="display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 8px"></div>
     <select id="tf-acc" class="inp" style="margin-bottom:8px"><option value="">${_txf.type==='transfer'?'Со счёта':'Счёт (необязательно)'}</option>${_accs.map(a=>`<option value="${a.id}">${a.name}${a.currency!=='RUB'?' ('+a.currency+')':''}</option>`).join('')}</select>
     ${_txf.type==='transfer'?`<select id="tf-acc2" class="inp" style="margin-bottom:8px"><option value="">На счёт</option>${_accs.map(a=>`<option value="${a.id}">${a.name}${a.currency!=='RUB'?' ('+a.currency+')':''}</option>`).join('')}</select>`:''}
     <input id="tf-note" class="inp" placeholder="Заметка (необязательно)" style="margin-bottom:8px" value="${(_txf.note||'').replace(/"/g,'&quot;')}">
@@ -887,6 +888,32 @@ function txfType(t){
   const ce=document.getElementById('tf-c'); if(ce) _txf.cur=ce.value;
   const me=document.getElementById('tf-m'); if(me) _txf.merchant=me.value;
   _txf.type=t; renderTxForm();
+}
+let _sugTimer, _sugReq=0;
+async function txfSuggest(q){
+  q=(q||'').trim();
+  const box=document.getElementById('tf-sug'); if(!box) return;
+  if(_txf.type!=='expense' || q.length<2){ box.innerHTML=''; return; }
+  clearTimeout(_sugTimer);
+  _sugTimer=setTimeout(async ()=>{
+    const myReq=++_sugReq;
+    try{
+      const r=await api('/api/suggest/merchants?limit=5&q='+encodeURIComponent(q));
+      if(myReq!==_sugReq) return;  // устаревший ответ
+      const sugs=r.suggestions||[];
+      box.innerHTML=sugs.map(s=>{const col=color(s.category||s.merchant), amt=s.amount?s.amount:'';
+        return `<button class="chip" style="display:inline-flex;align-items:center;gap:5px;text-align:left;background:${tint(col)};color:${col};border-color:transparent" onclick='txfApplySug(${JSON.stringify(s).replace(/"/g,"&quot;").replace(/'/g,"&#39;")})'>
+          <span style="font-weight:700">${s.merchant}</span>${s.category?` <span style="color:var(--muted);font-weight:500">· ${s.category}</span>`:''}${amt?` <span style="color:var(--muted);font-weight:500">· ~${fmt(amt)} ₽</span>`:''}</button>`;
+      }).join('');
+    }catch(e){ /* тихо игнорим */ }
+  },220);
+}
+function txfApplySug(s){
+  const me=document.getElementById('tf-m'); if(me) me.value=s.merchant;
+  const ae=document.getElementById('tf-a'); if(ae && !ae.value && s.amount) ae.value=s.amount;
+  const ce=document.getElementById('tf-cat'); if(ce && s.category_id) ce.value=s.category_id;
+  document.getElementById('tf-sug').innerHTML='';
+  tap('light');
 }
 async function saveTx(){
   const amount=parseFloat(document.getElementById('tf-a').value);

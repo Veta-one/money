@@ -262,6 +262,39 @@ async def ai_ask_endpoint(body: AskIn,
     return await ai_ask(db, body.question)
 
 
+@app.get("/api/suggest/merchants")
+async def suggest_merchants(q: str = "", limit: int = 6,
+                            user: dict = Depends(current_user),
+                            db: Session = Depends(get_session)):
+    """Smart-compose: топ-N merchants по prefix `q`, с категорией и средней суммой."""
+    limit = max(1, min(int(limit), 20))
+    base = (db.query(models.Transaction.merchant,
+                     models.Transaction.category_id,
+                     func.count(models.Transaction.id).label("cnt"),
+                     func.avg(models.Transaction.amount).label("avg_amt"))
+            .filter(models.Transaction.merchant.isnot(None),
+                    models.Transaction.merchant != "",
+                    models.Transaction.type == "expense"))
+    if q:
+        base = base.filter(func.lower(models.Transaction.merchant).like(f"%{q.lower()}%"))
+    rows = (base.group_by(models.Transaction.merchant, models.Transaction.category_id)
+            .order_by(func.count(models.Transaction.id).desc()).limit(limit).all())
+    out = []
+    seen_merchants: set[str] = set()
+    for m, cid, cnt, avg in rows:
+        # уникальные merchants — берём наиболее частую категорию
+        if m in seen_merchants:
+            continue
+        seen_merchants.add(m)
+        cat = db.get(models.Category, cid) if cid else None
+        out.append({
+            "merchant": m,
+            "category_id": cid, "category": cat.name if cat else None,
+            "amount": round(float(avg or 0)), "uses": int(cnt),
+        })
+    return {"q": q, "suggestions": out}
+
+
 @app.get("/api/receipts")
 async def receipts_list(q: str = "", limit: int = 30, offset: int = 0,
                         user: dict = Depends(current_user),
