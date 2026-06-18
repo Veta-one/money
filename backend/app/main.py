@@ -219,6 +219,17 @@ async def capital(user: dict = Depends(current_user), db: Session = Depends(get_
     return capital_overview(db)
 
 
+class TargetIn(BaseModel):
+    target: float
+
+
+@app.post("/api/capital/target")
+async def set_nw_target(body: TargetIn, user: dict = Depends(current_user),
+                        db: Session = Depends(get_session)):
+    set_setting(db, "networth_target", body.target)
+    return {"ok": True}
+
+
 class BalanceIn(BaseModel):
     balance: float
 

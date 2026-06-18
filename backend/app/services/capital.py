@@ -5,13 +5,17 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from math import ceil
 
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
 from .fx import compute_net_worth, get_usd_rub, to_rub
+from .income import expected_income_monthly
 from .planning import avg_monthly_expense
+from .settings_store import get_setting
 from .trends import networth_series
 
 _USD_LIKE = {"USD", "USDT", "USDC", "$"}
@@ -68,6 +72,15 @@ def capital_overview(db: Session) -> dict:
     avg_exp = avg_monthly_expense(db)
     months = round(liquid / avg_exp, 1) if avg_exp > 0 else None
 
+    # цель капитала + прогноз + «сначала заплати себе» (отложено в этом месяце)
+    target = float(get_setting(db, "networth_target") or 0)
+    monthly_save = round(expected_income_monthly(db) - avg_exp)
+    saved_month = round(_sum_tx(db, "income", month_start) - _sum_tx(db, "expense", month_start))
+    eta_months = eta_date = None
+    if target > net_now and monthly_save > 0:
+        eta_months = ceil((target - net_now) / monthly_save)
+        eta_date = (date.today() + relativedelta(months=eta_months)).isoformat()
+
     return {
         "net_worth": net_now, "usd_rate": round(usd_now, 2),
         "series": series, "delta": delta, "delta_days": delta_days,
@@ -79,6 +92,8 @@ def capital_overview(db: Session) -> dict:
                             sorted(by_type.items(), key=lambda x: -x[1]) if v > 0],
         "emergency": {"liquid": round(liquid), "avg_expense": round(avg_exp),
                       "months": months, "target": 6},
+        "target": round(target), "monthly_save": monthly_save, "saved_month": saved_month,
+        "eta_months": eta_months, "eta_date": eta_date,
         "income_sources": db.query(models.Recurring).filter(
             models.Recurring.type == "income", models.Recurring.active.is_(True)).count(),
     }

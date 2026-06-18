@@ -361,6 +361,15 @@ async function loadCapital(){
       <div class="card"><div class="v">${c.emergency.months} <span class="cur">мес. расходов</span></div>
         <div class="track" style="margin-top:10px"><i style="width:${Math.min(100,Math.round(c.emergency.months/c.emergency.target*100))}%;background:${c.emergency.months>=c.emergency.target?'var(--green)':'var(--ink)'}"></i></div>
         <div class="t2" style="margin-top:8px;color:var(--muted)">${fmt(c.emergency.liquid)} ₽ ликвидных · цель ${c.emergency.target} мес ≈ ${fmt((c.emergency.avg_expense||0)*c.emergency.target)} ₽</div></div>`:''}
+      <h2>Цель капитала</h2>
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="nwt" class="inp" type="number" inputmode="decimal" placeholder="Целевой капитал ₽" value="${c.target||''}" style="flex:1">
+          <button class="btn" onclick="saveNwTarget()">ОК</button></div>
+        ${c.target>0?`<div class="track" style="margin-top:12px"><i style="width:${Math.min(100,Math.round(c.net_worth/c.target*100))}%;background:var(--ink)"></i></div>
+          <div class="meta" style="margin-top:8px"><span>${fmt(c.net_worth)} из ${fmt(c.target)} ${CUR}</span><span>${Math.round(c.net_worth/c.target*100)}%</span></div>
+          ${c.eta_months?`<div class="t2" style="margin-top:6px;color:var(--muted)">при +${fmt(c.monthly_save)} ₽/мес ≈ ${c.eta_months} мес (до ${new Date(c.eta_date).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})})</div>`:(c.net_worth>=c.target?`<div class="t2" style="margin-top:6px;color:var(--green)">Цель достигнута</div>`:'')}`:''}
+        <div class="meta" style="margin-top:10px"><span class="muted">Отложено в этом месяце</span><span style="font-weight:700;color:${(c.saved_month||0)>=0?'var(--green)':'var(--red)'}">${(c.saved_month||0)>=0?'+':'−'}${fmt(Math.abs(c.saved_month||0))} ${CUR}</span></div></div>
       <h2>Счета</h2>
       ${accs.map(ac=>{const col=color(ac.name);return `<div class="row">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>
@@ -454,6 +463,8 @@ async function saveDep(){
   try{ if(_depEdit) await api('/api/deposits/'+_depEdit,{method:'POST',body:JSON.stringify(body)}); else await api('/api/deposits',{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
 async function delDep(id){ try{ await api('/api/deposits/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
+async function saveNwTarget(){ const v=parseFloat(document.getElementById('nwt').value)||0;
+  try{ await api('/api/capital/target',{method:'POST',body:JSON.stringify({target:v})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
 function setDir(d){ _debtDir=d; document.getElementById('dir-owed').className='chip'+(d==='owed_to_me'?' on':''); document.getElementById('dir-iowe').className='chip'+(d==='i_owe'?' on':''); }
 async function addDebt(){ const n=document.getElementById('dn').value.trim(), a=parseFloat(document.getElementById('da').value);
   if(!n||!a){toast('Кто и сколько');return;} try{ await api('/api/debts',{method:'POST',body:JSON.stringify({counterparty:n,direction:_debtDir,amount:a})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }
