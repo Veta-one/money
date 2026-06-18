@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from .fx import to_rub
-from .planning import goals_monthly_plan, obligatory_monthly
+from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
 from .settings_store import get_setting
 
 
@@ -38,6 +38,10 @@ def get_dashboard(db: Session) -> dict:
         .limit(8).all()
     )
     by_category = [{"name": n, "sum": round(float(s), 2)} for n, s in cat_rows]
+    fc = category_forecast(db)
+    for c in by_category:
+        c["expected"] = fc.get(c["name"], 0.0)
+    forecast_total = round(sum(fc.values()), 2)
 
     recent = (db.query(models.Transaction)
               .order_by(models.Transaction.datetime.desc()).limit(10).all())
@@ -71,5 +75,6 @@ def get_dashboard(db: Session) -> dict:
         "expected_income": round(expected, 2),
         "obligatory": obligatory,
         "goals_plan": goals_plan,
+        "forecast_total": forecast_total,
         "currency": settings.base_currency,
     }

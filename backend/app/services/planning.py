@@ -31,6 +31,25 @@ def obligatory_monthly(db: Session) -> float:
     return round(total, 2)
 
 
+def category_forecast(db: Session, months: int = 3) -> dict[str, float]:
+    """Средние траты по категориям за последние N полных месяцев (без текущего) → прогноз/мес."""
+    now = datetime.now()
+    cur_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    y, m = cur_start.year, cur_start.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    window_start = datetime(y, m, 1)
+    rows = (db.query(models.Category.name,
+                     func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0))
+            .join(models.Transaction, models.Transaction.category_id == models.Category.id)
+            .filter(models.Transaction.type == "expense",
+                    models.Transaction.datetime >= window_start,
+                    models.Transaction.datetime < cur_start)
+            .group_by(models.Category.name).all())
+    return {n: round(s / months, 2) for n, s in rows if s > 0}
+
+
 def goals_monthly_plan(db: Session) -> float:
     rows = db.query(models.Goal).filter(models.Goal.status == "active").all()
     return round(sum((g.monthly_plan or 0) for g in rows), 2)

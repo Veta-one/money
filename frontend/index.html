@@ -181,12 +181,16 @@ async function loadDashboard(){
         <div class="card"><div class="k">Потрачено</div><div class="v">${fmt(d.spent)}<span class="cur">${CUR}</span></div></div>
         <div class="card"><div class="k">Капитал</div><div class="v">${fmt(d.net_worth)}<span class="cur">${CUR}</span></div></div>
       </div>
+      ${d.forecast_total>0?`<div class="card" style="margin-top:12px"><div class="k">Прогноз трат в этом месяце</div>
+        <div class="v">≈ ${fmt(d.forecast_total)}<span class="cur">${CUR}</span></div>
+        <div class="track" style="margin-top:10px"><i style="width:${Math.min(100,Math.round(d.spent/d.forecast_total*100))}%;background:var(--ink)"></i></div>
+        <div class="t2" style="margin-top:8px">потрачено ${fmt(d.spent)} из ≈ ${fmt(d.forecast_total)} ${CUR}</div></div>`:''}
       ${months.some(m=>m.spent>0)?`<h2>Траты по месяцам</h2><div class="chartcard">${barChart(months)}</div>`:''}
       <h2>По категориям</h2>
       ${cats.length?`<div class="catlist">`+cats.map(c=>`
         <div class="cat"><div class="top"><span class="dot" style="background:${color(c.name)}"></span>
         <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR}</span></div>
-        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div></div>`).join('')+`</div>`
+        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`).join('')+`</div>`
         :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
       <h2>Последние операции</h2>
       ${rec.length?rec.map(x=>{const col=color(x.merchant||'op');return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
