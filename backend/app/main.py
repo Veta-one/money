@@ -93,8 +93,13 @@ app = FastAPI(title="MONEY", lifespan=lifespan)
 
 
 @app.get("/api/health")
-async def health():
-    return {"ok": True, "env": settings.app_env}
+async def health(db: Session = Depends(get_session)):
+    from sqlalchemy import text
+    try:
+        db.execute(text("SELECT 1"))
+        return {"ok": True, "env": settings.app_env, "db": "up"}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(503, f"db down: {e}")
 
 
 @app.get("/api/me")

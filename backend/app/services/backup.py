@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import json
 import logging
 import sqlite3
 from datetime import datetime
@@ -18,8 +19,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from ..config import settings
+from ..db import SessionLocal
+from .settings_store import get_setting, set_setting
 
 log = logging.getLogger("money.backup")
+RETENTION = 14   # держим последние N бэкапов в чате; старшие удаляем
 
 
 def _fernet(passphrase: str) -> Fernet:
@@ -63,9 +67,23 @@ async def make_and_send_backup() -> bool:
     else:
         ext = "db.gz"
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    await bot.send_document(
-        int(settings.backup_chat_id),
-        BufferedInputFile(blob, filename=f"money_{stamp}.{ext}"),
+    chat_id = int(settings.backup_chat_id)
+    msg = await bot.send_document(
+        chat_id, BufferedInputFile(blob, filename=f"money_{stamp}.{ext}"),
         caption=f"Бэкап БД · {datetime.now().strftime('%d.%m.%Y %H:%M')}",
     )
+    # ротация: держим N последних, старые удаляем
+    db = SessionLocal()
+    try:
+        ids = json.loads(get_setting(db, "backup_msg_ids") or "[]")
+        ids.append(msg.message_id)
+        while len(ids) > RETENTION:
+            old = ids.pop(0)
+            try:
+                await bot.delete_message(chat_id, old)
+            except Exception:  # noqa: BLE001
+                pass
+        set_setting(db, "backup_msg_ids", json.dumps(ids))
+    finally:
+        db.close()
     return True
