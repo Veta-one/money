@@ -63,8 +63,9 @@
   .chip{background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:12px;
     padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;flex:none}
   .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .catpick{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);
-    border-radius:13px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  .catpick{display:flex;align-items:center;gap:8px;background:var(--bg);border:none;
+    border-radius:14px;padding:12px 13px;font-size:13px;font-weight:600;cursor:pointer;width:100%;text-align:left;line-height:1.2}
+  .catpick svg{flex:none}
   .iconbtn{background:var(--bg);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer;color:var(--text)}
   .empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:14px;line-height:1.5}
   .loader{text-align:center;color:var(--muted);padding:70px 0}
@@ -88,7 +89,7 @@
   .drow{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
   .drow:last-child{border-bottom:none}
   .catchip{background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:5px}
-  .catgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .catgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -117,7 +118,7 @@ const CUR='₽';
 function plural(n,one,few,many){ n=Math.abs(n)%100; const k=n%10; if(n>10&&n<20)return many; if(k>1&&k<5)return few; if(k===1)return one; return many; }
 function dBadge(cur,prev,goodDown){ if(prev==null||prev===0)return ''; const diff=cur-prev; if(!diff)return ''; const pct=Math.round(diff/prev*100),up=diff>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'}${Math.abs(pct)}%</span>`; }
 function dBadgeAbs(delta,goodDown){ if(delta==null||!delta)return ''; const up=delta>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'} ${fmt(Math.abs(delta))} ₽</span>`; }
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[];
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me';
 
 // ---- Tabler icons ----
 const P = {
@@ -131,6 +132,7 @@ const P = {
   search:'<path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/>',
   cash:'<path d="M7 9m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/><path d="M14 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 9v-2a2 2 0 0 0 -2 -2h-10a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h2"/>',
   chart:'<path d="M3 13a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M9 9a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M15 5a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M4 20h14"/>',
+  edit:'<path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"/><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z"/><path d="M16 5l3 3"/>',
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
   trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
   x:'<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
@@ -298,20 +300,15 @@ async function loadDashboard(){
         <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`).join('')+`</div>`
         :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
       <h2>Последние операции</h2>
-      ${rec.length?rec.map(x=>{const key=x.category||x.merchant||'op';const col=color(key);const inn=x.type==='income'||x.amount<0;const ic=x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
-        <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
-        <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
-        <div class="t2">${new Date(x.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
-        <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`}).join('')
-        :`<div class="empty">Операций пока нет.</div>`}
+      ${rec.length?groupedTx(rec):`<div class="empty">Операций пока нет.</div>`}
       ${rec.length?`<button class="btn full" style="margin-top:10px" onclick="tab('ops')">Все операции</button>`:''}`;
   }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 
 async function loadCapital(){
   try{
-    const [a,s,dbt,c]=await Promise.all([api('/api/accounts'),api('/api/settings'),api('/api/debts'),api('/api/capital')]);
-    const accs=a.accounts||[], debts=dbt.debts||[]; _debtDir='owed_to_me';
+    const [a,dbt,c]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital')]);
+    const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _debtDir='owed_to_me';
     const per=c.from_month_start?'за месяц':'за '+c.delta_days+' дн.';
     document.getElementById('v-capital').innerHTML=`
       <div class="head"><div class="hi">Капитал</div></div>
@@ -331,7 +328,9 @@ async function loadCapital(){
         <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>
         <div class="mid"><div class="t1">${ac.name}</div>
         <div class="t2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
-        <input class="num" type="number" inputmode="decimal" value="${ac.balance}" onchange="saveBal(${ac.id},this.value)"></div>`}).join('')}
+        <input class="num" type="number" inputmode="decimal" value="${ac.balance}" onchange="saveBal(${ac.id},this.value)" style="width:92px">
+        <button class="iconbtn" onclick="openAcc(${ac.id})">${icon('edit',18)}</button></div>`}).join('')}
+      <button class="btn full" style="margin-top:4px" onclick="openAcc(null)">Добавить счёт</button>
       <h2>Долги</h2>
       ${(dbt.owed_to_me||dbt.i_owe)?`<div class="grid2" style="margin-top:0;margin-bottom:8px">
         <div class="card"><div class="k">Вам должны</div><div class="v" style="color:var(--green)">${fmt(dbt.owed_to_me)}<span class="cur">${CUR}</span></div></div>
@@ -346,15 +345,37 @@ async function loadCapital(){
           <button id="dir-owed" class="chip on" onclick="setDir('owed_to_me')">Мне должны</button>
           <button id="dir-iowe" class="chip" onclick="setDir('i_owe')">Я должен</button></div>
         <div style="display:flex;gap:8px">
-          <input id="dn" class="inp" placeholder="Кто" style="flex:1.4">
-          <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽">
+          <input id="dn" class="inp" placeholder="Кто (имя)" style="flex:2">
+          <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽" style="flex:1">
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
-      ${c.income_sources>0?'':`<h2>Ожидаемый доход (запасной)</h2>
-      <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:8px">Используется, только если во вкладке «Доходы» не заданы источники.</div><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>`}`;
+      `;
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
-async function saveInc(v){ try{ await api('/api/settings',{method:'POST',body:JSON.stringify({expected_monthly_income:parseFloat(v)||0})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
+function openAcc(id){
+  const ac=id?_accs.find(a=>a.id===id):null;
+  _accEdit=id; _accOwner=ac?ac.owner:'me';
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${ac?'Счёт: '+ac.name:'Новый счёт'}</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <input id="ac-n" class="inp" placeholder="Название" style="margin-bottom:8px" value="${ac?(ac.name||'').replace(/"/g,'&quot;'):''}">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="ac-b" class="inp" type="number" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
+      <select id="ac-c" class="inp" style="flex:1"><option value="RUB"${ac&&ac.currency==='USD'?'':' selected'}>RUB</option><option value="USD"${ac&&ac.currency==='USD'?' selected':''}>USD</option></select></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="ao-me" class="chip${_accOwner==='me'?' on':''}" onclick="setAccOwner('me')">Я</button>
+      <button id="ao-wife" class="chip${_accOwner==='wife'?' on':''}" onclick="setAccOwner('wife')">Жена</button>
+      <button class="btn" style="margin-left:auto" onclick="saveAcc()">Сохранить</button></div>
+    ${ac?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delAcc(${ac.id})">Удалить счёт</button>`:''}`;
+  document.getElementById('ov').style.display='flex';
+}
+function setAccOwner(o){ _accOwner=o; document.getElementById('ao-me').className='chip'+(o==='me'?' on':''); document.getElementById('ao-wife').className='chip'+(o==='wife'?' on':''); }
+async function saveAcc(){
+  const name=document.getElementById('ac-n').value.trim(); if(!name){toast('Название');return;}
+  const body={name, balance:parseFloat(document.getElementById('ac-b').value)||0, currency:document.getElementById('ac-c').value, owner:_accOwner};
+  try{ if(_accEdit) await api('/api/accounts/'+_accEdit+'/edit',{method:'POST',body:JSON.stringify(body)}); else await api('/api/accounts',{method:'POST',body:JSON.stringify(body)});
+    toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
+}
+async function delAcc(id){ try{ await api('/api/accounts/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
 function setDir(d){ _debtDir=d; document.getElementById('dir-owed').className='chip'+(d==='owed_to_me'?' on':''); document.getElementById('dir-iowe').className='chip'+(d==='i_owe'?' on':''); }
 async function addDebt(){ const n=document.getElementById('dn').value.trim(), a=parseFloat(document.getElementById('da').value);
   if(!n||!a){toast('Кто и сколько');return;} try{ await api('/api/debts',{method:'POST',body:JSON.stringify({counterparty:n,direction:_debtDir,amount:a})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }
@@ -391,6 +412,7 @@ async function loadGoals(){
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(x.name),18)}</div>
         <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · ${x.period==='yearly'?'в год':'в месяц'}</div></div>
         <div class="amt exp">${fmt(x.amount)} ${CUR}</div>
+        <button class="iconbtn" onclick="openRecEdit(${x.id},${x.amount})">${icon('edit',18)}</button>
         <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join(''):''}
       ${_cands.length?`<div class="muted" style="font-size:12px;margin:12px 4px 6px">Похоже на регулярные:</div>`+_cands.map((c,i)=>`<div class="row">
         <div class="sq" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon('swap',18)}</div>
@@ -415,6 +437,15 @@ function setPer(p){ _recPer=p; document.getElementById('per-m').className='chip'
 async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
   if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
+function openRecEdit(id,amount){
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Изменить сумму</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div style="display:flex;gap:8px"><input id="re-a" class="inp" type="number" inputmode="decimal" value="${amount}" style="flex:1">
+      <button class="btn" onclick="saveRec(${id})">Сохранить</button></div>`;
+  document.getElementById('ov').style.display='flex';
+}
+async function saveRec(id){ const v=parseFloat(document.getElementById('re-a').value); if(!v){toast('Сумма');return;}
+  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify({amount:v})}); toast('Сохранено'); closeOv(); loadGoals(); }catch(e){toast('Ошибка');} }
 async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense',period:'monthly'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 
@@ -451,27 +482,27 @@ function txRow(x){
     <div class="t2">${new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}${x.category?' · '+x.category:''}</div></div>
     <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`;
 }
+function groupedTx(items){
+  let html=''; const g={};
+  items.forEach(x=>{ const d=(x.dt||'').slice(0,10); (g[d]=g[d]||[]).push(x); });
+  for(const day of Object.keys(g)){
+    const arr=g[day];
+    const net=arr.reduce((s,x)=> s + (x.type==='income'? (x.base_rub||0) : x.type==='expense'? -(x.base_rub||0) : 0), 0);
+    const dt=new Date(day+'T00:00:00');
+    html+=`<div class="dayh"><span>${dt.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</span><span>${net>=0?'+':'−'}${fmt(Math.abs(net))} ${CUR}</span></div>`;
+    html+=arr.map(txRow).join('');
+  }
+  return html;
+}
 function renderOps(){
   const o=_ops;
   const pc=(v,t)=>`<button class="chip${o.period===v?' on':''}" onclick="opsSet('period','${v}')">${t}</button>`;
   const tc=(v,t)=>`<button class="chip${o.type===v?' on':''}" onclick="opsSet('type','${v}')">${t}</button>`;
   const catOpts=`<option value="">Все категории</option>`+_cats.map(c=>`<option value="${c.id}"${String(o.cat)===String(c.id)?' selected':''}>${c.name}</option>`).join('');
-  let listHtml='';
-  if(o.items.length){
-    const groups={};
-    o.items.forEach(x=>{ const d=x.dt.slice(0,10); (groups[d]=groups[d]||[]).push(x); });
-    for(const day of Object.keys(groups)){
-      const arr=groups[day];
-      const net=arr.reduce((s,x)=> s + (x.type==='income'? x.base_rub : x.type==='expense'? -x.base_rub : 0), 0);
-      const dt=new Date(day+'T00:00:00');
-      listHtml+=`<div class="dayh"><span>${dt.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</span><span>${net>=0?'+':'−'}${fmt(Math.abs(net))} ${CUR}</span></div>`;
-      listHtml+=arr.map(txRow).join('');
-    }
-  } else {
-    listHtml=`<div class="empty">Ничего не найдено по этим фильтрам.</div>`;
-  }
+  const listHtml=o.items.length?groupedTx(o.items):`<div class="empty">Ничего не найдено по этим фильтрам.</div>`;
   document.getElementById('v-ops').innerHTML=`
     <div class="head"><div class="hi">Операции</div><div class="sub">${o.count} шт.</div></div>
+    <button class="btn full" style="margin-bottom:12px" onclick="openTxForm()">Добавить операцию</button>
     <div class="filt">${pc('this','Этот месяц')}${pc('last','Прошлый')}${pc('all','Всё время')}</div>
     <div class="filt">${tc('','Все')}${tc('expense','Расходы')}${tc('income','Доходы')}${tc('transfer','Переводы')}</div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -486,6 +517,42 @@ function renderOps(){
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
 function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
+async function openTxForm(){
+  if(!_cats.length){ try{_cats=(await api('/api/categories')).categories||[];}catch(e){} }
+  if(!_incCats.length){ try{_incCats=(await api('/api/categories?type=income')).categories||[];}catch(e){} }
+  if(!_accs.length){ try{_accs=((await api('/api/accounts')).accounts)||[];}catch(e){} }
+  _txf={type:'expense'}; renderTxForm(); document.getElementById('ov').style.display='flex';
+}
+function renderTxForm(){
+  const isInc=_txf.type==='income', cats=isInc?_incCats:_cats, today=new Date().toISOString().slice(0,10);
+  const tc=(v,l)=>`<button class="chip${_txf.type===v?' on':''}" onclick="txfType('${v}')">${l}</button>`;
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Новая операция</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="filt" style="margin-bottom:10px">${tc('expense','Расход')}${tc('income','Доход')}${tc('transfer','Перевод')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="tf-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма" style="flex:2" value="${_txf.amount||''}">
+      <select id="tf-c" class="inp" style="flex:1"><option value="RUB"${_txf.cur==='USD'?'':' selected'}>RUB</option><option value="USD"${_txf.cur==='USD'?' selected':''}>USD</option></select></div>
+    ${_txf.type!=='transfer'?`<select id="tf-cat" class="inp" style="margin-bottom:8px"><option value="">Категория (необязательно)</option>${cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`:''}
+    <input id="tf-m" class="inp" placeholder="${isInc?'Источник/откуда':'Продавец/описание'}" style="margin-bottom:8px" value="${(_txf.merchant||'').replace(/"/g,'&quot;')}">
+    <select id="tf-acc" class="inp" style="margin-bottom:8px"><option value="">Счёт (необязательно)</option>${_accs.map(a=>`<option value="${a.id}">${a.name}${a.currency!=='RUB'?' ('+a.currency+')':''}</option>`).join('')}</select>
+    <input id="tf-d" class="inp" type="date" style="margin-bottom:12px" value="${today}">
+    <button class="btn full" onclick="saveTx()">Добавить</button>`;
+}
+function txfType(t){
+  _txf.amount=parseFloat(document.getElementById('tf-a').value)||undefined;
+  const ce=document.getElementById('tf-c'); if(ce) _txf.cur=ce.value;
+  const me=document.getElementById('tf-m'); if(me) _txf.merchant=me.value;
+  _txf.type=t; renderTxForm();
+}
+async function saveTx(){
+  const amount=parseFloat(document.getElementById('tf-a').value);
+  if(!amount){ toast('Сумма'); return; }
+  const body={type:_txf.type, amount:amount, currency:document.getElementById('tf-c').value,
+    merchant:(document.getElementById('tf-m').value||'').trim()||null, dt:document.getElementById('tf-d').value||null};
+  const cat=document.getElementById('tf-cat'); if(cat&&cat.value) body.category_id=parseInt(cat.value);
+  const acc=document.getElementById('tf-acc'); if(acc&&acc.value) body.account_id=parseInt(acc.value);
+  try{ await api('/api/tx',{method:'POST',body:JSON.stringify(body)}); toast('Добавлено'); closeOv(); loadOps(); }catch(e){ toast('Ошибка'); }
+}
 
 // ---- аналитика ----
 async function loadAnalytics(){
@@ -659,7 +726,7 @@ function openPick(kind,id){ _pickKind=kind; _pickId=id;
   const cats=kind==='inccat'?_incCats:_cats;
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Выбери категорию</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <div class="catgrid">`+cats.map(c=>`<button class="catpick" style="border-color:${color(c.name)};color:${color(c.name)}" onclick="pickCat(${c.id})">${icon(catIcon(c.name),15)}<span>${c.name}</span></button>`).join('')+`</div>`;
+    <div class="catgrid">`+cats.map(c=>`<button class="catpick" style="background:${tint(color(c.name))};color:${color(c.name)}" onclick="pickCat(${c.id})">${icon(catIcon(c.name),16)}<span>${c.name}</span></button>`).join('')+`</div>`;
 }
 async function pickCat(cid){
   try{
@@ -674,7 +741,7 @@ function openSrcPick(id){ _pickId=id;
   const srcs=(_detail&&_detail.sources)||[];
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Привязать к источнику</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    ${srcs.length?`<div class="catgrid">`+srcs.map(s=>`<button class="catpick" style="border-color:${color(s.name)};color:${color(s.name)}" onclick="pickSrc(${s.id})">${icon('cash',15)}<span>${s.name}</span></button>`).join('')+`</div>`:`<div class="muted" style="font-size:13px;padding:2px 2px 8px">Источников ещё нет — создай ниже или во вкладке «Доходы».</div>`}
+    ${srcs.length?`<div class="catgrid">`+srcs.map(s=>`<button class="catpick" style="background:${tint(color(s.name))};color:${color(s.name)}" onclick="pickSrc(${s.id})">${icon('cash',16)}<span>${s.name}</span></button>`).join('')+`</div>`:`<div class="muted" style="font-size:13px;padding:2px 2px 8px">Источников ещё нет — создай ниже или во вкладке «Доходы».</div>`}
     <div style="display:flex;gap:8px;margin-top:12px">
       <input id="ns-n" class="inp" placeholder="Новый источник" style="flex:1">
       <button class="btn" onclick="createSrcFromTx()">Создать</button></div>

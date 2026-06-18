@@ -220,6 +220,63 @@ async def set_balance(acc_id: int, body: BalanceIn,
     return {"ok": True}
 
 
+class AccIn(BaseModel):
+    name: str
+    type: str = "card"
+    currency: str = "RUB"
+    owner: str = "me"
+    balance: float = 0.0
+
+
+class AccEdit(BaseModel):
+    name: str | None = None
+    currency: str | None = None
+    owner: str | None = None
+    balance: float | None = None
+
+
+@app.post("/api/accounts")
+async def create_account(body: AccIn, user: dict = Depends(current_user),
+                         db: Session = Depends(get_session)):
+    a = models.Account(
+        name=(body.name[:128] or "Счёт"),
+        type=body.type if body.type in ("card", "cash", "deposit", "crypto", "external") else "card",
+        currency=(body.currency or "RUB").upper(),
+        owner=body.owner if body.owner in ("me", "wife") else "me",
+        balance=body.balance or 0.0)
+    db.add(a)
+    db.commit()
+    return {"id": a.id}
+
+
+@app.post("/api/accounts/{acc_id}/edit")
+async def edit_account(acc_id: int, body: AccEdit, user: dict = Depends(current_user),
+                       db: Session = Depends(get_session)):
+    a = db.get(models.Account, acc_id)
+    if not a:
+        raise HTTPException(404, "no account")
+    if body.name is not None:
+        a.name = body.name[:128]
+    if body.currency is not None:
+        a.currency = body.currency.upper()
+    if body.owner in ("me", "wife"):
+        a.owner = body.owner
+    if body.balance is not None:
+        a.balance = body.balance
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/accounts/{acc_id}")
+async def delete_account(acc_id: int, user: dict = Depends(current_user),
+                         db: Session = Depends(get_session)):
+    a = db.get(models.Account, acc_id)
+    if a:
+        a.archived = True   # архивируем, чтобы не осиротить операции
+        db.commit()
+    return {"ok": True}
+
+
 class SettingsIn(BaseModel):
     expected_monthly_income: float
 
@@ -349,6 +406,25 @@ async def dismiss_recurring(body: DismissIn, user: dict = Depends(current_user),
     if body.name not in lst:
         lst.append(body.name)
     set_setting(db, "dismissed_recurring", json.dumps(lst, ensure_ascii=False))
+    return {"ok": True}
+
+
+class RecPatch(BaseModel):
+    amount: float | None = None
+    name: str | None = None
+
+
+@app.post("/api/recurring/{rec_id}")
+async def patch_recurring(rec_id: int, body: RecPatch, user: dict = Depends(current_user),
+                          db: Session = Depends(get_session)):
+    r = db.get(models.Recurring, rec_id)
+    if not r:
+        raise HTTPException(404, "no recurring")
+    if body.amount is not None:
+        r.amount = body.amount
+    if body.name is not None:
+        r.name = body.name[:128]
+    db.commit()
     return {"ok": True}
 
 
@@ -609,6 +685,43 @@ async def set_item_category(item_id: int, body: CatIn,
         learn_rule(db, body.category_id,
                    inn=(tx.receipt.inn if tx.receipt else None), pattern=it.name)
     return {"ok": True}
+
+
+class TxIn(BaseModel):
+    type: str = "expense"
+    amount: float
+    currency: str = "RUB"
+    category_id: int | None = None
+    account_id: int | None = None
+    merchant: str | None = None
+    note: str | None = None
+    dt: str | None = None
+
+
+@app.post("/api/tx")
+async def create_tx(body: TxIn, user: dict = Depends(current_user),
+                    db: Session = Depends(get_session)):
+    """Ручное добавление операции из мини-аппа (напр. доход в крипте)."""
+    cur = (body.currency or "RUB").upper()
+    amt = abs(body.amount)
+    base = to_rub(amt, cur, db)
+    when = datetime.now()
+    if body.dt:
+        try:
+            when = datetime.fromisoformat(body.dt)
+        except Exception:  # noqa: BLE001
+            pass
+    t = models.Transaction(
+        type=body.type if body.type in ("expense", "income", "transfer") else "expense",
+        amount=amt, currency=cur, base_amount_rub=base,
+        fx_rate=(base / amt if amt else 1.0),
+        category_id=body.category_id, account_id=body.account_id,
+        merchant=(body.merchant or None), note=(body.note or None),
+        datetime=when, source="manual", status="confirmed",
+    )
+    db.add(t)
+    db.commit()
+    return {"id": t.id}
 
 
 # Статика мини-аппа — ПОСЛЕ всех /api и /webhook (mount на "/" перехватывает остальное).

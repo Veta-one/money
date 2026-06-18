@@ -69,7 +69,8 @@ def get_dashboard(db: Session) -> dict:
 
     recent_out = [{
         "id": t.id, "dt": t.datetime.isoformat(), "amount": round(t.amount, 2),
-        "currency": t.currency, "merchant": t.merchant or "", "type": t.type,
+        "currency": t.currency, "base_rub": round(t.base_amount_rub or 0.0, 2),
+        "merchant": t.merchant or "", "type": t.type,
         "category": _cn(t.category_id),
     } for t in recent]
 
