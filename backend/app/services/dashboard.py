@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import calendar
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
 from ..config import settings
+from .analytics import _sum_by_category
 from .fx import compute_net_worth
 from .income import expected_income_monthly
 from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
@@ -27,6 +29,20 @@ def get_dashboard(db: Session) -> dict:
     spent = _sum("expense")
     income = _sum("income")
 
+    prev_start = month_start - relativedelta(months=1)
+
+    def _sum_between(tx_type: str, start, end) -> float:
+        return float(db.query(func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0))
+                     .filter(models.Transaction.type == tx_type,
+                             models.Transaction.datetime >= start,
+                             models.Transaction.datetime < end).scalar() or 0.0)
+
+    spent_prev = _sum_between("expense", prev_start, month_start)
+    income_prev = _sum_between("income", prev_start, month_start)
+    needs_review = int(db.query(func.count(models.Transaction.id))
+                       .filter(models.Transaction.status == "needs_review").scalar() or 0)
+    prev_cat = _sum_by_category(db, prev_start, month_start)
+
     cat_rows = (
         db.query(models.Category.name,
                  func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0).label("s"))
@@ -41,6 +57,7 @@ def get_dashboard(db: Session) -> dict:
     fc = category_forecast(db)
     for c in by_category:
         c["expected"] = fc.get(c["name"], 0.0)
+        c["prev"] = round(prev_cat.get(c["name"], 0.0), 2)
     forecast_total = round(sum(fc.values()), 2)
 
     recent = (db.query(models.Transaction)
@@ -57,6 +74,10 @@ def get_dashboard(db: Session) -> dict:
     } for t in recent]
 
     net_worth = compute_net_worth(db)
+    snap = (db.query(models.NetWorthSnapshot)
+            .filter(models.NetWorthSnapshot.date <= date.today() - timedelta(days=20))
+            .order_by(models.NetWorthSnapshot.date.desc()).first())
+    nw_delta = round(net_worth - snap.total_rub, 2) if snap else None
 
     expected = expected_income_monthly(db)
     obligatory = obligatory_monthly(db)
@@ -70,9 +91,15 @@ def get_dashboard(db: Session) -> dict:
         "month": now.strftime("%Y-%m"),
         "spent": round(spent, 2),
         "income": round(income, 2),
+        "spent_prev": round(spent_prev, 2),
+        "income_prev": round(income_prev, 2),
+        "saved": round(income - spent, 2),
+        "saved_prev": round(income_prev - spent_prev, 2),
+        "needs_review": needs_review,
         "by_category": by_category,
         "recent": recent_out,
         "net_worth": round(net_worth, 2),
+        "net_worth_delta": nw_delta,
         "safe_to_spend": safe_to_spend,
         "per_day": per_day,
         "days_left": days_left,
