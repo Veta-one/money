@@ -17,11 +17,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from . import bot as botmod
 from . import models  # noqa: F401  — регистрируем таблицы в metadata
 from .config import settings
-from .db import Base, engine, get_session
+from .db import Base, SessionLocal, engine, get_session
 from .security import current_user
 from .services.backup import make_and_send_backup
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
+from .services.trends import (monthly_spending, networth_series, snapshot_job,
+                              take_networth_snapshot)
 from .services.fx import to_rub
 from .services.planning import goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
@@ -33,6 +35,13 @@ scheduler = AsyncIOScheduler(timezone=settings.timezone)
 async def lifespan(_app: FastAPI):
     # dev: создаём таблицы автоматически. На проде — alembic.
     Base.metadata.create_all(bind=engine)
+    _db0 = SessionLocal()
+    try:
+        take_networth_snapshot(_db0)   # стартовый снимок капитала
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        _db0.close()
     if botmod.bot and settings.public_url:
         # Не валим старт, если TLS/DNS ещё не готовы — вебхук поставим позже.
         try:
@@ -53,6 +62,8 @@ async def lifespan(_app: FastAPI):
                           id="monthly", replace_existing=True)
         scheduler.add_job(make_and_send_backup, "cron", hour=3, minute=30,
                           id="backup", replace_existing=True)
+        scheduler.add_job(snapshot_job, "cron", hour=3, minute=0,
+                          id="snapshot", replace_existing=True)
         scheduler.start()
     yield
     if scheduler.running:
@@ -79,6 +90,11 @@ async def me(user: dict = Depends(current_user)):
 async def dashboard(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     """Сводка для дашборда (только владелец)."""
     return get_dashboard(db)
+
+
+@app.get("/api/trends")
+async def trends(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return {"months": monthly_spending(db), "networth": networth_series(db)}
 
 
 @app.get("/api/accounts")

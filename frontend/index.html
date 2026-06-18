@@ -7,230 +7,260 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --bg: var(--tg-theme-bg-color, #17212b);
-    --text: var(--tg-theme-text-color, #ffffff);
-    --hint: var(--tg-theme-hint-color, #8a98a8);
-    --card: var(--tg-theme-secondary-bg-color, #232e3c);
-    --accent: var(--tg-theme-button-color, #3390ec);
-    --accent-text: var(--tg-theme-button-text-color, #fff);
-    --green:#3bd16f; --red:#ff5c5c;
+    --bg:#f3f4f6; --card:#ffffff; --ink:#1b1c20; --text:#15161a; --muted:#8b909a;
+    --line:#eceef1; --accent:#1b1c20;
+    --violet:#7c5cff; --blue:#2f8bff; --green:#18c171; --orange:#ff8a3d; --red:#ff4d54; --pink:#ff5c9d; --teal:#10b3c6;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
-       background:var(--bg);color:var(--text);padding:16px 16px 80px;}
-  .greet{color:var(--hint);font-size:14px;margin:2px 0 14px}
-  .hero{background:linear-gradient(135deg,var(--accent),#6aa9ff);border-radius:20px;
-        padding:20px;color:var(--accent-text);box-shadow:0 8px 24px rgba(0,0,0,.18)}
-  .hero .label{font-size:13px;opacity:.85}
-  .hero .big{font-size:34px;font-weight:800;margin:4px 0 2px;letter-spacing:-.5px}
-  .hero .sub{font-size:13px;opacity:.9}
-  .row{display:flex;gap:12px;margin-top:12px}
-  .card{background:var(--card);border-radius:16px;padding:14px 16px;flex:1}
-  .card .k{color:var(--hint);font-size:12px}
-  .card .v{font-size:20px;font-weight:700;margin-top:4px}
-  h2{font-size:15px;margin:22px 4px 10px;font-weight:700}
-  .cat{display:flex;align-items:center;gap:10px;margin:10px 2px}
-  .cat .name{flex:1;font-size:14px}
-  .cat .sum{font-weight:700;font-size:14px}
-  .bar{height:6px;border-radius:6px;background:var(--accent);margin-top:5px;opacity:.85}
-  .tx,.acc{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;
-      padding:12px 14px;margin-bottom:8px}
-  .tx .ic{width:38px;height:38px;border-radius:11px;background:var(--bg);display:flex;
-          align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-  .tx .mid{flex:1;min-width:0}
-  .tx .t1{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tx .t2{font-size:12px;color:var(--hint);margin-top:2px}
-  .tx .amt{font-weight:700;font-size:15px;white-space:nowrap}
-  .amt.exp{color:var(--red)} .amt.inc{color:var(--green)}
-  .acc .mid{flex:1;min-width:0}
-  .acc .a1{font-size:14px;font-weight:600}
-  .acc .a2{font-size:12px;color:var(--hint);margin-top:2px}
-  .acc input{width:108px;background:var(--bg);border:1px solid transparent;border-radius:10px;
-             color:var(--text);font-size:15px;font-weight:700;text-align:right;padding:8px 10px}
-  .acc input:focus{border-color:var(--accent);outline:none}
-  .field{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:8px}
-  .field label{display:block;color:var(--hint);font-size:12px;margin-bottom:6px}
-  .field input{width:100%;background:var(--bg);border:1px solid transparent;border-radius:10px;
-               color:var(--text);font-size:17px;font-weight:700;padding:10px 12px}
-  .field input:focus{border-color:var(--accent);outline:none}
-  .empty{color:var(--hint);text-align:center;padding:28px 16px;font-size:14px;line-height:1.5}
-  .loader{text-align:center;color:var(--hint);padding:60px 0}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  body{padding:14px 14px 96px}
+  .muted{color:var(--muted)}
+  .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
+  .head .hi{font-size:15px;font-weight:600}
+  .head .sub{font-size:12px;color:var(--muted)}
+  svg.ic{display:block}
+  /* hero */
+  .hero{background:var(--ink);color:#fff;border-radius:24px;padding:22px 20px}
+  .hero .label{font-size:13px;color:#a9adb6}
+  .hero .big{font-size:34px;font-weight:800;letter-spacing:-.5px;margin:6px 0 4px}
+  .hero .big .cur{font-size:18px;color:#a9adb6;font-weight:700;margin-left:4px}
+  .hero .sub{font-size:13px;color:#c7cad1}
+  /* cards */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .card{background:var(--card);border-radius:18px;padding:16px}
+  .card .k{font-size:12px;color:var(--muted)}
+  .card .v{font-size:20px;font-weight:700;margin-top:6px}
+  .v .cur{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
+  h2{font-size:14px;font-weight:700;margin:22px 4px 10px;display:flex;align-items:center;gap:7px}
+  /* chart */
+  .chartcard{background:var(--card);border-radius:18px;padding:16px 14px 10px}
+  /* category rows */
+  .catlist{background:var(--card);border-radius:18px;padding:6px 16px}
+  .cat{padding:12px 0;border-bottom:1px solid var(--line)}
+  .cat:last-child{border-bottom:none}
+  .cat .top{display:flex;align-items:center;gap:10px}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .cat .nm{flex:1;font-size:14px}
+  .cat .am{font-size:14px;font-weight:700}
+  .track{height:6px;border-radius:6px;background:var(--line);margin-top:9px;overflow:hidden}
+  .track > i{display:block;height:100%;border-radius:6px}
+  /* list rows */
+  .row{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:8px}
+  .sq{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
+  .row .mid{flex:1;min-width:0}
+  .row .t1{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .t2{font-size:12px;color:var(--muted);margin-top:2px}
+  .amt{font-size:15px;font-weight:700;white-space:nowrap}
+  .amt.exp{color:var(--text)} .amt.inc{color:var(--green)}
+  .num{width:118px;background:var(--bg);border:1.5px solid transparent;border-radius:12px;color:var(--text);
+    font-size:15px;font-weight:700;text-align:right;padding:9px 11px}
+  .num:focus{border-color:var(--ink);outline:none}
+  .inp{width:100%;background:var(--bg);border:1.5px solid transparent;border-radius:12px;color:var(--text);
+    font-size:15px;padding:11px 12px}
+  .inp:focus{border-color:var(--ink);outline:none}
+  /* goals */
+  .goal{background:var(--card);border-radius:18px;padding:16px;margin-bottom:10px}
+  .goal .gh{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .goal .gn{font-size:15px;font-weight:700}
+  .goal .gv{font-size:13px;color:var(--muted)}
+  .goal .meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:9px}
+  .btn{background:var(--ink);color:#fff;border:none;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn.full{width:100%}
+  .btn.ghost{background:var(--bg);color:var(--text)}
+  .chip{background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:12px;
+    padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  .iconbtn{background:var(--bg);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+  .empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:14px;line-height:1.5}
+  .loader{text-align:center;color:var(--muted);padding:70px 0}
   .err{color:var(--red);text-align:center;padding:40px 16px}
-  .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);
-        border-top:1px solid rgba(255,255,255,.06)}
-  .tabs button{flex:1;background:none;border:none;color:var(--hint);font-size:13px;
-               padding:12px 0 14px;font-weight:600}
-  .tabs button.active{color:var(--accent)}
-  .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--accent);
-         color:var(--accent-text);padding:8px 16px;border-radius:20px;font-size:13px;opacity:0;
-         transition:opacity .2s;pointer-events:none}
+  /* nav */
+  .nav{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:4px;
+    background:var(--ink);border-radius:22px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.22)}
+  .nav button{background:none;border:none;color:#9a9ea8;display:flex;align-items:center;gap:7px;
+    padding:10px 16px;border-radius:16px;font-size:13px;font-weight:600;cursor:pointer}
+  .nav button.active{background:#2c2e35;color:#fff}
+  .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
-  .chip{background:var(--accent);color:var(--accent-text);border:none;border-radius:12px;padding:9px 12px;font-size:13px;font-weight:600;white-space:nowrap}
-  .inp{width:100%;background:var(--bg);border:none;border-radius:10px;color:var(--text);padding:10px;font-size:15px}
 </style>
 </head>
 <body>
-  <div id="view-dashboard"><div class="loader">Загрузка…</div></div>
-  <div id="view-capital" style="display:none"><div class="loader">Загрузка…</div></div>
-  <div id="view-goals" style="display:none"><div class="loader">Загрузка…</div></div>
-  <div class="tabs">
-    <button id="tab-dashboard" class="active" onclick="switchTab('dashboard')">📊 Дашборд</button>
-    <button id="tab-capital" onclick="switchTab('capital')">💼 Капитал</button>
-    <button id="tab-goals" onclick="switchTab('goals')">🎯 Цели</button>
+  <div id="v-dashboard"><div class="loader">Загрузка…</div></div>
+  <div id="v-capital" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div id="v-goals" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div class="nav">
+    <button id="t-dashboard" class="active" onclick="tab('dashboard')"></button>
+    <button id="t-capital" onclick="tab('capital')"></button>
+    <button id="t-goals" onclick="tab('goals')"></button>
   </div>
   <div class="toast" id="toast"></div>
 <script>
 const tg = window.Telegram?.WebApp;
-try{ tg?.ready(); tg?.expand(); }catch(e){}
-const initData = () => tg?.initData || '';
-const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n||0);
+try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgroundColor?.('#f3f4f6'); }catch(e){}
+const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const CUR='₽';
-let _suggestions = [];
+let _sug=[];
+
+// ---- Tabler icons ----
+const P = {
+  dashboard:'<path d="M4 4h6v8h-6z"/><path d="M4 16h6v4h-6z"/><path d="M14 12h6v8h-6z"/><path d="M14 4h6v4h-6z"/>',
+  wallet:'<path d="M19 7h-14a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2z"/><path d="M16.5 12.5h.5"/><path d="M19 7v-2a2 2 0 0 0 -2 -2h-9"/>',
+  target:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M12 12m-5 0a5 5 0 1 0 10 0a5 5 0 1 0 -10 0"/><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/>',
+  receipt:'<path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2z"/><path d="M9 7h6"/><path d="M9 11h6"/>',
+  coin:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M14.8 9a2 2 0 0 0 -1.8 -1h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1 -1.8 -1"/><path d="M12 6v2"/><path d="M12 16v2"/>',
+  swap:'<path d="M3 8h14l-3 -3"/><path d="M21 16h-14l3 3"/>',
+  plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
+  pencil:'<path d="M4 20h4l10.5 -10.5a2.1 2.1 0 0 0 -3 -3l-10.5 10.5v3"/><path d="M13.5 6.5l3 3"/>',
+  trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
+};
+function icon(n, sz, col){ return `<svg class="ic" width="${sz||22}" height="${sz||22}" viewBox="0 0 24 24" fill="none" stroke="${col||'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`; }
+
+const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7'];
+function color(s){ let h=0; for(const c of (s||'')) h=(h*31+c.charCodeAt(0))>>>0; return PAL[h%PAL.length]; }
+function tint(hex){ return hex+'22'; }
 
 async function api(path, opts){
-  const o = opts||{};
-  o.headers = Object.assign({'X-Telegram-Init-Data': initData(), 'Content-Type':'application/json'}, o.headers||{});
-  const r = await fetch(path, o);
+  const o=opts||{}; o.headers=Object.assign({'X-Telegram-Init-Data':tg?.initData||'','Content-Type':'application/json'},o.headers||{});
+  const r=await fetch(path,o);
   if(r.status===401||r.status===403) throw new Error('AUTH');
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
-function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1500); }
-function authErr(view){ document.getElementById('view-'+view).innerHTML='<div class="err">Доступ только владельцу.<br>Открой из бота.</div>'; }
+function toast(t){ const e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),1400); }
+function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err">Доступ только владельцу.<br>Открой приложение из бота.</div>'; }
 
-function switchTab(t){
+// nav labels with icons
+document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span>Главная</span>';
+document.getElementById('t-capital').innerHTML=icon('wallet',20)+'<span>Капитал</span>';
+document.getElementById('t-goals').innerHTML=icon('target',20)+'<span>Цели</span>';
+
+function tab(t){
   for(const x of ['dashboard','capital','goals']){
-    document.getElementById('view-'+x).style.display = x===t?'block':'none';
-    document.getElementById('tab-'+x).classList.toggle('active', x===t);
+    document.getElementById('v-'+x).style.display=x===t?'block':'none';
+    document.getElementById('t-'+x).classList.toggle('active',x===t);
   }
-  if(t==='dashboard') loadDashboard();
-  if(t==='capital') loadCapital();
-  if(t==='goals') loadGoals();
+  ({dashboard:loadDashboard,capital:loadCapital,goals:loadGoals})[t]();
 }
 
-const txIcon = t => t.type==='income'?'📥':t.type==='transfer'?'🔄':'🧾';
+function barChart(data, w=330, h=128){
+  const max=Math.max(1,...data.map(d=>d.spent));
+  const n=data.length||1, gap=12, bw=(w-gap*(n-1))/n, base=h-22;
+  let s='';
+  data.forEach((d,i)=>{
+    const bh=Math.max(3, d.spent/max*(base-6)), x=i*(bw+gap), y=base-bh;
+    s+=`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="6" fill="var(--ink)"/>`;
+    s+=`<text x="${x+bw/2}" y="${h-5}" text-anchor="middle" font-size="11" fill="#8b909a">${d.label}</text>`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
+}
 
 async function loadDashboard(){
   try{
-    const d = await api('/api/dashboard');
-    const cats=d.by_category||[], max=Math.max(1,...cats.map(c=>c.sum)), recent=d.recent||[];
-    d.name = tg?.initDataUnsafe?.user?.first_name || '';
-    document.getElementById('view-dashboard').innerHTML = `
-      <div class="greet">Привет${d.name?', '+d.name:''} 👋</div>
+    const [d,t]=await Promise.all([api('/api/dashboard'),api('/api/trends')]);
+    const name=tg?.initDataUnsafe?.user?.first_name||'';
+    const cats=d.by_category||[], mx=Math.max(1,...cats.map(c=>c.sum)), rec=d.recent||[];
+    const months=(t.months||[]);
+    document.getElementById('v-dashboard').innerHTML=`
+      <div class="head"><div><div class="hi">Привет${name?', '+name:''}</div><div class="sub">${d.month}</div></div></div>
       <div class="hero">
         <div class="label">Свободно до конца месяца</div>
-        <div class="big">${fmt(d.safe_to_spend)} ${CUR}</div>
+        <div class="big">${fmt(d.safe_to_spend)}<span class="cur">${CUR}</span></div>
         <div class="sub">≈ ${fmt(d.per_day)} ${CUR}/день · осталось ${d.days_left} дн.</div>
       </div>
-      <div class="row">
-        <div class="card"><div class="k">Потрачено в ${d.month}</div><div class="v">${fmt(d.spent)} ${CUR}</div></div>
-        <div class="card"><div class="k">Капитал</div><div class="v">${fmt(d.net_worth)} ${CUR}</div></div>
+      <div class="grid2">
+        <div class="card"><div class="k">Потрачено</div><div class="v">${fmt(d.spent)}<span class="cur">${CUR}</span></div></div>
+        <div class="card"><div class="k">Капитал</div><div class="v">${fmt(d.net_worth)}<span class="cur">${CUR}</span></div></div>
       </div>
+      ${months.some(m=>m.spent>0)?`<h2>Траты по месяцам</h2><div class="chartcard">${barChart(months)}</div>`:''}
       <h2>По категориям</h2>
-      ${cats.length?cats.map(c=>`<div class="cat"><div style="flex:1">
-        <div style="display:flex"><div class="name">${c.name}</div><div class="sum">${fmt(c.sum)} ${CUR}</div></div>
-        <div class="bar" style="width:${Math.round(c.sum/max*100)}%"></div></div></div>`).join('')
-        :`<div class="empty">Пока нет трат за месяц.<br>Пришли боту чек, текст или голосовое 🎙️</div>`}
+      ${cats.length?`<div class="catlist">`+cats.map(c=>`
+        <div class="cat"><div class="top"><span class="dot" style="background:${color(c.name)}"></span>
+        <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR}</span></div>
+        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div></div>`).join('')+`</div>`
+        :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
       <h2>Последние операции</h2>
-      ${recent.length?recent.map(t=>`<div class="tx"><div class="ic">${txIcon(t)}</div>
-        <div class="mid"><div class="t1">${t.merchant||(t.type==='income'?'Доход':'Операция')}</div>
-        <div class="t2">${new Date(t.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
-        <div class="amt ${t.type==='income'?'inc':'exp'}">${t.type==='income'?'+':'−'}${fmt(Math.abs(t.amount))} ${t.currency==='RUB'?CUR:t.currency}</div></div>`).join('')
+      ${rec.length?rec.map(x=>{const col=color(x.merchant||'op');return `<div class="row">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon(x.type==='income'?'coin':x.type==='transfer'?'swap':'receipt',20)}</div>
+        <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
+        <div class="t2">${new Date(x.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
+        <div class="amt ${x.type==='income'?'inc':'exp'}">${x.type==='income'?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`).join('')
         :`<div class="empty">Операций пока нет.</div>`}`;
-  }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('view-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+  }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 
 async function loadCapital(){
   try{
-    const [a, s] = await Promise.all([api('/api/accounts'), api('/api/settings')]);
-    const accs = a.accounts||[];
-    document.getElementById('view-capital').innerHTML = `
+    const [a,s]=await Promise.all([api('/api/accounts'),api('/api/settings')]);
+    const accs=a.accounts||[];
+    document.getElementById('v-capital').innerHTML=`
+      <div class="head"><div class="hi">Капитал</div></div>
       <div class="hero"><div class="label">Чистый капитал</div>
-        <div class="big">${fmt(a.net_worth)} ${CUR}</div>
+        <div class="big">${fmt(a.net_worth)}<span class="cur">${CUR}</span></div>
         <div class="sub">всё сведено к рублю по курсу ЦБ</div></div>
       <h2>Счета</h2>
-      ${accs.map(ac=>`<div class="acc"><div class="mid">
-        <div class="a1">${ac.name}</div>
-        <div class="a2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
-        <input type="number" inputmode="decimal" value="${ac.balance}"
-               onchange="saveBalance(${ac.id}, this.value)"></div>`).join('')}
-      <h2>Доход для «свободно в месяц»</h2>
-      <div class="field"><label>Ожидаемый доход в месяц, ₽</label>
-        <input type="number" inputmode="decimal" value="${s.expected_monthly_income||0}"
-               onchange="saveIncome(this.value)"></div>
-      <div class="empty" style="padding:14px">Меняй балансы — net worth пересчитается. Крипта/USD сводятся к рублю автоматически.</div>`;
-  }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('view-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+      ${accs.map(ac=>{const col=color(ac.name);return `<div class="row">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>
+        <div class="mid"><div class="t1">${ac.name}</div>
+        <div class="t2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
+        <input class="num" type="number" inputmode="decimal" value="${ac.balance}" onchange="saveBal(${ac.id},this.value)"></div>`}).join('')}
+      <h2>Ожидаемый доход в месяц</h2>
+      <div class="card"><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>
+      <div class="empty" style="padding:14px 4px">Меняй балансы — капитал и «свободно в месяц» пересчитаются.</div>`;
+  }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
-
-async function saveBalance(id, val){
-  try{ await api('/api/accounts/'+id, {method:'POST', body:JSON.stringify({balance:parseFloat(val)||0})}); toast('Сохранено'); loadCapital(); }
-  catch(e){ toast('Ошибка'); }
-}
-async function saveIncome(val){
-  try{ await api('/api/settings', {method:'POST', body:JSON.stringify({expected_monthly_income:parseFloat(val)||0})}); toast('Сохранено'); }
-  catch(e){ toast('Ошибка'); }
-}
+async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
+async function saveInc(v){ try{ await api('/api/settings',{method:'POST',body:JSON.stringify({expected_monthly_income:parseFloat(v)||0})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
 
 async function loadGoals(){
   try{
-    const [g, r] = await Promise.all([api('/api/goals'), api('/api/recurring')]);
-    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[];
-    _suggestions = sug.suggestions||[];
-    let h = `<div class="hero"><div class="label">Можешь откладывать в месяц</div>
-      <div class="big">${fmt(sug.capacity)} ${CUR}</div>
-      <div class="sub">доход − обязательные − траты</div></div>`;
-    h += `<h2>Предложения</h2><div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 2px">`;
-    h += _suggestions.map((s,i)=>`<button class="chip" onclick="createSug(${i})">+ ${s.name} · ${fmt(s.target_amount)} ${CUR}</button>`).join('');
-    h += `</div>`;
-    h += `<h2>Мои цели</h2>`;
-    h += goals.length ? goals.map(go=>`<div class="card" style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between"><b>${go.name}</b><span>${fmt(go.current_amount)} / ${fmt(go.target_amount)} ${CUR}</span></div>
-        <div class="bar" style="width:${go.pct}%;margin-top:8px"></div>
-        <div class="a2" style="color:var(--hint);font-size:12px;margin-top:8px">${go.pct}%${go.eta?' · план '+fmt(go.monthly_plan)+' ₽/мес → '+new Date(go.eta).toLocaleDateString('ru-RU',{month:'long',year:'numeric'}):' · добавь план/мес'}</div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <input type="number" inputmode="decimal" placeholder="внести ₽" id="add-${go.id}" class="inp" style="flex:1">
-          <button class="chip" onclick="addToGoal(${go.id},${go.current_amount})">Внести</button>
-          <button class="chip" style="background:var(--card)" onclick="delGoal(${go.id})">🗑</button>
-        </div></div>`).join('') : `<div class="empty">Целей пока нет — выбери предложенную выше или добавь свою.</div>`;
-    h += `<h2>Добавить свою</h2><div class="card">
-        <input id="ng-name" placeholder="Название" class="inp" style="margin-bottom:8px">
+    const [g,r]=await Promise.all([api('/api/goals'),api('/api/recurring')]);
+    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[]; _sug=sug.suggestions||[];
+    document.getElementById('v-goals').innerHTML=`
+      <div class="head"><div class="hi">Цели</div></div>
+      <div class="hero"><div class="label">Можешь откладывать в месяц</div>
+        <div class="big">${fmt(sug.capacity)}<span class="cur">${CUR}</span></div>
+        <div class="sub">доход − обязательные − траты</div></div>
+      ${_sug.length?`<h2>Предложения</h2><div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 2px">`
+        +_sug.map((x,i)=>`<button class="chip" onclick="mkSug(${i})">${icon('plus',15)} ${x.name} · ${fmt(x.target_amount)} ${CUR}</button>`).join('')+`</div>`:''}
+      <h2>Мои цели</h2>
+      ${goals.length?goals.map(go=>{const col=color(go.name);return `<div class="goal">
+        <div class="gh"><div class="gn">${go.name}</div><div class="gv">${fmt(go.current_amount)} / ${fmt(go.target_amount)} ${CUR}</div></div>
+        <div class="track" style="margin-top:11px"><i style="width:${go.pct}%;background:${col}"></i></div>
+        <div class="meta"><span>${go.pct}%</span><span>${go.eta?'до '+new Date(go.eta).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'}):'задай план/мес'}</span></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input class="inp" type="number" inputmode="decimal" placeholder="внести ₽" id="ad-${go.id}" style="flex:1">
+          <button class="btn" onclick="addGoal(${go.id},${go.current_amount})">Внести</button>
+          <button class="iconbtn" onclick="delGoal(${go.id})">${icon('trash',18)}</button></div></div>`}).join('')
+        :`<div class="empty">Целей пока нет — выбери предложенную выше.</div>`}
+      <h2>Добавить свою</h2>
+      <div class="card">
+        <input id="ng-n" class="inp" placeholder="Название" style="margin-bottom:8px">
         <div style="display:flex;gap:8px">
-          <input id="ng-target" type="number" inputmode="decimal" placeholder="Сумма ₽" class="inp" style="flex:1">
-          <input id="ng-plan" type="number" inputmode="decimal" placeholder="В мес ₽" class="inp" style="flex:1">
-        </div>
-        <button class="chip" style="margin-top:10px;width:100%" onclick="addGoalForm()">Создать цель</button></div>`;
-    h += `<h2>Регулярные платежи</h2>`;
-    h += rec.length ? rec.map(x=>`<div class="acc"><div class="mid"><div class="a1">${x.name}</div>
-        <div class="a2">${x.type==='income'?'доход':'расход'} · в месяц</div></div>
-        <div style="display:flex;align-items:center;gap:10px"><b>${fmt(x.amount)} ${CUR}</b>
-        <button class="chip" style="background:var(--card)" onclick="delRec(${x.id})">🗑</button></div></div>`).join('')
-        : `<div class="empty" style="padding:14px">Добавь обязательное (ЖКХ, связь, подписки) — уменьшит «свободно в месяц».</div>`;
-    h += `<div class="card" style="margin-top:8px"><div style="display:flex;gap:8px">
-        <input id="nr-name" placeholder="Напр.: ЖКХ" class="inp" style="flex:1.4">
-        <input id="nr-amount" type="number" inputmode="decimal" placeholder="₽/мес" class="inp" style="flex:1">
-        <button class="chip" onclick="addRec()">+</button></div></div>`;
-    document.getElementById('view-goals').innerHTML = h;
-  }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('view-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+          <input id="ng-t" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽">
+          <input id="ng-p" class="inp" type="number" inputmode="decimal" placeholder="В мес ₽"></div>
+        <button class="btn full" style="margin-top:10px" onclick="newGoal()">Создать цель</button></div>
+      <h2>Регулярные платежи</h2>
+      ${rec.length?rec.map(x=>{const col=color(x.name);return `<div class="row">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon('swap',20)}</div>
+        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · в месяц</div></div>
+        <div class="amt exp">${fmt(x.amount)} ${CUR}</div>
+        <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join('')
+        :`<div class="empty" style="padding:14px 4px">Добавь ЖКХ, связь, подписки — уменьшат «свободно в месяц».</div>`}
+      <div class="card" style="margin-top:8px"><div style="display:flex;gap:8px">
+        <input id="nr-n" class="inp" placeholder="Напр.: ЖКХ" style="flex:1.4">
+        <input id="nr-a" class="inp" type="number" inputmode="decimal" placeholder="₽/мес">
+        <button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
+  }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('v-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
-async function createSug(i){ try{ await api('/api/goals',{method:'POST',body:JSON.stringify(_suggestions[i])}); toast('Цель создана'); loadGoals(); }catch(e){toast('Ошибка');} }
-async function addGoalForm(){
-  const name=document.getElementById('ng-name').value.trim();
-  const target=parseFloat(document.getElementById('ng-target').value);
-  const plan=parseFloat(document.getElementById('ng-plan').value)||0;
-  if(!name||!target){toast('Нужны имя и сумма');return;}
-  try{ await api('/api/goals',{method:'POST',body:JSON.stringify({name,target_amount:target,monthly_plan:plan})}); toast('Создано'); loadGoals(); }catch(e){toast('Ошибка');}
-}
-async function addToGoal(id,cur){
-  const v=parseFloat(document.getElementById('add-'+id).value); if(!v){toast('Введи сумму');return;}
-  try{ await api('/api/goals/'+id,{method:'POST',body:JSON.stringify({current_amount:cur+v})}); toast('Внесено'); loadGoals(); }catch(e){toast('Ошибка');}
-}
+async function mkSug(i){ try{ await api('/api/goals',{method:'POST',body:JSON.stringify(_sug[i])}); toast('Цель создана'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t=parseFloat(document.getElementById('ng-t').value),p=parseFloat(document.getElementById('ng-p').value)||0;
+  if(!n||!t){toast('Имя и сумма');return;} try{ await api('/api/goals',{method:'POST',body:JSON.stringify({name:n,target_amount:t,monthly_plan:p})}); toast('Создано'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function addGoal(id,cur){ const v=parseFloat(document.getElementById('ad-'+id).value); if(!v){toast('Сумма');return;}
+  try{ await api('/api/goals/'+id,{method:'POST',body:JSON.stringify({current_amount:cur+v})}); toast('Внесено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
-async function addRec(){
-  const name=document.getElementById('nr-name').value.trim();
-  const amount=parseFloat(document.getElementById('nr-amount').value);
-  if(!name||!amount){toast('Нужны имя и сумма');return;}
-  try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name,amount,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');}
-}
+async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
+  if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
 
 loadDashboard();
