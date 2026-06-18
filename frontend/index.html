@@ -30,7 +30,7 @@
     letter-spacing:-.1px}
   body{padding:14px 14px 96px}
   .muted{color:var(--muted)}
-  .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
+  .head{display:flex;align-items:center;justify-content:space-between;margin:0 2px 14px;padding:8px 0;position:sticky;top:0;background:var(--bg);z-index:14;backdrop-filter:saturate(180%) blur(6px);-webkit-backdrop-filter:saturate(180%) blur(6px)}
   .head .hi{font-size:15px;font-weight:600}
   .head .sub{font-size:12px;color:var(--muted)}
   svg.ic{display:block}
@@ -94,7 +94,8 @@
     border-radius:14px;padding:12px 13px;font-size:13px;font-weight:600;cursor:pointer;width:100%;text-align:left;line-height:1.2}
   .catpick svg{flex:none}
   .iconbtn{background:var(--bg);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer;color:var(--text)}
-  .empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:14px;line-height:1.5}
+  .empty{color:var(--muted);text-align:center;padding:30px 16px;font-size:14px;line-height:1.5}
+  .empty .ttl{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
   .loader{text-align:center;color:var(--muted);padding:70px 0}
   .err{color:var(--red);text-align:center;padding:40px 16px}
   .nav{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:2px;
@@ -179,7 +180,12 @@ function applyTheme(){
 applyTheme();
 try{ tg?.ready(); tg?.expand(); }catch(e){}
 try{ tg?.onEvent?.('themeChanged', ()=>{ if(_themePref==='auto'){ applyTheme(); refreshActive(); } }); }catch(e){}
-function setTheme(p){ _themePref=p; localStorage.setItem('money.theme',p); applyTheme(); refreshActive(); }
+// TG CloudStorage: тема между устройствами одного аккаунта (на клиентах 6.9+).
+try{ tg?.CloudStorage?.getItem?.('theme',(_,v)=>{ if(v && v!==_themePref){ _themePref=v; localStorage.setItem('money.theme',v); applyTheme(); }}); }catch(e){}
+function setTheme(p){
+  _themePref=p; localStorage.setItem('money.theme',p); applyTheme(); refreshActive();
+  try{ tg?.CloudStorage?.setItem?.('theme',p); }catch(e){}
+}
 function tap(s){ try{ tg?.HapticFeedback?.impactOccurred?.(s||'light'); }catch(e){} }
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
@@ -511,9 +517,9 @@ async function loadDashboard(){
         <div class="cat" onclick="openCatOps(${c.id})" style="cursor:pointer"><div class="top"><span class="cdot" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),16)}</span>
         <span class="nm">${c.name}</span>${(c.sparkline&&c.sparkline.length>1)?`<span style="margin-right:6px">${spark(c.sparkline,52,16,col)}</span>`:''}<span class="am">${fmt(c.sum)} ${CUR} ${dBadge(c.sum,c.prev,true)}</span></div>
         <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${col}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`}).join('')+`</div>`
-        :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
+        :`<div class="empty"><div class="ttl">Трат за месяц ещё нет</div>Пришли боту фото чека, текст («такси 300») или голосовое — он сам распарсит, разложит по категориям и нарисует тут.</div>`}
       <h2>Последние операции</h2>
-      ${rec.length?groupedTx(rec):`<div class="empty">Операций пока нет.</div>`}
+      ${rec.length?groupedTx(rec):`<div class="empty">Свежих операций нет — пока тихо.</div>`}
       ${rec.length?`<button class="btn full" style="margin-top:10px" onclick="tab('ops')">Все операции</button>`:''}`;
   }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
@@ -674,7 +680,7 @@ async function loadGoals(){
         <div style="display:flex;gap:8px;margin-top:12px">
           ${go.account?`<div class="inp" style="flex:1;color:var(--muted);font-size:13px;display:flex;align-items:center">${icon('wallet',15)}<span style="margin-left:6px">${go.account} (авто)</span></div>`:`<input class="inp" type="number" inputmode="decimal" placeholder="внести ₽" id="ad-${go.id}" style="flex:1"><button class="btn" onclick="addGoal(${go.id},${go.current_amount})">Внести</button>`}
           <button class="iconbtn" onclick="delGoal(${go.id})">${icon('trash',18)}</button></div></div>`}).join('')
-        :`<div class="empty">Целей пока нет — создай ниже.</div>`}
+        :`<div class="empty"><div class="ttl">Целей пока нет</div>Откладывать проще, когда видишь куда. Начни с «Подушки безопасности» — 3-6 месяцев расходов.</div>`}
       <h2>Добавить цель</h2>
       <div class="card">
         <input id="ng-n" class="inp" placeholder="Название" style="margin-bottom:8px">
@@ -806,7 +812,7 @@ function renderOps(){
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <input class="inp" type="number" inputmode="decimal" placeholder="Сумма от ₽" value="${o.minA||''}" onchange="opsSet('minA',this.value)" style="flex:1">
       <input class="inp" type="number" inputmode="decimal" placeholder="до ₽" value="${o.maxA||''}" onchange="opsSet('maxA',this.value)" style="flex:1"></div>`:'';
-  const listHtml=o.items.length?groupedTx(o.items):`<div class="empty">Ничего не найдено по этим фильтрам.</div>`;
+  const listHtml=o.items.length?groupedTx(o.items):`<div class="empty"><div class="ttl">По фильтрам ничего нет</div>Попробуй сбросить условия или поменять период наверху.</div>`;
   document.getElementById('v-ops').innerHTML=`
     <div class="head"><div class="hi">Операции</div><div class="sub">${o.count} шт.</div></div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -1167,11 +1173,18 @@ async function createSrcFromTx(){
     toast('Создано и привязано'); refreshActive(); openTx(_pickId);
   }catch(e){ toast('Ошибка'); }
 }
-function closeOv(){ document.getElementById('ov').style.display='none'; toggleFab(true); }
+function closeOv(){ document.getElementById('ov').style.display='none'; toggleFab(true); tgBackSync(); }
 function toggleFab(show){ const f=document.getElementById('fab-add'); if(f) f.style.display=show?'flex':'none'; }
-// автоматически прячем FAB пока открыт оверлей
-new MutationObserver(()=>{const ov=document.getElementById('ov'); toggleFab(!ov || ov.style.display==='none'); })
-  .observe(document.getElementById('ov'),{attributes:true,attributeFilter:['style']});
+// автоматически прячем FAB + синхронизируем TG BackButton пока открыт оверлей
+function tgBackSync(){
+  const ov=document.getElementById('ov'); const open=ov && ov.style.display==='flex';
+  toggleFab(!open);
+  try{
+    if(open){ tg?.BackButton?.show?.(); tg?.BackButton?.onClick?.(closeOv); }
+    else{ tg?.BackButton?.hide?.(); }
+  }catch(e){}
+}
+new MutationObserver(tgBackSync).observe(document.getElementById('ov'),{attributes:true,attributeFilter:['style']});
 
 // ---- настройки ----
 const ICON_SET=['cart','cup','bus','car','flame','kid','tool','bag','home','scissors','pill','book','shirt','film','beer','smoke','gift','leaf','phone','tv','bank','box','wallet','coin','swap','tag','percent','pig','adjust','target','receipt','cash'];
