@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -98,6 +98,81 @@ async def dashboard(user: dict = Depends(current_user), db: Session = Depends(ge
 @app.get("/api/trends")
 async def trends(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     return {"months": monthly_spending(db), "networth": networth_series(db)}
+
+
+@app.get("/api/transactions")
+async def list_transactions(
+    month: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    type: str | None = None,
+    category_id: int | None = None,
+    account_id: int | None = None,
+    q: str | None = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    user: dict = Depends(current_user),
+    db: Session = Depends(get_session),
+):
+    """Список операций с фильтрами + итог по выборке (Фаза A)."""
+    query = db.query(models.Transaction)
+    if month:
+        try:
+            y, m = (int(x) for x in month.split("-"))
+            start = datetime(y, m, 1)
+            end = datetime(y + (1 if m == 12 else 0), 1 if m == 12 else m + 1, 1)
+            query = query.filter(models.Transaction.datetime >= start,
+                                 models.Transaction.datetime < end)
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        if date_from:
+            try:
+                query = query.filter(models.Transaction.datetime >= datetime.fromisoformat(date_from))
+            except Exception:  # noqa: BLE001
+                pass
+        if date_to:
+            try:
+                query = query.filter(models.Transaction.datetime < datetime.fromisoformat(date_to) + timedelta(days=1))
+            except Exception:  # noqa: BLE001
+                pass
+    if type in ("expense", "income", "transfer", "debt"):
+        query = query.filter(models.Transaction.type == type)
+    if category_id:
+        query = query.filter(models.Transaction.category_id == category_id)
+    if account_id:
+        query = query.filter(models.Transaction.account_id == account_id)
+    if min_amount is not None:
+        query = query.filter(func.abs(models.Transaction.base_amount_rub) >= min_amount)
+    if max_amount is not None:
+        query = query.filter(func.abs(models.Transaction.base_amount_rub) <= max_amount)
+
+    rows = query.order_by(models.Transaction.datetime.desc()).all()
+    if q:
+        ql = q.strip().lower()
+        rows = [r for r in rows
+                if ql in (r.merchant or "").lower() or ql in (r.note or "").lower()]
+
+    sum_expense = round(sum(r.base_amount_rub or 0.0 for r in rows if r.type == "expense"), 2)
+    sum_income = round(sum(r.base_amount_rub or 0.0 for r in rows if r.type == "income"), 2)
+    count = len(rows)
+    page = rows[offset:offset + limit]
+
+    cat_map = {c.id: c.name for c in db.query(models.Category).all()}
+    out = [{
+        "id": t.id, "dt": t.datetime.isoformat(), "amount": round(t.amount, 2),
+        "currency": t.currency, "base_rub": round(t.base_amount_rub or 0.0, 2),
+        "type": t.type, "merchant": t.merchant or "",
+        "category": cat_map.get(t.category_id), "category_id": t.category_id,
+        "account_id": t.account_id, "source": t.source, "status": t.status,
+    } for t in page]
+    return {
+        "transactions": out, "count": count,
+        "sum_expense": sum_expense, "sum_income": sum_income,
+        "offset": offset, "limit": limit, "has_more": offset + limit < count,
+    }
 
 
 @app.get("/api/accounts")

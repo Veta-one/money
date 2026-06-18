@@ -74,6 +74,12 @@
   .nav button{background:none;border:none;color:#9a9ea8;display:flex;align-items:center;gap:7px;
     padding:10px 16px;border-radius:16px;font-size:13px;font-weight:600;cursor:pointer}
   .nav button.active{background:#2c2e35;color:#fff}
+  .nav button .lbl{display:none}
+  .nav button.active .lbl{display:inline}
+  .filt{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;margin-bottom:10px;scrollbar-width:none}
+  .filt::-webkit-scrollbar{display:none}
+  .dayh{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);font-weight:600;margin:16px 4px 8px}
+  select.inp{appearance:none;-webkit-appearance:none}
   .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff;
     padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
   .toast.show{opacity:1}
@@ -88,10 +94,12 @@
 </head>
 <body>
   <div id="v-dashboard"><div class="loader">Загрузка…</div></div>
+  <div id="v-ops" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-capital" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-goals" style="display:none"><div class="loader">Загрузка…</div></div>
   <div class="nav">
     <button id="t-dashboard" class="active" onclick="tab('dashboard')"></button>
+    <button id="t-ops" onclick="tab('ops')"></button>
     <button id="t-capital" onclick="tab('capital')"></button>
     <button id="t-goals" onclick="tab('goals')"></button>
   </div>
@@ -113,6 +121,8 @@ const P = {
   receipt:'<path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2z"/><path d="M9 7h6"/><path d="M9 11h6"/>',
   coin:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M14.8 9a2 2 0 0 0 -1.8 -1h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1 -1.8 -1"/><path d="M12 6v2"/><path d="M12 16v2"/>',
   swap:'<path d="M3 8h14l-3 -3"/><path d="M21 16h-14l3 3"/>',
+  list:'<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M5 6v.01"/><path d="M5 12v.01"/><path d="M5 18v.01"/>',
+  search:'<path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/>',
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
   trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
   x:'<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
@@ -174,17 +184,22 @@ async function api(path, opts){
 function toast(t){ const e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),1400); }
 function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err">Доступ только владельцу.<br>Открой приложение из бота.</div>'; }
 
-document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span>Главная</span>';
-document.getElementById('t-capital').innerHTML=icon('wallet',20)+'<span>Капитал</span>';
-document.getElementById('t-goals').innerHTML=icon('target',20)+'<span>Цели</span>';
+document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span class="lbl">Главная</span>';
+document.getElementById('t-ops').innerHTML=icon('list',20)+'<span class="lbl">Операции</span>';
+document.getElementById('t-capital').innerHTML=icon('wallet',20)+'<span class="lbl">Капитал</span>';
+document.getElementById('t-goals').innerHTML=icon('target',20)+'<span class="lbl">Цели</span>';
 
+const TABS=['dashboard','ops','capital','goals'];
+let _tab='dashboard';
 function tab(t){
-  for(const x of ['dashboard','capital','goals']){
+  _tab=t;
+  for(const x of TABS){
     document.getElementById('v-'+x).style.display=x===t?'block':'none';
     document.getElementById('t-'+x).classList.toggle('active',x===t);
   }
-  ({dashboard:loadDashboard,capital:loadCapital,goals:loadGoals})[t]();
+  ({dashboard:loadDashboard,ops:loadOps,capital:loadCapital,goals:loadGoals})[t]();
 }
+function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,capital:loadCapital,goals:loadGoals})[_tab](); }
 
 function barChart(data, w=330, h=144){
   const max=Math.max(1,...data.map(d=>d.spent));
@@ -337,6 +352,74 @@ async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}
 async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense',period:'monthly'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 
+// ---- операции (список + фильтры) ----
+let _ops={period:'this', type:'', cat:'', q:'', offset:0, items:[], more:false, count:0, se:0, si:0};
+function ym(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function opsQS(){
+  const p=new URLSearchParams(), now=new Date();
+  if(_ops.period==='this') p.set('month',ym(now));
+  else if(_ops.period==='last'){ const d=new Date(now.getFullYear(),now.getMonth()-1,1); p.set('month',ym(d)); }
+  if(_ops.type) p.set('type',_ops.type);
+  if(_ops.cat) p.set('category_id',_ops.cat);
+  if(_ops.q) p.set('q',_ops.q);
+  p.set('limit','50'); p.set('offset',String(_ops.offset));
+  return p.toString();
+}
+async function loadOps(reset){
+  if(reset!==false){ _ops.offset=0; _ops.items=[]; }
+  try{
+    if(!_cats.length){ try{ _cats=(await api('/api/categories')).categories||[]; }catch(e){} }
+    const r=await api('/api/transactions?'+opsQS());
+    _ops.items=_ops.items.concat(r.transactions||[]);
+    _ops.more=r.has_more; _ops.count=r.count; _ops.se=r.sum_expense; _ops.si=r.sum_income;
+    renderOps();
+  }catch(e){ e.message==='AUTH'?authErr('ops'):document.getElementById('v-ops').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+function txRow(x){
+  const key=x.category||x.merchant||'op', col=color(key);
+  const inn=x.type==='income'||x.amount<0;
+  const ic=x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);
+  return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
+    <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
+    <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
+    <div class="t2">${new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}${x.category?' · '+x.category:''}</div></div>
+    <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`;
+}
+function renderOps(){
+  const o=_ops;
+  const pc=(v,t)=>`<button class="chip${o.period===v?' on':''}" onclick="opsSet('period','${v}')">${t}</button>`;
+  const tc=(v,t)=>`<button class="chip${o.type===v?' on':''}" onclick="opsSet('type','${v}')">${t}</button>`;
+  const catOpts=`<option value="">Все категории</option>`+_cats.map(c=>`<option value="${c.id}"${String(o.cat)===String(c.id)?' selected':''}>${c.name}</option>`).join('');
+  let listHtml='';
+  if(o.items.length){
+    const groups={};
+    o.items.forEach(x=>{ const d=x.dt.slice(0,10); (groups[d]=groups[d]||[]).push(x); });
+    for(const day of Object.keys(groups)){
+      const arr=groups[day];
+      const net=arr.reduce((s,x)=> s + (x.type==='income'? x.base_rub : x.type==='expense'? -x.base_rub : 0), 0);
+      const dt=new Date(day+'T00:00:00');
+      listHtml+=`<div class="dayh"><span>${dt.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</span><span>${net>=0?'+':'−'}${fmt(Math.abs(net))} ${CUR}</span></div>`;
+      listHtml+=arr.map(txRow).join('');
+    }
+  } else {
+    listHtml=`<div class="empty">Ничего не найдено по этим фильтрам.</div>`;
+  }
+  document.getElementById('v-ops').innerHTML=`
+    <div class="head"><div class="hi">Операции</div><div class="sub">${o.count} шт.</div></div>
+    <div class="filt">${pc('this','Этот месяц')}${pc('last','Прошлый')}${pc('all','Всё время')}</div>
+    <div class="filt">${tc('','Все')}${tc('expense','Расходы')}${tc('income','Доходы')}${tc('transfer','Переводы')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <select class="inp" style="flex:1" onchange="opsSet('cat',this.value)">${catOpts}</select>
+      <input class="inp" style="flex:1.2" placeholder="Поиск по продавцу" value="${(o.q||'').replace(/"/g,'&quot;')}" onchange="opsSet('q',this.value.trim())"></div>
+    <div class="grid2" style="margin-top:0">
+      <div class="card"><div class="k">Расходы</div><div class="v">${fmt(o.se)}<span class="cur">${CUR}</span></div></div>
+      <div class="card"><div class="k">Доходы</div><div class="v" style="color:var(--green)">${fmt(o.si)}<span class="cur">${CUR}</span></div></div></div>
+    ${listHtml}
+    ${o.more?`<button class="btn full" style="margin-top:12px" onclick="opsMore()">Показать ещё</button>`:''}`;
+}
+function opsSet(k,v){ _ops[k]=v; loadOps(); }
+function opsMore(){ _ops.offset+=50; loadOps(false); }
+
 // ---- детали операции + правка категорий ----
 async function openTx(id){
   try{
@@ -369,7 +452,7 @@ async function pickCat(cid){
   try{
     const url=_pickKind==='item'?'/api/items/'+_pickId:'/api/tx/'+_pickId;
     await api(url,{method:'POST',body:JSON.stringify({category_id:cid})});
-    toast('Сохранено'); closeOv(); loadDashboard();
+    toast('Сохранено'); closeOv(); refreshActive();
   }catch(e){ toast('Ошибка'); }
 }
 function closeOv(){ document.getElementById('ov').style.display='none'; }
