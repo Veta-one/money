@@ -9,6 +9,7 @@ from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
+from sqlalchemy import func
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message, WebAppInfo)
 
@@ -38,10 +39,7 @@ async def _download(file_id: str) -> bytes:
     return buf.getvalue()
 
 
-def _kb(res: dict) -> InlineKeyboardMarkup | None:
-    tx_id = res.get("tx_id")
-    if not tx_id:
-        return None
+def _compact_kb(tx_id: int) -> InlineKeyboardMarkup:
     rows = []
     if settings.public_url:
         rows.append([InlineKeyboardButton(
@@ -51,10 +49,18 @@ def _kb(res: dict) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _kb(res: dict) -> InlineKeyboardMarkup | None:
+    tx_id = res.get("tx_id")
+    return _compact_kb(tx_id) if tx_id else None
+
+
 def _cat_keyboard(db, tx_id: int) -> InlineKeyboardMarkup:
+    counts = dict(db.query(models.Transaction.category_id, func.count(models.Transaction.id))
+                  .filter(models.Transaction.category_id.isnot(None))
+                  .group_by(models.Transaction.category_id).all())
     cats = (db.query(models.Category)
-            .filter(models.Category.type == "expense", models.Category.archived.is_(False))
-            .order_by(models.Category.name).all())
+            .filter(models.Category.type == "expense", models.Category.archived.is_(False)).all())
+    cats.sort(key=lambda c: (-counts.get(c.id, 0), c.name))   # самые частые — вверх
     rows, row = [], []
     for c in cats:
         row.append(InlineKeyboardButton(text=c.name, callback_data=f"setcat:{tx_id}:{c.id}"))
@@ -63,6 +69,7 @@ def _cat_keyboard(db, tx_id: int) -> InlineKeyboardMarkup:
             row = []
     if row:
         rows.append(row)
+    rows.append([InlineKeyboardButton(text="✕ Скрыть категории", callback_data=f"hidecat:{tx_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -211,6 +218,15 @@ async def cb_editcat(cq: CallbackQuery):
         db.close()
     await cq.message.edit_reply_markup(reply_markup=kb)
     await cq.answer("Выбери категорию")
+
+
+@dp.callback_query(F.data.startswith("hidecat:"))
+async def cb_hidecat(cq: CallbackQuery):
+    if not _owner(cq):
+        return
+    tx_id = int(cq.data.split(":")[1])
+    await cq.message.edit_reply_markup(reply_markup=_compact_kb(tx_id))
+    await cq.answer("Свернул")
 
 
 @dp.callback_query(F.data.startswith("setcat:"))
