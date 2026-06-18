@@ -842,11 +842,22 @@ function renderDetail(d){
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}`;
   document.getElementById('ov').style.display='flex';
 }
-function openPick(kind,id){ _pickKind=kind; _pickId=id;
+function openPick(kind,id,parentId){ _pickKind=kind; _pickId=id;
   const cats=kind==='inccat'?_incCats:_cats;
-  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Выбери категорию</div>
-      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <div class="catgrid">`+cats.map(c=>`<button class="catpick" style="background:${tint(color(c.name))};color:${color(c.name)}" onclick="pickCat(${c.id})">${icon(catIcon(c.name),16)}<span>${c.name}</span></button>`).join('')+`</div>`;
+  const hasKids=c=>cats.some(x=>String(x.parent_id)===String(c.id));
+  const chip=(c,label,oc)=>`<button class="catpick" style="background:${tint(color(c.name))};color:${color(c.name)}" onclick="${oc}">${icon(catIcon(c.name),16)}<span>${label}</span></button>`;
+  let cells='', head='Выбери категорию', back='';
+  if(parentId){
+    const p=cats.find(c=>String(c.id)===String(parentId));
+    head=p?p.name:'Категория';
+    back=`<button class="chip" style="margin-bottom:10px" onclick="openPick('${kind}',${id})">‹ Назад</button>`;
+    cells=chip(p,'Вся «'+p.name+'»',`pickCat(${p.id})`)
+      +cats.filter(c=>String(c.parent_id)===String(parentId)).map(c=>chip(c,c.name,`pickCat(${c.id})`)).join('');
+  } else {
+    cells=cats.filter(c=>!c.parent_id).map(c=>{const k=hasKids(c);return chip(c,c.name+(k?' ›':''),k?`openPick('${kind}',${id},${c.id})`:`pickCat(${c.id})`);}).join('');
+  }
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${head}</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${back}<div class="catgrid">${cells}</div>`;
 }
 async function pickCat(cid){
   try{

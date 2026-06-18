@@ -733,8 +733,13 @@ async def list_categories(type: str = "expense", user: dict = Depends(current_us
                   .group_by(models.Transaction.category_id).all())
     cats = (db.query(models.Category)
             .filter(models.Category.type == ctype, models.Category.archived.is_(False)).all())
-    cats.sort(key=lambda c: (-counts.get(c.id, 0), c.name))   # самые частые — первыми
-    return {"categories": [{"id": c.id, "name": c.name} for c in cats]}
+    childsum: dict[int, int] = {}
+    for c in cats:
+        if c.parent_id:
+            childsum[c.parent_id] = childsum.get(c.parent_id, 0) + counts.get(c.id, 0)
+    # родителя сортируем по сумме своих+дочерних использований
+    cats.sort(key=lambda c: (-(counts.get(c.id, 0) + childsum.get(c.id, 0)), c.name))
+    return {"categories": [{"id": c.id, "name": c.name, "parent_id": c.parent_id} for c in cats]}
 
 
 @app.get("/api/tx/{tx_id}")
