@@ -58,6 +58,9 @@
   .amt{font-size:15px;font-weight:700;white-space:nowrap}
   .amt.exp{color:var(--text)} .amt.inc{color:var(--green)}
   .row.rev{box-shadow:inset 3px 0 0 #ff8a3d}
+  .cbx{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;background:#fff}
+  .cbx.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .fab{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:#fff;border:none;border-radius:14px;padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.22);cursor:pointer;z-index:55;display:flex;align-items:center;gap:8px}
   .num{width:118px;background:var(--bg);border:1.5px solid transparent;border-radius:12px;color:var(--text);
     font-size:15px;font-weight:700;text-align:right;padding:9px 11px}
   .num:focus{border-color:var(--ink);outline:none}
@@ -135,7 +138,8 @@ const CUR='₽';
 function plural(n,one,few,many){ n=Math.abs(n)%100; const k=n%10; if(n>10&&n<20)return many; if(k>1&&k<5)return few; if(k===1)return one; return many; }
 function dBadge(cur,prev,goodDown){ if(prev==null||prev===0)return ''; const diff=cur-prev; if(!diff)return ''; const pct=Math.round(diff/prev*100),up=diff>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'}${Math.abs(pct)}%</span>`; }
 function dBadgeAbs(delta,goodDown){ if(delta==null||!delta)return ''; const up=delta>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'} ${fmt(Math.abs(delta))} ₽</span>`; }
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true;
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true,
+_opsBulk=false, _opsSel=new Set();
 
 // ---- Tabler icons ----
 const P = {
@@ -545,7 +549,7 @@ async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/
 async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 
 // ---- операции (список + фильтры) ----
-let _ops={period:'this', type:'', cat:'', q:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0};
+let _ops={period:'this', type:'', cat:'', q:'', merchant:'', minA:'', maxA:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0};
 function ym(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function opsQS(){
   const p=new URLSearchParams(), now=new Date();
@@ -554,6 +558,9 @@ function opsQS(){
   if(_ops.type) p.set('type',_ops.type);
   if(_ops.cat) p.set('category_id',_ops.cat);
   if(_ops.q) p.set('q',_ops.q);
+  if(_ops.merchant) p.set('merchant',_ops.merchant);
+  if(_ops.minA) p.set('min_amount',String(_ops.minA));
+  if(_ops.maxA) p.set('max_amount',String(_ops.maxA));
   if(_ops.review) p.set('review','1');
   p.set('limit','50'); p.set('offset',String(_ops.offset));
   return p.toString();
@@ -570,12 +577,24 @@ async function loadOps(reset){
 }
 function txRow(x){
   const key=x.category||x.merchant||'op', col=color(key);
-  const inn=x.type==='income'||x.amount<0;
-  const ic=x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);
-  const sub=`${new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}${x.category?' · '+x.category:''}${x.review?' · <span style="color:#ff8a3d;font-weight:700">разобрать</span>':''}`;
+  const isRefund=x.type==='expense'&&x.amount<0;
+  const inn=x.type==='income'||isRefund;
+  const ic=isRefund?'swap':x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);
+  const tags=[x.category?x.category:null, isRefund?'<span style="color:var(--green);font-weight:700">↩ возврат</span>':null, x.review?'<span style="color:#ff8a3d;font-weight:700">разобрать</span>':null].filter(Boolean).join(' · ');
+  const sub=new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+(tags?' · '+tags:'');
+  const merchEsc=(x.merchant||'').replace(/'/g,'&#39;');
+  const merchHtml=x.merchant?`<span onclick="event.stopPropagation();openMerchOps('${merchEsc}')" style="cursor:pointer">${x.merchant}</span>`:(x.type==='income'?'Доход':'Операция');
+  if(_opsBulk){
+    const on=_opsSel.has(x.id);
+    return `<div class="row" onclick="opsToggleSel(${x.id})" style="cursor:pointer">
+      <div class="cbx${on?' on':''}">${on?icon('plus',14,'#fff'):''}</div>
+      <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
+      <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div><div class="t2">${sub}</div></div>
+      <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`;
+  }
   return `<div class="row${x.review?' rev':''}" onclick="openTx(${x.id})" style="cursor:pointer">
     <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
-    <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
+    <div class="mid"><div class="t1">${merchHtml}</div>
     <div class="t2">${sub}</div></div>
     <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`;
 }
@@ -596,24 +615,31 @@ function renderOps(){
   const pc=(v,t)=>`<button class="chip${o.period===v?' on':''}" onclick="opsSet('period','${v}')">${t}</button>`;
   const tc=(v,t)=>`<button class="chip${o.type===v?' on':''}" onclick="opsSet('type','${v}')">${t}</button>`;
   const catName=o.cat?((_cats.find(c=>String(c.id)===String(o.cat))||{}).name||'Категория'):'Все категории';
-  const nActive=(o.period!=='this'?1:0)+(o.type?1:0)+(o.cat?1:0)+(o.q?1:0)+(o.review?1:0);
+  const nActive=(o.period!=='this'?1:0)+(o.type?1:0)+(o.cat?1:0)+(o.q?1:0)+(o.merchant?1:0)+(o.minA||o.maxA?1:0)+(o.review?1:0);
+  const merchTag=o.merchant?`<div class="chip on" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px" onclick="opsSet('merchant','')">${o.merchant} ✕</div>`:'';
   const panel=_opsFiltOpen?`
     <div class="filt">${pc('this','Этот месяц')}${pc('last','Прошлый')}${pc('all','Всё время')}</div>
     <div class="filt">${tc('','Все')}${tc('expense','Расходы')}${tc('income','Доходы')}${tc('transfer','Переводы')}<button class="chip${o.review?' on':''}" onclick="opsSet('review',${o.review?0:1})">На разбор</button></div>
     <button class="inp" style="display:flex;align-items:center;justify-content:space-between;text-align:left;margin-bottom:8px" onclick="openOpsCat()"><span>${catName}</span>${icon('chev',16,'#8b909a')}</button>
-    <div class="srch" style="margin-bottom:12px">${icon('search',18)}<input placeholder="Поиск по продавцу" value="${(o.q||'').replace(/"/g,'&quot;')}" onchange="opsSet('q',this.value.trim())"></div>`:'';
+    <div class="srch" style="margin-bottom:8px">${icon('search',18)}<input placeholder="Поиск по продавцу" value="${(o.q||'').replace(/"/g,'&quot;')}" onchange="opsSet('q',this.value.trim())"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="inp" type="number" inputmode="decimal" placeholder="Сумма от ₽" value="${o.minA||''}" onchange="opsSet('minA',this.value)" style="flex:1">
+      <input class="inp" type="number" inputmode="decimal" placeholder="до ₽" value="${o.maxA||''}" onchange="opsSet('maxA',this.value)" style="flex:1"></div>`:'';
   const listHtml=o.items.length?groupedTx(o.items):`<div class="empty">Ничего не найдено по этим фильтрам.</div>`;
   document.getElementById('v-ops').innerHTML=`
     <div class="head"><div class="hi">Операции</div><div class="sub">${o.count} шт.</div></div>
-    <button class="chip${_opsFiltOpen?' on':''}" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:12px" onclick="opsToggleFilt()">${icon('filter',16)} Фильтр${nActive?' · '+nActive:''}</button>
-    ${panel}
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="chip${_opsFiltOpen?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleFilt()">${icon('filter',16)} Фильтр${nActive?' · '+nActive:''}</button>
+      <button class="chip${_opsBulk?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleBulk()">${icon('list',16)} ${_opsBulk?'Готово':'Выделить'}</button></div>
+    ${merchTag}${panel}
     <div class="grid2" style="margin-top:0">
       <div class="card"><div class="k">Расходы</div><div class="v">${fmt(o.se)}<span class="cur">${CUR}</span></div></div>
       <div class="card"><div class="k">Доходы</div><div class="v" style="color:var(--green)">${fmt(o.si)}<span class="cur">${CUR}</span></div></div></div>
     ${listHtml}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-bottom:${_opsBulk&&_opsSel.size?'60px':'0'}">
       ${o.more?`<button class="btn full" onclick="opsMore()">Показать ещё</button>`:''}
-      <button class="btn full" onclick="openTxForm()">Добавить операцию</button></div>`;
+      <button class="btn full" onclick="openTxForm()">Добавить операцию</button></div>
+    ${_opsBulk&&_opsSel.size?`<button class="fab" onclick="opsBulkPick()">Назначить категорию · ${_opsSel.size}</button>`:''}`;
 }
 function opsToggleFilt(){ _opsFiltOpen=!_opsFiltOpen; renderOps(); }
 async function openOpsCat(){
@@ -627,8 +653,22 @@ async function openOpsCat(){
 function opsPickCat(id){ _ops.cat=id; _ops.offset=0; _ops.items=[]; closeOv(); loadOps(); }
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
-function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
-function openReviewOps(){ _ops={period:'all', type:'', cat:'', q:'', review:1, offset:0, items:[], more:false, count:0, se:0, si:0}; _opsFiltOpen=true; tab('ops'); }
+function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', merchant:'', minA:'', maxA:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
+function openReviewOps(){ _ops={period:'all', type:'', cat:'', q:'', merchant:'', minA:'', maxA:'', review:1, offset:0, items:[], more:false, count:0, se:0, si:0}; _opsFiltOpen=true; tab('ops'); }
+function openMerchOps(name){ _ops={period:'all', type:'', cat:'', q:'', merchant:name, minA:'', maxA:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
+function opsToggleBulk(){ _opsBulk=!_opsBulk; if(!_opsBulk) _opsSel.clear(); renderOps(); }
+function opsToggleSel(id){ if(_opsSel.has(id))_opsSel.delete(id); else _opsSel.add(id); renderOps(); }
+async function opsBulkPick(){
+  if(!_cats.length){ try{_cats=(await api('/api/categories')).categories||[];}catch(e){} }
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Назначить ${_opsSel.size} операций</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="catgrid">`+_cats.filter(c=>!c.parent_id).map(c=>`<button class="catpick" style="background:${tint(color(c.name))};color:${color(c.name)}" onclick="opsBulkSave(${c.id})">${icon(catIcon(c.name),16)}<span>${c.name}</span></button>`).join('')+`</div>`;
+  document.getElementById('ov').style.display='flex';
+}
+async function opsBulkSave(catId){
+  try{ const r=await api('/api/transactions/bulk',{method:'POST',body:JSON.stringify({ids:[..._opsSel], category_id:catId})});
+    toast('Обновлено '+r.updated); _opsSel.clear(); _opsBulk=false; closeOv(); loadOps(); }catch(e){ toast('Ошибка'); }
+}
 async function openTxForm(){
   if(!_cats.length){ try{_cats=(await api('/api/categories')).categories||[];}catch(e){} }
   if(!_incCats.length){ try{_incCats=(await api('/api/categories?type=income')).categories||[];}catch(e){} }
@@ -726,8 +766,8 @@ async function loadAnalytics(){
           <div class="cc-n">${c.name}</div>
           <div class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),18)}</div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
       <h2>Куда уходит больше всего</h2>
-      ${tm.length?tm.map(m=>`<div class="row"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
-        <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
+      ${tm.length?tm.map(m=>{const me=(m.merchant||'').replace(/'/g,'&#39;');return `<div class="row" style="cursor:pointer" onclick="openMerchOps('${me}')"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
+        <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`}).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
       <h2>Подписки и регулярные</h2>
       <div class="card"><div class="k">В месяц на регулярные</div><div class="v">${fmt(subs.total)}<span class="cur">${CUR}</span></div></div>
       ${(subs.items||[]).length?`<div style="margin-top:8px">`+subs.items.map(x=>`<div class="row"><div class="sq" style="background:${tint(color(x.name))};color:${color(x.name)}">${icon(catIcon(x.name),20)}</div>

@@ -134,6 +134,7 @@ async def list_transactions(
     category_id: int | None = None,
     account_id: int | None = None,
     q: str | None = None,
+    merchant: str | None = None,
     min_amount: float | None = None,
     max_amount: float | None = None,
     review: int | None = None,
@@ -170,6 +171,8 @@ async def list_transactions(
         query = query.filter(models.Transaction.category_id == category_id)
     if account_id:
         query = query.filter(models.Transaction.account_id == account_id)
+    if merchant:
+        query = query.filter(models.Transaction.merchant == merchant)
     if min_amount is not None:
         query = query.filter(func.abs(models.Transaction.base_amount_rub) >= min_amount)
     if max_amount is not None:
@@ -767,6 +770,29 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
 
 class CatIn(BaseModel):
     category_id: int
+
+
+class BulkCatIn(BaseModel):
+    ids: list[int]
+    category_id: int
+
+
+@app.post("/api/transactions/bulk")
+async def bulk_set_category(body: BulkCatIn, user: dict = Depends(current_user),
+                            db: Session = Depends(get_session)):
+    """Массовая правка категории у нескольких операций (+ обучение правил)."""
+    n = 0
+    for tx_id in body.ids:
+        t = db.get(models.Transaction, tx_id)
+        if not t:
+            continue
+        t.category_id = body.category_id
+        t.status = "confirmed"
+        n += 1
+        learn_rule(db, body.category_id,
+                   inn=(t.receipt.inn if t.receipt else None), pattern=t.merchant)
+    db.commit()
+    return {"ok": True, "updated": n}
 
 
 @app.post("/api/tx/{tx_id}")
