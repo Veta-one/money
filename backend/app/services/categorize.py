@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import re
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -23,8 +22,11 @@ def category_names(db: Session, types=("expense",)) -> list[str]:
 def category_by_name(db: Session, name: str | None):
     if not name:
         return None
-    return (db.query(models.Category)
-            .filter(func.lower(models.Category.name) == name.strip().lower()).first())
+    target = name.strip().lower()  # SQLite lower() не знает кириллицу — сравниваем в Python
+    for c in db.query(models.Category).all():
+        if c.name.lower() == target:
+            return c
+    return None
 
 
 def rule_category_id(db: Session, inn: str | None, text: str) -> int | None:
