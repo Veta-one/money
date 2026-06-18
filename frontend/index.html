@@ -236,6 +236,9 @@ const P = {
   tag:'<path d="M7.5 7.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3z"/>',
   adjust:'<path d="M4 10a2 2 0 1 0 4 0a2 2 0 0 0 -4 0M6 4v4M6 12v8M10 16a2 2 0 1 0 4 0a2 2 0 0 0 -4 0M12 4v10M12 18v2M16 7a2 2 0 1 0 4 0a2 2 0 0 0 -4 0M18 4v1M18 9v11"/>',
   pig:'<path d="M15 11l0 .01M5.173 8.378a3 3 0 1 1 4.656 -1.377M16 4l0 3.803a6.019 6.019 0 0 1 2.658 3.197h1.341a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-1.342c-.336 .95 -.907 1.8 -1.658 2.473v2.027a1.5 1.5 0 0 1 -3 0v-.583a6.04 6.04 0 0 1 -1 .083h-4a6.04 6.04 0 0 1 -1 -.083v.583a1.5 1.5 0 0 1 -3 0v-2.027a6 6 0 0 1 3.5 -10.473h2.5l4.5 -3z"/>',
+  chat:'<path d="M8 9h8M8 13h6M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3z"/>',
+  sparkle:'<path d="M16 18a2 2 0 0 1 2 2M16 18a2 2 0 0 0 2 -2M16 18h2M3 4l4 0M5 2l0 4M11.5 4l-1.5 4l-3 1.5l3 1.5l1.5 4l1.5 -4l3 -1.5l-3 -1.5z"/>',
+  send:'<path d="M10 14l11 -11M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -8l-8 -3.5a.55 .55 0 0 1 0 -1z"/>',
 };
 function icon(n, sz, col){ return `<svg class="ic" width="${sz||22}" height="${sz||22}" viewBox="0 0 24 24" fill="none" stroke="${col||'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||P.tag}</svg>`; }
 
@@ -478,7 +481,9 @@ async function loadDashboard(){
     const cats=d.by_category||[], mx=Math.max(1,...cats.map(c=>c.sum)), rec=d.recent||[], months=(t.months||[]);
     document.getElementById('v-dashboard').innerHTML=`
       <div class="head"><div><div class="hi">Привет${name?', '+name:''}</div><div class="sub">${d.month}</div></div>
-        <button class="iconbtn" onclick="openSettings()" title="Настройки">${icon('gear',20)}</button></div>
+        <div style="display:flex;gap:4px">
+          <button class="iconbtn" onclick="openAi()" title="Спросить ассистента">${icon('chat',20)}</button>
+          <button class="iconbtn" onclick="openSettings()" title="Настройки">${icon('gear',20)}</button></div></div>
       <div class="hero">
         <div class="label">Свободно до конца месяца</div>
         <div class="big">${fmt(d.safe_to_spend)}<span class="cur">${CUR}</span></div>
@@ -1171,6 +1176,59 @@ new MutationObserver(()=>{const ov=document.getElementById('ov'); toggleFab(!ov 
 // ---- настройки ----
 const ICON_SET=['cart','cup','bus','car','flame','kid','tool','bag','home','scissors','pill','book','shirt','film','beer','smoke','gift','leaf','phone','tv','bank','box','wallet','coin','swap','tag','percent','pig','adjust','target','receipt','cash'];
 const COLOR_SET=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b','#84cc16','#06b6d4','#ec4899','#8b5cf6'];
+// ===== AI-чат: спрашиваем ассистента по своим данным =====
+const AI_QUICK=[
+  'Сколько потратил на еду в этом месяце?',
+  'Какая самая дорогая категория?',
+  'Когда следующая зарплата?',
+  'Сравни траты с прошлым месяцем',
+  'Хватит ли мне на отпуск?',
+];
+let _aiHist=JSON.parse(localStorage.getItem('money.ai.hist')||'[]');
+function _aiSave(){ try{ localStorage.setItem('money.ai.hist', JSON.stringify(_aiHist.slice(-20))); }catch(e){} }
+function openAi(){
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1" style="display:flex;align-items:center;gap:7px">${icon('sparkle',18)}<span>Ассистент</span></div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div id="ai-log" style="display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding:6px 2px"></div>
+    ${_aiHist.length?'':`<div style="font-size:12px;color:var(--muted);margin:4px 2px 8px">Спроси по-русски, например:</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px" id="ai-quick">
+      ${AI_QUICK.map(q=>`<button class="chip" style="text-align:left;justify-content:flex-start" onclick="aiAsk('${q.replace(/'/g,"&#39;")}')">${q}</button>`).join('')}</div>`}
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <textarea id="ai-q" class="inp" placeholder="Спросить ассистента…" rows="2" style="flex:1;resize:none;font-family:inherit"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiAsk()}"></textarea>
+      <button class="btn" onclick="aiAsk()" id="ai-send">${icon('send',18,'#fff')}</button></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Ответ Gemini по вашим данным. Не финсовет.</div>`;
+  document.getElementById('ov').style.display='flex';
+  aiRenderLog();
+  setTimeout(()=>{document.getElementById('ai-q')?.focus(); const log=document.getElementById('ai-log'); if(log) log.scrollTop=log.scrollHeight;},80);
+}
+function aiRenderLog(){
+  const log=document.getElementById('ai-log'); if(!log) return;
+  log.innerHTML=_aiHist.map(m=>{
+    const side=m.role==='user'?'flex-end':'flex-start';
+    const bg=m.role==='user'?'var(--ink)':'var(--bg)';
+    const fg=m.role==='user'?'#fff':'var(--text)';
+    return `<div style="align-self:${side};max-width:86%;background:${bg};color:${fg};padding:10px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word">${m.text.replace(/</g,'&lt;')}</div>`;
+  }).join('');
+  log.scrollTop=log.scrollHeight;
+}
+async function aiAsk(prefill){
+  const q=(prefill!==undefined?prefill:(document.getElementById('ai-q')?.value||'')).trim();
+  if(!q) return;
+  const btn=document.getElementById('ai-send'), input=document.getElementById('ai-q');
+  if(input) input.value='';
+  _aiHist.push({role:'user', text:q}); _aiSave(); aiRenderLog();
+  _aiHist.push({role:'assistant', text:'…'}); aiRenderLog();
+  if(btn) btn.disabled=true;
+  // убираем quick-старт после первого вопроса
+  document.getElementById('ai-quick')?.remove();
+  try{
+    const r=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({question:q})});
+    _aiHist[_aiHist.length-1]={role:'assistant', text:r.answer||'(пусто)'};
+  }catch(e){ _aiHist[_aiHist.length-1]={role:'assistant', text:'Ошибка: '+(e.message||e)}; }
+  _aiSave(); aiRenderLog();
+  if(btn) btn.disabled=false;
+}
 async function openSettings(){
   const alertBig=(await api('/api/kv/alert_big').catch(()=>({value:null}))).value||'15000';
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Настройки</div>

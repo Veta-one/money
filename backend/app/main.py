@@ -23,6 +23,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine, get_session
 from .migrations import run_migrations
 from .security import current_user
+from .services.ai_chat import ask as ai_ask
 from .services.alerts import fns_refresh_job, nudge_job
 from .services.analytics import analytics_overview
 from .services.backup import make_and_send_backup
@@ -248,6 +249,17 @@ async def heatmap(days: int = 365,
     pts = daily_spending(db, days)
     mx = max((p["spent"] for p in pts), default=0.0)
     return {"days": days, "points": pts, "max": round(mx, 2)}
+
+
+class AskIn(BaseModel):
+    question: str
+
+
+@app.post("/api/ai/ask")
+async def ai_ask_endpoint(body: AskIn,
+                          user: dict = Depends(current_user),
+                          db: Session = Depends(get_session)):
+    return await ai_ask(db, body.question)
 
 
 class TargetIn(BaseModel):
