@@ -186,6 +186,7 @@ class Debt(Base):
     counterparty: Mapped[str] = mapped_column(String(128))
     direction: Mapped[str] = mapped_column(String(16))    # i_owe|owed_to_me
     amount: Mapped[float] = mapped_column(Float)
+    paid: Mapped[float] = mapped_column(Float, default=0.0)  # погашено к текущему моменту
     currency: Mapped[str] = mapped_column(String(8), default="RUB")
     date: Mapped[date | None] = mapped_column(Date)
     due_date: Mapped[date | None] = mapped_column(Date)

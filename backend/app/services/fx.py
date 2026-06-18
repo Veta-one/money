@@ -49,6 +49,7 @@ def compute_net_worth(db) -> float:
     total = sum(to_rub(a.balance, a.currency, db)
                 for a in db.query(models.Account).filter(models.Account.archived.is_(False)).all())
     for d in db.query(models.Debt).filter(models.Debt.status == "open").all():
-        v = to_rub(d.amount, d.currency, db)
+        remaining = max((d.amount or 0) - (d.paid or 0), 0)   # в капитал идёт ОСТАТОК долга
+        v = to_rub(remaining, d.currency, db)
         total += v if d.direction == "owed_to_me" else -v
     return round(total, 2)

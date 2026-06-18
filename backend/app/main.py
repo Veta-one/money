@@ -639,10 +639,15 @@ class DebtIn(BaseModel):
 async def list_debts(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     rows = (db.query(models.Debt).filter(models.Debt.status == "open")
             .order_by(models.Debt.id.desc()).all())
-    owed = sum(to_rub(d.amount, d.currency, db) for d in rows if d.direction == "owed_to_me")
-    iowe = sum(to_rub(d.amount, d.currency, db) for d in rows if d.direction == "i_owe")
+
+    def _rem(d):
+        return max((d.amount or 0) - (d.paid or 0), 0)
+
+    owed = sum(to_rub(_rem(d), d.currency, db) for d in rows if d.direction == "owed_to_me")
+    iowe = sum(to_rub(_rem(d), d.currency, db) for d in rows if d.direction == "i_owe")
     return {"debts": [{"id": d.id, "counterparty": d.counterparty, "direction": d.direction,
-                       "amount": d.amount, "currency": d.currency} for d in rows],
+                       "amount": round(d.amount or 0), "paid": round(d.paid or 0),
+                       "remaining": round(_rem(d)), "currency": d.currency} for d in rows],
             "owed_to_me": round(owed, 2), "i_owe": round(iowe, 2)}
 
 
@@ -663,6 +668,25 @@ async def close_debt(debt_id: int, user: dict = Depends(current_user), db: Sessi
     if d:
         d.status = "closed"
         db.commit()
+    return {"ok": True}
+
+
+class PayIn(BaseModel):
+    amount: float
+
+
+@app.post("/api/debts/{debt_id}/pay")
+async def pay_debt(debt_id: int, body: PayIn, user: dict = Depends(current_user),
+                   db: Session = Depends(get_session)):
+    """Записать частичное погашение долга (или возврат вам)."""
+    d = db.get(models.Debt, debt_id)
+    if not d:
+        raise HTTPException(404, "no debt")
+    d.paid = (d.paid or 0) + abs(body.amount)
+    if d.paid >= (d.amount or 0):       # погашено полностью → закрываем
+        d.paid = d.amount or 0
+        d.status = "closed"
+    db.commit()
     return {"ok": True}
 
 

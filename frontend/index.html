@@ -382,11 +382,14 @@ async function loadCapital(){
       ${(dbt.owed_to_me||dbt.i_owe)?`<div class="grid2" style="margin-top:0;margin-bottom:8px">
         <div class="card"><div class="k">Вам должны</div><div class="v" style="color:var(--green)">${fmt(dbt.owed_to_me)}<span class="cur">${CUR}</span></div></div>
         <div class="card"><div class="k">Вы должны</div><div class="v" style="color:var(--red)">${fmt(dbt.i_owe)}<span class="cur">${CUR}</span></div></div></div>`:''}
-      ${debts.map(d=>{const col=d.direction==='owed_to_me'?'#18c171':'#ff4d54';return `<div class="row">
-        <div class="sq" style="background:${tint(col)};color:${col}">${icon('coin',20)}</div>
-        <div class="mid"><div class="t1">${d.counterparty}</div><div class="t2">${d.direction==='owed_to_me'?'должен вам':'вы должны'}</div></div>
-        <div class="amt">${fmt(d.amount)} ${CUR}</div>
-        <button class="iconbtn" onclick="closeDebt(${d.id})">${icon('x',18)}</button></div>`}).join('')}
+      ${debts.map(d=>{const col=d.direction==='owed_to_me'?'#18c171':'#ff4d54';const pct=d.amount>0?Math.min(100,Math.round((d.paid||0)/d.amount*100)):0;return `<div class="goal">
+        <div class="gh"><div class="gn">${d.counterparty} <span class="muted" style="font-size:12px;font-weight:600">· ${d.direction==='owed_to_me'?'должен вам':'вы должны'}</span></div><div class="gv" style="color:${col}">${fmt(d.remaining)} ${CUR}</div></div>
+        ${d.paid>0?`<div class="track" style="margin-top:11px"><i style="width:${pct}%;background:${col}"></i></div>
+          <div class="meta" style="margin-top:8px"><span>${d.direction==='owed_to_me'?'вернули':'отдано'} ${fmt(d.paid)} из ${fmt(d.amount)}</span><span>осталось ${fmt(d.remaining)}</span></div>`:''}
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input class="inp" type="number" inputmode="decimal" placeholder="${d.direction==='owed_to_me'?'вернули ₽':'погасить ₽'}" id="dpay-${d.id}" style="flex:1">
+          <button class="btn" onclick="payDebt(${d.id})">${d.direction==='owed_to_me'?'Получил':'Отдал'}</button>
+          <button class="iconbtn" onclick="closeDebt(${d.id})">${icon('x',18)}</button></div></div>`}).join('')}
       <div class="card" style="margin-top:8px">
         <div style="display:flex;gap:8px;margin-bottom:8px">
           <button id="dir-owed" class="chip on" onclick="setDir('owed_to_me')">Мне должны</button>
@@ -469,6 +472,8 @@ function setDir(d){ _debtDir=d; document.getElementById('dir-owed').className='c
 async function addDebt(){ const n=document.getElementById('dn').value.trim(), a=parseFloat(document.getElementById('da').value);
   if(!n||!a){toast('Кто и сколько');return;} try{ await api('/api/debts',{method:'POST',body:JSON.stringify({counterparty:n,direction:_debtDir,amount:a})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }
 async function closeDebt(id){ try{ await api('/api/debts/'+id+'/close',{method:'POST'}); toast('Закрыт'); loadCapital(); }catch(e){toast('Ошибка');} }
+async function payDebt(id){ const v=parseFloat(document.getElementById('dpay-'+id).value); if(!v){toast('Сумма');return;}
+  try{ await api('/api/debts/'+id+'/pay',{method:'POST',body:JSON.stringify({amount:v})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }
 
 async function loadGoals(){
   try{
