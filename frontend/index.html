@@ -472,8 +472,8 @@ async function closeDebt(id){ try{ await api('/api/debts/'+id+'/close',{method:'
 
 async function loadGoals(){
   try{
-    const [g,r]=await Promise.all([api('/api/goals'),api('/api/recurring')]);
-    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[]; _cands=r.candidates||[]; _recPer='monthly';
+    const [g,r,a]=await Promise.all([api('/api/goals'),api('/api/recurring'),api('/api/accounts')]);
+    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[], accs2=a.accounts||[]; _cands=r.candidates||[]; _recPer='monthly';
     document.getElementById('v-goals').innerHTML=`
       <div class="head"><div class="hi">Цели</div></div>
       <div class="hero"><div class="label">Можешь откладывать в месяц</div>
@@ -485,8 +485,7 @@ async function loadGoals(){
         <div class="track" style="margin-top:11px"><i style="width:${go.pct}%;background:${col}"></i></div>
         <div class="meta"><span>${go.pct}%</span><span>${go.eta?'до '+new Date(go.eta).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'}):'задай план/мес'}</span></div>
         <div style="display:flex;gap:8px;margin-top:12px">
-          <input class="inp" type="number" inputmode="decimal" placeholder="внести ₽" id="ad-${go.id}" style="flex:1">
-          <button class="btn" onclick="addGoal(${go.id},${go.current_amount})">Внести</button>
+          ${go.account?`<div class="inp" style="flex:1;color:var(--muted);font-size:13px;display:flex;align-items:center">${icon('wallet',15)}<span style="margin-left:6px">${go.account} (авто)</span></div>`:`<input class="inp" type="number" inputmode="decimal" placeholder="внести ₽" id="ad-${go.id}" style="flex:1"><button class="btn" onclick="addGoal(${go.id},${go.current_amount})">Внести</button>`}
           <button class="iconbtn" onclick="delGoal(${go.id})">${icon('trash',18)}</button></div></div>`}).join('')
         :`<div class="empty">Целей пока нет — создай ниже.</div>`}
       <h2>Добавить цель</h2>
@@ -495,6 +494,7 @@ async function loadGoals(){
         <div style="display:flex;gap:8px">
           <input id="ng-t" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽">
           <input id="ng-p" class="inp" type="number" inputmode="decimal" placeholder="В мес ₽"></div>
+        <select id="ng-a" class="inp" style="margin-top:8px"><option value="">Без привязки к счёту</option>${accs2.map(ac=>`<option value="${ac.id}">${ac.name}</option>`).join('')}</select>
         <button class="btn full" style="margin-top:10px" onclick="newGoal()">Создать цель</button></div>
       <h2>Регулярные платежи</h2>
       ${rec.length?rec.map(x=>{const col=color(x.name);return `<div class="row">
@@ -517,8 +517,8 @@ async function loadGoals(){
           <button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
   }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('v-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
-async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t=parseFloat(document.getElementById('ng-t').value),p=parseFloat(document.getElementById('ng-p').value)||0;
-  if(!n||!t){toast('Имя и сумма');return;} try{ await api('/api/goals',{method:'POST',body:JSON.stringify({name:n,target_amount:t,monthly_plan:p})}); toast('Создано'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t=parseFloat(document.getElementById('ng-t').value),p=parseFloat(document.getElementById('ng-p').value)||0,acc=document.getElementById('ng-a').value;
+  if(!n||!t){toast('Имя и сумма');return;} try{ await api('/api/goals',{method:'POST',body:JSON.stringify({name:n,target_amount:t,monthly_plan:p,account_id:acc?parseInt(acc):null})}); toast('Создано'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function addGoal(id,cur){ const v=parseFloat(document.getElementById('ad-'+id).value); if(!v){toast('Сумма');return;}
   try{ await api('/api/goals/'+id,{method:'POST',body:JSON.stringify({current_amount:cur+v})}); toast('Внесено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }

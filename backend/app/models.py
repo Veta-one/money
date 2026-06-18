@@ -169,6 +169,7 @@ class Goal(Base):
     current_amount: Mapped[float] = mapped_column(Float, default=0.0)
     monthly_plan: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(16), default="active")
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))  # где лежат деньги цели
 
 
 class Budget(Base):

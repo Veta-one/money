@@ -12,6 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
+from .fx import to_rub
 from .settings_store import get_setting
 
 
@@ -91,9 +92,10 @@ def detect_recurring(db: Session, months: int = 3, max_per_month: float = 1.6, t
     return cands[:top]
 
 
-def goal_view(g: models.Goal) -> dict:
+def goal_view(g: models.Goal, db: Session | None = None) -> dict:
     target = g.target_amount or 0
-    current = g.current_amount or 0
+    acc = db.get(models.Account, g.account_id) if (g.account_id and db is not None) else None
+    current = round(to_rub(acc.balance, acc.currency, db)) if acc else (g.current_amount or 0)
     remaining = max(target - current, 0)
     pct = min(round(current / target * 100), 100) if target else 0
     eta = None
@@ -104,6 +106,7 @@ def goal_view(g: models.Goal) -> dict:
         "monthly_plan": g.monthly_plan or 0, "currency": g.currency,
         "target_date": g.target_date.isoformat() if g.target_date else None,
         "status": g.status, "remaining": remaining, "pct": pct, "eta": eta,
+        "account_id": g.account_id, "account": acc.name if acc else None,
     }
 
 

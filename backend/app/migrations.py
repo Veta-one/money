@@ -33,6 +33,7 @@ def run_migrations(engine: Engine) -> None:
         # --- Фаза B: доходы по источникам ---
         _add_column(conn, "recurring", "owner", "owner VARCHAR(16) DEFAULT 'me'")
         _add_column(conn, "transactions", "recurring_id", "recurring_id INTEGER")
+        _add_column(conn, "goals", "account_id", "account_id INTEGER")
 
         # индексы под выборки операций/доходов (datetime уже индексирован моделью)
         for name, ddl in (

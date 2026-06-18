@@ -326,6 +326,7 @@ class GoalIn(BaseModel):
     monthly_plan: float = 0
     current_amount: float = 0
     target_date: str | None = None
+    account_id: int | None = None
 
 
 class GoalPatch(BaseModel):
@@ -334,24 +335,25 @@ class GoalPatch(BaseModel):
     target_amount: float | None = None
     target_date: str | None = None
     status: str | None = None
+    account_id: int | None = None
 
 
 @app.get("/api/goals")
 async def list_goals(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     goals = db.query(models.Goal).filter(models.Goal.status != "done").all()
-    return {"goals": [goal_view(g) for g in goals], "suggest": suggest_goals(db)}
+    return {"goals": [goal_view(g, db) for g in goals], "suggest": suggest_goals(db)}
 
 
 @app.post("/api/goals")
 async def create_goal(body: GoalIn, user: dict = Depends(current_user), db: Session = Depends(get_session)):
     g = models.Goal(
         name=body.name, target_amount=body.target_amount, monthly_plan=body.monthly_plan,
-        current_amount=body.current_amount,
+        current_amount=body.current_amount, account_id=body.account_id,
         target_date=date.fromisoformat(body.target_date) if body.target_date else None,
         status="active")
     db.add(g)
     db.commit()
-    return goal_view(g)
+    return goal_view(g, db)
 
 
 @app.post("/api/goals/{goal_id}")
@@ -364,10 +366,12 @@ async def patch_goal(goal_id: int, body: GoalPatch,
         v = getattr(body, field)
         if v is not None:
             setattr(g, field, v)
+    if body.account_id is not None:
+        g.account_id = body.account_id or None
     if body.target_date is not None:
         g.target_date = date.fromisoformat(body.target_date) if body.target_date else None
     db.commit()
-    return goal_view(g)
+    return goal_view(g, db)
 
 
 @app.delete("/api/goals/{goal_id}")
