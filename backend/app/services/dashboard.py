@@ -17,21 +17,19 @@ from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
 
 
 def needs_review(t) -> bool:
-    """Операция «на разбор»: расход без категории; доход без категории/источника; статус needs_review."""
+    """Операция «на разбор»: расход или доход без категории; либо статус needs_review.
+    Источник у дохода — опционален (кешбэк/проценты/разовое его не требуют)."""
     if t.status == "needs_review":
         return True
-    if t.type == "expense" and not t.category_id:
-        return True
-    if t.type == "income" and (not t.category_id or not t.recurring_id):
+    if t.type in ("expense", "income") and not t.category_id:
         return True
     return False
 
 
 _REVIEW_FILTER = or_(
     models.Transaction.status == "needs_review",
-    and_(models.Transaction.type == "expense", models.Transaction.category_id.is_(None)),
-    and_(models.Transaction.type == "income",
-         or_(models.Transaction.category_id.is_(None), models.Transaction.recurring_id.is_(None))),
+    and_(models.Transaction.type.in_(("expense", "income")),
+         models.Transaction.category_id.is_(None)),
 )
 
 
