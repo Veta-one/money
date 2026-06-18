@@ -82,10 +82,11 @@ def detect_recurring(db: Session, months: int = 3, max_per_month: float = 1.6, t
     cands = []
     for mn, a in agg.items():
         nm, cnt = len(a["months"]), len(a["amounts"])
-        if nm >= 2 and cnt / nm <= max_per_month and mn.lower() not in existing and mn not in dismissed:
+        name = mn[:60]   # то же имя, что уходит во фронт и в dismissed/existing
+        if nm >= 2 and cnt / nm <= max_per_month and name.lower() not in existing and name not in dismissed:
             amts = sorted(a["amounts"])
             median = amts[len(amts) // 2]
-            cands.append({"name": mn[:60], "amount": round(median), "months": nm})
+            cands.append({"name": name, "amount": round(median), "months": nm})
     cands.sort(key=lambda c: (-c["months"], -c["amount"]))
     return cands[:top]
 
