@@ -12,6 +12,15 @@
     --bg:#f3f4f6; --card:#ffffff; --ink:#1b1c20; --text:#15161a; --muted:#8b909a;
     --line:#eceef1; --green:#18c171; --red:#ff4d54;
   }
+  html.dark{
+    --bg:#15161a; --card:#1e2026; --ink:#f3f4f6; --text:#f3f4f6; --muted:#8b909a;
+    --line:#2c2e35; --green:#18c171; --red:#ff5c63;
+  }
+  html.dark .nav{background:#0e0f12}
+  html.dark .nav button.active{background:#2c2e35}
+  html.dark .hero{background:#0e0f12}
+  html.dark select.inp{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b909a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6l6 -6'/></svg>")}
+  html.dark .btn{background:#3a3d45;color:#fff}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;background:var(--bg);color:var(--text);
     font-family:'Inter',-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
@@ -131,7 +140,12 @@
   <div id="ov" class="ov" style="display:none" onclick="if(event.target.id==='ov')closeOv()"><div id="sheet" class="sheet"></div></div>
 <script>
 const tg = window.Telegram?.WebApp;
-try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgroundColor?.('#f3f4f6'); }catch(e){}
+const _isDark=(tg?.colorScheme==='dark')||window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+if(_isDark) document.documentElement.classList.add('dark');
+const _bgColor=_isDark?'#15161a':'#f3f4f6';
+try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.(_bgColor); tg?.setBackgroundColor?.(_bgColor); }catch(e){}
+try{ tg?.onEvent?.('themeChanged', ()=>{ const dark=tg.colorScheme==='dark'; document.documentElement.classList.toggle('dark',dark); const bg=dark?'#15161a':'#f3f4f6'; tg.setHeaderColor?.(bg); tg.setBackgroundColor?.(bg); refreshActive(); }); }catch(e){}
+function tap(s){ try{ tg?.HapticFeedback?.impactOccurred?.(s||'light'); }catch(e){} }
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
 const CUR='₽';
@@ -215,7 +229,7 @@ async function api(path, opts){
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
-function toast(t){ const e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),1400); }
+function toast(t){ tap(t.toLowerCase().includes('ошибк')?'medium':'light'); const e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),1400); }
 function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err">Доступ только владельцу.<br>Открой приложение из бота.</div>'; }
 
 document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span class="lbl">Главная</span>';
@@ -228,6 +242,7 @@ document.getElementById('t-goals').innerHTML=icon('target',20)+'<span class="lbl
 const TABS=['dashboard','ops','analytics','income','capital','goals'];
 let _tab='dashboard';
 function tab(t){
+  if(t!==_tab) tap('light');
   _tab=t;
   for(const x of TABS){
     document.getElementById('v-'+x).style.display=x===t?'block':'none';
