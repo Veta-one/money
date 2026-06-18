@@ -784,6 +784,9 @@ async function createSrcFromTx(){
 function closeOv(){ document.getElementById('ov').style.display='none'; }
 
 loadDashboard();
+// глубокая ссылка из бота: ?tx=ID → открыть операцию
+const _startTx=new URLSearchParams(location.search).get('tx');
+if(_startTx && /^\d+$/.test(_startTx)){ setTimeout(()=>{ try{ openTx(parseInt(_startTx)); }catch(e){} }, 350); }
 </script>
 </body>
 </html>

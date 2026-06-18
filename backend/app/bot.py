@@ -10,7 +10,7 @@ from io import BytesIO
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
-                           InlineKeyboardMarkup, Message)
+                           InlineKeyboardMarkup, Message, WebAppInfo)
 
 from . import models
 from .config import settings
@@ -39,10 +39,16 @@ async def _download(file_id: str) -> bytes:
 
 
 def _kb(res: dict) -> InlineKeyboardMarkup | None:
-    if not res.get("tx_id"):
+    tx_id = res.get("tx_id")
+    if not tx_id:
         return None
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✏️ Категория", callback_data=f"editcat:{res['tx_id']}")]])
+    rows = []
+    if settings.public_url:
+        rows.append([InlineKeyboardButton(
+            text="📂 Открыть в приложении",
+            web_app=WebAppInfo(url=f"{settings.public_url}?tx={tx_id}"))])
+    rows.append([InlineKeyboardButton(text="✏️ Категория", callback_data=f"editcat:{tx_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _cat_keyboard(db, tx_id: int) -> InlineKeyboardMarkup:
