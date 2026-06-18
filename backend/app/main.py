@@ -19,6 +19,7 @@ from . import models  # noqa: F401  — регистрируем таблицы 
 from .config import settings
 from .db import Base, engine, get_session
 from .security import current_user
+from .services.backup import make_and_send_backup
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
 from .services.fx import to_rub
@@ -50,6 +51,8 @@ async def lifespan(_app: FastAPI):
                           minute=0, id="weekly", replace_existing=True)
         scheduler.add_job(send_digest, "cron", args=["monthly"], day=1, hour=10, minute=0,
                           id="monthly", replace_existing=True)
+        scheduler.add_job(make_and_send_backup, "cron", hour=3, minute=30,
+                          id="backup", replace_existing=True)
         scheduler.start()
     yield
     if scheduler.running:

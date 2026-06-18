@@ -16,6 +16,7 @@ from . import models
 from .config import settings
 from .db import SessionLocal
 from .services import ingest
+from .services.backup import make_and_send_backup
 from .services.categorize import learn_rule
 from .services.digests import build_daily, build_monthly, build_weekly
 
@@ -103,6 +104,14 @@ async def on_week(m: Message):
 async def on_month(m: Message):
     if _owner(m):
         await _send_report(m, build_monthly)
+
+
+@dp.message(Command("backup"))
+async def on_backup(m: Message):
+    if not _owner(m):
+        return
+    if not await make_and_send_backup():
+        await m.answer("Бэкап не настроен (нет чата/пароля).")
 
 
 @dp.message(F.photo)
