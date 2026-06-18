@@ -135,7 +135,7 @@ const CUR='₽';
 function plural(n,one,few,many){ n=Math.abs(n)%100; const k=n%10; if(n>10&&n<20)return many; if(k>1&&k<5)return few; if(k===1)return one; return many; }
 function dBadge(cur,prev,goodDown){ if(prev==null||prev===0)return ''; const diff=cur-prev; if(!diff)return ''; const pct=Math.round(diff/prev*100),up=diff>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'}${Math.abs(pct)}%</span>`; }
 function dBadgeAbs(delta,goodDown){ if(delta==null||!delta)return ''; const up=delta>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'} ${fmt(Math.abs(delta))} ₽</span>`; }
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _opsFiltOpen=false;
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true;
 
 // ---- Tabler icons ----
 const P = {
@@ -334,8 +334,8 @@ async function loadDashboard(){
 
 async function loadCapital(){
   try{
-    const [a,dbt,c]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital')]);
-    const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _debtDir='owed_to_me';
+    const [a,dbt,c,dep]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital'),api('/api/deposits')]);
+    const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _deps=dep.deposits||[]; _debtDir='owed_to_me';
     const per=c.from_month_start?'за месяц':'за '+c.delta_days+' дн.';
     document.getElementById('v-capital').innerHTML=`
       <div class="head"><div class="hi">Капитал</div></div>
@@ -386,6 +386,14 @@ async function loadCapital(){
           <input id="dn" class="inp" placeholder="Кто (имя)" style="flex:2">
           <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽" style="flex:1">
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
+      <h2>Вклады</h2>
+      ${(dep.deposits||[]).map(x=>`<div class="goal">
+        <div class="gh"><div class="gn">${x.bank}${x.owner==='wife'?' <span class="muted" style="font-size:12px;font-weight:600">· жена</span>':''}</div><div class="gv">${fmt(x.value_now)} ${CUR}</div></div>
+        <div class="meta" style="margin-top:8px"><span>${fmt(x.principal)} ₽ под ${x.rate}%${x.monthly_topup?' · +'+fmt(x.monthly_topup)+'/мес':''}</span><span style="color:var(--green)">+${fmt(x.interest_now)} ₽ %</span></div>
+        ${x.value_end?`<div class="meta"><span>к ${new Date(x.term_end).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})}</span><span>≈ ${fmt(x.value_end)} ₽ (+${fmt(x.interest_total)})</span></div>`:''}
+        <div style="display:flex;gap:8px;margin-top:12px"><button class="chip" onclick="openDep(${x.id})">Изменить</button>
+          <button class="iconbtn" onclick="delDep(${x.id})">${icon('trash',18)}</button></div></div>`).join('')}
+      <button class="btn full" style="margin-top:4px" onclick="openDep(null)">Добавить вклад</button>
       `;
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
@@ -414,6 +422,38 @@ async function saveAcc(){
     toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
 async function delAcc(id){ try{ await api('/api/accounts/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
+function openDep(id){
+  const d=id?_deps.find(x=>x.id===id):null;
+  _depEdit=id; _depOwner=d?d.owner:'me'; _depCap=d?d.capitalization:true;
+  const today=new Date().toISOString().slice(0,10);
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${d?'Вклад: '+d.bank:'Новый вклад'}</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <input id="dp-b" class="inp" placeholder="Банк / название" style="margin-bottom:8px" value="${d?(d.bank||'').replace(/"/g,'&quot;'):''}">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="dp-p" class="inp" type="number" inputmode="decimal" placeholder="Сумма (тело)" style="flex:1.4" value="${d?d.principal:''}">
+      <input id="dp-r" class="inp" type="number" inputmode="decimal" placeholder="Ставка %" style="flex:1" value="${d?d.rate:''}"></div>
+    <input id="dp-t" class="inp" type="number" inputmode="decimal" placeholder="Пополнение в месяц (необяз.)" style="margin-bottom:8px" value="${d&&d.monthly_topup?d.monthly_topup:''}">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Открыт</div><input id="dp-s" class="inp" type="date" value="${d&&d.term_start?d.term_start:today}"></div>
+      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Окончание</div><input id="dp-e" class="inp" type="date" value="${d&&d.term_end?d.term_end:''}"></div></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button id="do-me" class="chip${_depOwner==='me'?' on':''}" onclick="setDepOwner('me')">Я</button>
+      <button id="do-wife" class="chip${_depOwner==='wife'?' on':''}" onclick="setDepOwner('wife')">Жена</button>
+      <span style="width:4px"></span>
+      <button id="dc-on" class="chip${_depCap?' on':''}" onclick="setDepCap(1)">С капит.</button>
+      <button id="dc-off" class="chip${_depCap?'':' on'}" onclick="setDepCap(0)">Без</button>
+      <button class="btn" style="margin-left:auto" onclick="saveDep()">Сохранить</button></div>
+    ${d?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delDep(${d.id})">Удалить вклад</button>`:''}`;
+  document.getElementById('ov').style.display='flex';
+}
+function setDepOwner(o){ _depOwner=o; document.getElementById('do-me').className='chip'+(o==='me'?' on':''); document.getElementById('do-wife').className='chip'+(o==='wife'?' on':''); }
+function setDepCap(v){ _depCap=!!v; document.getElementById('dc-on').className='chip'+(_depCap?' on':''); document.getElementById('dc-off').className='chip'+(_depCap?'':' on'); }
+async function saveDep(){
+  const b=document.getElementById('dp-b').value.trim(); if(!b){toast('Название');return;}
+  const body={bank:b, principal:parseFloat(document.getElementById('dp-p').value)||0, rate:parseFloat(document.getElementById('dp-r').value)||0, monthly_topup:parseFloat(document.getElementById('dp-t').value)||0, capitalization:_depCap, owner:_depOwner, term_start:document.getElementById('dp-s').value||null, term_end:document.getElementById('dp-e').value||null};
+  try{ if(_depEdit) await api('/api/deposits/'+_depEdit,{method:'POST',body:JSON.stringify(body)}); else await api('/api/deposits',{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
+}
+async function delDep(id){ try{ await api('/api/deposits/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
 function setDir(d){ _debtDir=d; document.getElementById('dir-owed').className='chip'+(d==='owed_to_me'?' on':''); document.getElementById('dir-iowe').className='chip'+(d==='i_owe'?' on':''); }
 async function addDebt(){ const n=document.getElementById('dn').value.trim(), a=parseFloat(document.getElementById('da').value);
   if(!n||!a){toast('Кто и сколько');return;} try{ await api('/api/debts',{method:'POST',body:JSON.stringify({counterparty:n,direction:_debtDir,amount:a})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }

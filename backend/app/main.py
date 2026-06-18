@@ -30,6 +30,7 @@ from .services.budget import budget_overview
 from .services.capital import capital_overview
 from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard, needs_review
+from .services.deposits import deposits_overview
 from .services.digests import send_digest
 from .services.income import income_overview, learn_income_alias
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
@@ -529,6 +530,78 @@ async def set_budget(body: BudgetIn, user: dict = Depends(current_user),
     elif b:
         db.delete(b)  # 0 → вернуться к авто-прогнозу
     db.commit()
+    return {"ok": True}
+
+
+# ---------- вклады ----------
+
+class DepIn(BaseModel):
+    bank: str
+    principal: float = 0.0
+    rate: float = 0.0
+    monthly_topup: float = 0.0
+    capitalization: bool = True
+    owner: str = "me"
+    term_start: str | None = None
+    term_end: str | None = None
+
+
+class DepPatch(BaseModel):
+    bank: str | None = None
+    principal: float | None = None
+    rate: float | None = None
+    monthly_topup: float | None = None
+    capitalization: bool | None = None
+    owner: str | None = None
+    term_start: str | None = None
+    term_end: str | None = None
+
+
+@app.get("/api/deposits")
+async def deposits(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return deposits_overview(db)
+
+
+@app.post("/api/deposits")
+async def create_deposit(body: DepIn, user: dict = Depends(current_user),
+                         db: Session = Depends(get_session)):
+    d = models.Deposit(
+        bank=body.bank[:128], principal=body.principal or 0.0, rate=body.rate or 0.0,
+        monthly_topup=body.monthly_topup or 0.0, capitalization=bool(body.capitalization),
+        owner=body.owner if body.owner in ("me", "wife") else "me",
+        term_start=date.fromisoformat(body.term_start) if body.term_start else date.today(),
+        term_end=date.fromisoformat(body.term_end) if body.term_end else None,
+    )
+    db.add(d)
+    db.commit()
+    return {"id": d.id}
+
+
+@app.post("/api/deposits/{dep_id}")
+async def patch_deposit(dep_id: int, body: DepPatch, user: dict = Depends(current_user),
+                        db: Session = Depends(get_session)):
+    d = db.get(models.Deposit, dep_id)
+    if not d:
+        raise HTTPException(404, "no deposit")
+    for f in ("bank", "principal", "rate", "monthly_topup", "capitalization", "owner"):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(d, f, v)
+    if body.term_start is not None:
+        d.term_start = date.fromisoformat(body.term_start) if body.term_start else None
+    if body.term_end is not None:
+        d.term_end = date.fromisoformat(body.term_end) if body.term_end else None
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/deposits/{dep_id}")
+async def delete_deposit(dep_id: int, user: dict = Depends(current_user),
+                         db: Session = Depends(get_session)):
+    d = db.get(models.Deposit, dep_id)
+    if d:
+        db.delete(d)
+        db.commit()
     return {"ok": True}
 
 
