@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from .. import models
 from ..db import SessionLocal
-from .fx import to_rub
+from .fx import compute_net_worth
 
 _MONTHS = ["янв", "фев", "мар", "апр", "май", "июн",
            "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -34,8 +34,7 @@ def monthly_spending(db, months: int = 6) -> list[dict]:
 
 
 def take_networth_snapshot(db) -> float:
-    accs = db.query(models.Account).filter(models.Account.archived.is_(False)).all()
-    total = round(sum(to_rub(a.balance, a.currency, db) for a in accs), 2)
+    total = compute_net_worth(db)
     today = date.today()
     row = db.query(models.NetWorthSnapshot).filter_by(date=today).first()
     if row:

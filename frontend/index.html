@@ -70,6 +70,7 @@
   .btn.ghost{background:var(--bg);color:var(--text)}
   .chip{background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:12px;
     padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .iconbtn{background:var(--bg);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
   .empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:14px;line-height:1.5}
   .loader{text-align:center;color:var(--muted);padding:70px 0}
@@ -108,7 +109,7 @@ const tg = window.Telegram?.WebApp;
 try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgroundColor?.('#f3f4f6'); }catch(e){}
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const CUR='₽';
-let _sug=[], _cats=[], _cands=[], _pickKind=null, _pickId=null;
+let _sug=[], _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me';
 
 // ---- Tabler icons ----
 const P = {
@@ -197,15 +198,15 @@ async function loadDashboard(){
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(x.type==='income'?'coin':x.type==='transfer'?'swap':'receipt',20)}</div>
         <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
         <div class="t2">${new Date(x.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
-        <div class="amt ${x.type==='income'?'inc':'exp'}">${x.type==='income'?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`}).join('')
+        <div class="amt ${(x.type==='income'||x.amount<0)?'inc':'exp'}">${(x.type==='income'||x.amount<0)?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`}).join('')
         :`<div class="empty">Операций пока нет.</div>`}`;
   }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 
 async function loadCapital(){
   try{
-    const [a,s]=await Promise.all([api('/api/accounts'),api('/api/settings')]);
-    const accs=a.accounts||[];
+    const [a,s,dbt]=await Promise.all([api('/api/accounts'),api('/api/settings'),api('/api/debts')]);
+    const accs=a.accounts||[], debts=dbt.debts||[]; _debtDir='owed_to_me';
     document.getElementById('v-capital').innerHTML=`
       <div class="head"><div class="hi">Капитал</div></div>
       <div class="hero"><div class="label">Чистый капитал</div>
@@ -217,6 +218,23 @@ async function loadCapital(){
         <div class="mid"><div class="t1">${ac.name}</div>
         <div class="t2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
         <input class="num" type="number" inputmode="decimal" value="${ac.balance}" onchange="saveBal(${ac.id},this.value)"></div>`}).join('')}
+      <h2>Долги</h2>
+      ${(dbt.owed_to_me||dbt.i_owe)?`<div class="grid2" style="margin-top:0;margin-bottom:8px">
+        <div class="card"><div class="k">Вам должны</div><div class="v" style="color:var(--green)">${fmt(dbt.owed_to_me)}<span class="cur">${CUR}</span></div></div>
+        <div class="card"><div class="k">Вы должны</div><div class="v" style="color:var(--red)">${fmt(dbt.i_owe)}<span class="cur">${CUR}</span></div></div></div>`:''}
+      ${debts.map(d=>{const col=d.direction==='owed_to_me'?'#18c171':'#ff4d54';return `<div class="row">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon('coin',20)}</div>
+        <div class="mid"><div class="t1">${d.counterparty}</div><div class="t2">${d.direction==='owed_to_me'?'должен вам':'вы должны'}</div></div>
+        <div class="amt">${fmt(d.amount)} ${CUR}</div>
+        <button class="iconbtn" onclick="closeDebt(${d.id})">${icon('x',18)}</button></div>`}).join('')}
+      <div class="card" style="margin-top:8px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button id="dir-owed" class="chip on" onclick="setDir('owed_to_me')">Мне должны</button>
+          <button id="dir-iowe" class="chip" onclick="setDir('i_owe')">Я должен</button></div>
+        <div style="display:flex;gap:8px">
+          <input id="dn" class="inp" placeholder="Кто" style="flex:1.4">
+          <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽">
+          <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
       <h2>Ожидаемый доход в месяц</h2>
       <div class="card"><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>
       <div class="empty" style="padding:14px 4px">Меняй балансы — капитал и «свободно в месяц» пересчитаются.</div>`;
@@ -224,6 +242,10 @@ async function loadCapital(){
 }
 async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
 async function saveInc(v){ try{ await api('/api/settings',{method:'POST',body:JSON.stringify({expected_monthly_income:parseFloat(v)||0})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
+function setDir(d){ _debtDir=d; document.getElementById('dir-owed').className='chip'+(d==='owed_to_me'?' on':''); document.getElementById('dir-iowe').className='chip'+(d==='i_owe'?' on':''); }
+async function addDebt(){ const n=document.getElementById('dn').value.trim(), a=parseFloat(document.getElementById('da').value);
+  if(!n||!a){toast('Кто и сколько');return;} try{ await api('/api/debts',{method:'POST',body:JSON.stringify({counterparty:n,direction:_debtDir,amount:a})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }
+async function closeDebt(id){ try{ await api('/api/debts/'+id+'/close',{method:'POST'}); toast('Закрыт'); loadCapital(); }catch(e){toast('Ошибка');} }
 
 async function loadGoals(){
   try{

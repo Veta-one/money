@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..config import settings
-from .fx import to_rub
+from .fx import compute_net_worth
 from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
 from .settings_store import get_setting
 
@@ -50,8 +50,7 @@ def get_dashboard(db: Session) -> dict:
         "currency": t.currency, "merchant": t.merchant or "", "type": t.type,
     } for t in recent]
 
-    accounts = db.query(models.Account).filter(models.Account.archived.is_(False)).all()
-    net_worth = sum(to_rub(a.balance, a.currency, db) for a in accounts)
+    net_worth = compute_net_worth(db)
 
     exp = get_setting(db, "expected_monthly_income")
     expected = float(exp) if exp is not None else (settings.expected_monthly_income or 0.0)

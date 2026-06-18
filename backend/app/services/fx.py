@@ -42,3 +42,13 @@ def to_rub(amount: float, currency: str | None, db) -> float:
     if cur in _USD_LIKE:
         return round(amount * get_usd_rub(db), 2)
     return round(amount, 2)  # неизвестная валюта — как есть
+
+
+def compute_net_worth(db) -> float:
+    """Капитал = счета (в рублях) + вам должны − вы должны (по открытым долгам)."""
+    total = sum(to_rub(a.balance, a.currency, db)
+                for a in db.query(models.Account).filter(models.Account.archived.is_(False)).all())
+    for d in db.query(models.Debt).filter(models.Debt.status == "open").all():
+        v = to_rub(d.amount, d.currency, db)
+        total += v if d.direction == "owed_to_me" else -v
+    return round(total, 2)

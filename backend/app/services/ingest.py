@@ -72,10 +72,13 @@ async def _ingest_receipt(qr: dict) -> dict:
             return {"status": "error", "text": "Чек получен, но не разобрал состав (структуру вижу в логах)."}
 
         acc = _default_account(db)
+        is_return = int(qr.get("n", 1)) == 2     # 2 = возврат прихода → деньги назад
+        sign = -1 if is_return else 1
+        merchant = parsed["merchant"] or parsed["retail_place"]
         tx = models.Transaction(
             account_id=acc.id if acc else None, datetime=parsed["datetime"],
-            amount=parsed["total"], currency="RUB", base_amount_rub=parsed["total"],
-            fx_rate=1.0, type="expense", merchant=parsed["merchant"] or parsed["retail_place"],
+            amount=parsed["total"] * sign, currency="RUB", base_amount_rub=parsed["total"] * sign,
+            fx_rate=1.0, type="expense", merchant=("Возврат: " + merchant) if is_return else merchant,
             source="receipt", status="confirmed", dedup_key=f"{qr['fn']}_{qr['i']}_{qr['fp']}",
         )
         db.add(tx)
@@ -92,7 +95,7 @@ async def _ingest_receipt(qr: dict) -> dict:
         for it, c in zip(parsed["items"], cats):
             db.add(models.TransactionItem(
                 transaction_id=tx.id, name=it["name"], name_normalized=it["name"].lower(),
-                qty=it["quantity"], price=it["price"], sum=it["sum"], category_id=c["category_id"]))
+                qty=it["quantity"], price=it["price"], sum=it["sum"] * sign, category_id=c["category_id"]))
             review = review or c["needs_review"]
         tx.category_id = _dominant(parsed["items"], cats)
         db.commit()
@@ -130,16 +133,20 @@ async def ingest_text(text: str) -> dict:
         prompt = (
             "Разбери запись о личных финансах и верни ТОЛЬКО JSON.\n"
             'Поля: amount (число > 0), currency ("RUB" по умолчанию), '
-            'type ("expense"|"income"|"transfer"), cash (true/false), '
+            'type ("expense"|"income"|"transfer"|"debt"), cash (true/false), '
             "merchant (на что/где, кратко), "
-            f"category (одно из: {', '.join(category_names(db, ('expense',)))}; или null).\n"
+            'для type="debt": direction ("owed_to_me" если ты дал в долг, "i_owe" если занял у кого-то) '
+            "и counterparty (имя), "
+            f"category (для расхода — одно из: {', '.join(category_names(db, ('expense',)))}; иначе null).\n"
             'Если запись не про деньги — верни {"amount": null}.\n\n'
             f"Запись: {text}"
         )
         data = _json_from(await gemini.text(prompt))
         if not data or not data.get("amount"):
             return {"status": "skip",
-                    "text": "Не понял сумму. Напиши, например: «такси 300» или «зарплата 135000»."}
+                    "text": "Не понял сумму. Напиши, например: «такси 300», «зарплата 135000» или «дал Пете 5000 в долг»."}
+        if data.get("type") == "debt" and data.get("counterparty"):
+            return _save_debt(db, data)
         return await _save_simple(db, data, source="text", raw=text)
     finally:
         db.close()
@@ -249,6 +256,20 @@ async def _ingest_vision(image: bytes) -> dict:
         return await _save_simple(db, data, source="photo", raw="(фото)")
     finally:
         db.close()
+
+
+def _save_debt(db, data) -> dict:
+    direction = data.get("direction") if data.get("direction") in ("i_owe", "owed_to_me") else "owed_to_me"
+    d = models.Debt(counterparty=str(data["counterparty"])[:128], direction=direction,
+                    amount=abs(float(data["amount"])), currency=(data.get("currency") or "RUB").upper(),
+                    date=datetime.now().date(), status="open")
+    db.add(d)
+    db.commit()
+    if direction == "owed_to_me":
+        txt = f"📌 Долг: {d.counterparty} должен тебе {d.amount:.0f} {d.currency}"
+    else:
+        txt = f"📌 Долг: ты должен {d.counterparty} {d.amount:.0f} {d.currency}"
+    return {"status": "ok", "text": txt}
 
 
 async def _save_simple(db, data, source, raw) -> dict:

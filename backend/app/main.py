@@ -25,7 +25,7 @@ from .services.dashboard import get_dashboard
 from .services.digests import send_digest
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
                               take_networth_snapshot)
-from .services.fx import to_rub
+from .services.fx import compute_net_worth, to_rub
 from .services.planning import detect_recurring, goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
 
@@ -105,7 +105,7 @@ async def accounts(user: dict = Depends(current_user), db: Session = Depends(get
     out = [{"id": a.id, "name": a.name, "type": a.type, "currency": a.currency,
             "owner": a.owner, "balance": a.balance,
             "rub": to_rub(a.balance, a.currency, db)} for a in rows]
-    return {"accounts": out, "net_worth": round(sum(x["rub"] for x in out), 2)}
+    return {"accounts": out, "net_worth": compute_net_worth(db)}
 
 
 class BalanceIn(BaseModel):
@@ -235,6 +235,55 @@ async def delete_recurring(rec_id: int, user: dict = Depends(current_user),
     r = db.get(models.Recurring, rec_id)
     if r:
         db.delete(r)
+        db.commit()
+    return {"ok": True}
+
+
+# ---------- долги ----------
+
+class DebtIn(BaseModel):
+    counterparty: str
+    direction: str            # i_owe | owed_to_me
+    amount: float
+    currency: str = "RUB"
+
+
+@app.get("/api/debts")
+async def list_debts(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    rows = (db.query(models.Debt).filter(models.Debt.status == "open")
+            .order_by(models.Debt.id.desc()).all())
+    owed = sum(to_rub(d.amount, d.currency, db) for d in rows if d.direction == "owed_to_me")
+    iowe = sum(to_rub(d.amount, d.currency, db) for d in rows if d.direction == "i_owe")
+    return {"debts": [{"id": d.id, "counterparty": d.counterparty, "direction": d.direction,
+                       "amount": d.amount, "currency": d.currency} for d in rows],
+            "owed_to_me": round(owed, 2), "i_owe": round(iowe, 2)}
+
+
+@app.post("/api/debts")
+async def create_debt(body: DebtIn, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    d = models.Debt(counterparty=body.counterparty[:128],
+                    direction=body.direction if body.direction in ("i_owe", "owed_to_me") else "owed_to_me",
+                    amount=abs(body.amount), currency=(body.currency or "RUB"),
+                    date=date.today(), status="open")
+    db.add(d)
+    db.commit()
+    return {"id": d.id}
+
+
+@app.post("/api/debts/{debt_id}/close")
+async def close_debt(debt_id: int, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    d = db.get(models.Debt, debt_id)
+    if d:
+        d.status = "closed"
+        db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/debts/{debt_id}")
+async def delete_debt(debt_id: int, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    d = db.get(models.Debt, debt_id)
+    if d:
+        db.delete(d)
         db.commit()
     return {"ok": True}
 
