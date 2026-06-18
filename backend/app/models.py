@@ -171,6 +171,14 @@ class Goal(Base):
     status: Mapped[str] = mapped_column(String(16), default="active")
 
 
+class Budget(Base):
+    """Месячный лимит расходов по категории. Нет записи → бюджет = прогноз."""
+    __tablename__ = "budgets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), unique=True, index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+
+
 class Debt(Base):
     __tablename__ = "debts"
     id: Mapped[int] = mapped_column(primary_key=True)

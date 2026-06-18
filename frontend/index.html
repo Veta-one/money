@@ -117,7 +117,7 @@ const CUR='₽';
 function plural(n,one,few,many){ n=Math.abs(n)%100; const k=n%10; if(n>10&&n<20)return many; if(k>1&&k<5)return few; if(k===1)return one; return many; }
 function dBadge(cur,prev,goodDown){ if(prev==null||prev===0)return ''; const diff=cur-prev; if(!diff)return ''; const pct=Math.round(diff/prev*100),up=diff>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'}${Math.abs(pct)}%</span>`; }
 function dBadgeAbs(delta,goodDown){ if(delta==null||!delta)return ''; const up=delta>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'} ${fmt(Math.abs(delta))} ₽</span>`; }
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month';
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _bud=[];
 
 // ---- Tabler icons ----
 const P = {
@@ -469,9 +469,20 @@ function opsMore(){ _ops.offset+=50; loadOps(false); }
 // ---- аналитика ----
 async function loadAnalytics(){
   try{
-    const d=await api('/api/analytics?period='+_anPeriod);
+    const [d,b]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets')]);
+    _bud=b.items||[];
     const t=d.totals||{}, cf=d.cashflow||[], cmp=d.compare||[], bc=d.by_category||[], tm=d.top_merchants||[], subs=d.subscriptions||{items:[]};
     const pc=(v,l)=>`<button class="chip${_anPeriod===v?' on':''}" onclick="setAnPeriod('${v}')">${l}</button>`;
+    const budCard=`<div class="card">
+      <div style="display:flex;justify-content:space-between"><span class="muted">Доход (план)</span><span style="font-weight:700">${fmt(b.expected_income)} ${CUR}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px"><span class="muted">Расходы (план)</span><span style="font-weight:700">−${fmt(b.total_budget)} ${CUR}</span></div>
+      ${b.goals_plan>0?`<div style="display:flex;justify-content:space-between;margin-top:6px"><span class="muted">В цели</span><span style="font-weight:700">−${fmt(b.goals_plan)} ${CUR}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><span style="font-weight:800">Профицит</span><span style="font-weight:800;color:${b.proficit>=0?'var(--green)':'var(--red)'}">${b.proficit>=0?'+':'−'}${fmt(Math.abs(b.proficit))} ${CUR}</span></div></div>`;
+    const budItems=_bud.length?_bud.map((it,i)=>`<div class="cat" onclick="openBudget(${i})" style="cursor:pointer">
+      <div class="top"><span class="cdot" style="background:${tint(color(it.name))};color:${color(it.name)}">${icon(catIcon(it.name),16)}</span>
+      <span class="nm">${it.name}${it.manual?'':' <span class="muted" style="font-size:11px">авто</span>'}</span>
+      <span class="am" style="${it.over?'color:var(--red)':''}">${fmt(it.spent)} / ${fmt(it.budget)} ${CUR}</span></div>
+      <div class="track"><i style="width:${Math.min(100,it.pct)}%;background:${it.over?'var(--red)':color(it.name)}"></i></div></div>`).join(''):`<div class="empty">Пока нечего бюджетировать.</div>`;
     const cmpHtml=cmp.length?cmp.map(c=>{const up=c.delta>0,col=up?'var(--red)':'var(--green)';return `<div class="cat"><div class="top">
         <span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
         <span class="nm">${c.name}</span><span class="am" style="color:${col}">${up?'+':'−'}${fmt(Math.abs(c.delta))} ${CUR}</span></div>
@@ -479,6 +490,10 @@ async function loadAnalytics(){
     const bcMax=Math.max(1,...bc.map(c=>c.sum));
     document.getElementById('v-analytics').innerHTML=`
       <div class="head"><div class="hi">Аналитика</div></div>
+      <h2 style="margin-top:6px">Бюджет · ${new Date(b.month+'-01').toLocaleDateString('ru-RU',{month:'long'})}</h2>
+      ${budCard}
+      <div class="catlist" style="margin-top:10px">${budItems}</div>
+      <h2>Тренды по периодам</h2>
       <div class="filt">${pc('month','Месяц')}${pc('quarter','Квартал')}${pc('year','Год')}</div>
       <div class="grid2" style="margin-top:0">
         <div class="card"><div class="k">Доход</div><div class="v" style="color:var(--green)">${fmt(t.income)}<span class="cur">${CUR}</span></div></div>
@@ -508,6 +523,21 @@ async function loadAnalytics(){
   }catch(e){ e.message==='AUTH'?authErr('analytics'):document.getElementById('v-analytics').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 function setAnPeriod(p){ _anPeriod=p; loadAnalytics(); }
+function openBudget(i){
+  const it=_bud[i]; if(!it)return;
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Лимит: ${it.name}</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="t2" style="margin:2px 2px 12px;color:var(--muted)">Потрачено ${fmt(it.spent)} ${CUR} в этом месяце. ${it.manual?'Задан свой лимит.':'Сейчас авто-прогноз ≈ '+fmt(it.budget)+' '+CUR+'.'}</div>
+    <div style="display:flex;gap:8px">
+      <input id="bud-a" class="inp" type="number" inputmode="decimal" placeholder="Лимит ₽/мес" value="${it.manual?it.budget:''}" style="flex:1">
+      <button class="btn" onclick="saveBudget(${it.id})">Сохранить</button></div>
+    ${it.manual?`<button class="chip" style="margin-top:10px" onclick="saveBudget(${it.id},0)">Сбросить на авто-прогноз</button>`:''}`;
+  document.getElementById('ov').style.display='flex';
+}
+async function saveBudget(cid,forced){
+  const v=forced!==undefined?forced:(parseFloat(document.getElementById('bud-a').value)||0);
+  try{ await api('/api/budgets',{method:'POST',body:JSON.stringify({category_id:cid,amount:v})}); toast('Сохранено'); closeOv(); loadAnalytics(); }catch(e){ toast('Ошибка'); }
+}
 
 // ---- доходы по источникам ----
 async function loadIncome(){

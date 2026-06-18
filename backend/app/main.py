@@ -24,6 +24,7 @@ from .migrations import run_migrations
 from .security import current_user
 from .services.analytics import analytics_overview
 from .services.backup import make_and_send_backup
+from .services.budget import budget_overview
 from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
@@ -409,6 +410,33 @@ async def delete_income(rec_id: int, user: dict = Depends(current_user),
     if r and r.type == "income":
         db.delete(r)
         db.commit()
+    return {"ok": True}
+
+
+# ---------- бюджет по категориям ----------
+
+class BudgetIn(BaseModel):
+    category_id: int
+    amount: float
+
+
+@app.get("/api/budgets")
+async def budgets(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return budget_overview(db)
+
+
+@app.post("/api/budgets")
+async def set_budget(body: BudgetIn, user: dict = Depends(current_user),
+                     db: Session = Depends(get_session)):
+    b = db.query(models.Budget).filter(models.Budget.category_id == body.category_id).first()
+    if body.amount and body.amount > 0:
+        if b:
+            b.amount = body.amount
+        else:
+            db.add(models.Budget(category_id=body.category_id, amount=body.amount))
+    elif b:
+        db.delete(b)  # 0 → вернуться к авто-прогнозу
+    db.commit()
     return {"ok": True}
 
 
