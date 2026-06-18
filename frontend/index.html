@@ -46,12 +46,13 @@
   .v .cur{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
   h2{font-size:13px;font-weight:700;margin:20px 4px 9px;letter-spacing:.1px}
   .ccards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-  .catcard{background:var(--card);border-radius:16px;padding:13px 14px}
+  .catcard{background:var(--card);border-radius:16px;padding:12px;display:flex;gap:10px;align-items:center}
+  .catcard .cc-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
+  .catcard .cc-body{flex:1;min-width:0}
   .catcard .cc-top{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
   .catcard .cc-a{font-size:15px;font-weight:800;letter-spacing:-.3px}
   .catcard .cc-p{font-size:12px;font-weight:700;color:var(--muted)}
   .catcard .cc-n{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .catcard .cc-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;margin-top:12px}
   .chartcard{background:var(--card);border-radius:18px;padding:16px 14px 10px}
   .catlist{background:var(--card);border-radius:18px;padding:6px 16px}
   .cat{padding:12px 0;border-bottom:1px solid var(--line)}
@@ -801,9 +802,10 @@ async function loadAnalytics(){
       <h2>Структура расходов</h2>
       ${bc.length?`<div class="chartcard">${donut(bc.map(c=>({value:c.sum,color:color(c.name)})))}</div>
         <div class="ccards">`+bc.slice(0,8).map(c=>{const tot=bc.reduce((s,x)=>s+x.sum,0)||1,col=color(c.name);return `<div class="catcard">
-          <div class="cc-top"><span class="cc-a">${fmt(c.sum)} ₽</span><span class="cc-p">${Math.round(c.sum/tot*100)}%</span></div>
-          <div class="cc-n">${c.name}</div>
-          <div class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),18)}</div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
+          <div class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),18)}</div>
+          <div class="cc-body">
+            <div class="cc-top"><span class="cc-a">${fmt(c.sum)} ₽</span><span class="cc-p">${Math.round(c.sum/tot*100)}%</span></div>
+            <div class="cc-n">${c.name}</div></div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
       <h2>Куда уходит больше всего</h2>
       ${tm.length?tm.map(m=>{const me=(m.merchant||'').replace(/'/g,'&#39;');return `<div class="row" style="cursor:pointer" onclick="openMerchOps('${me}')"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
         <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`}).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
@@ -845,12 +847,15 @@ async function loadIncome(){
       const hint=(s.currency!=='RUB'||s.period!=='monthly')?' · '+fmt(s.plan)+' ₽/мес':'';
       const right=s.end_date?'до '+new Date(s.end_date).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'}):(s.plan>0&&s.fact>=s.plan?'получено':'ожидается');
       return `<div class="goal">
-        <div class="gh"><div class="gn">${s.name}${s.owner==='wife'?' <span class="muted" style="font-size:12px;font-weight:600">· жена</span>':''}</div>
-          <div class="gv">${fmt(s.fact)} / ${fmt(s.plan)} ₽</div></div>
+        <div class="gh" style="align-items:center"><div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          <span class="sq" style="background:${tint(col)};color:${col}">${icon('cash',20)}</span>
+          <div style="min-width:0"><div class="gn">${s.name}${s.owner==='wife'?' <span class="muted" style="font-size:12px;font-weight:600">· жена</span>':''}</div>
+            <div class="t2" style="margin-top:2px">${fmt(s.amount)} ${cur}${per}${hint}</div></div></div>
+          <div class="gv" style="text-align:right">${fmt(s.fact)} / ${fmt(s.plan)} ₽<div class="t2" style="margin-top:2px">${right}</div></div></div>
         <div class="track" style="margin-top:11px"><i style="width:${s.pct}%;background:${col}"></i></div>
-        <div class="meta"><span>${fmt(s.amount)} ${cur}${per}${hint}</span><span>${right}</span></div>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button class="chip" onclick="toggleIncome(${s.id},${s.active?0:1})">${s.active?'Выключить':'Включить'}</button>
+          <button class="iconbtn" onclick="openIncEdit(${s.id})">${icon('edit',18)}</button>
           <button class="iconbtn" onclick="delIncome(${s.id})">${icon('trash',18)}</button></div></div>`;
     }).join(''):`<div class="empty">Источников дохода пока нет.<br>Добавь Шкулёв, Turnvoice, пособия — план дохода сложится сам.</div>`;
     const bdHtml=bd.length?`<div class="chartcard" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center">
@@ -891,6 +896,38 @@ async function addIncome(){ const n=document.getElementById('is-n').value.trim()
   if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/income',{method:'POST',body:JSON.stringify({name:n,amount:a,currency:c,period:_incPer,owner:_incOwner})}); toast('Добавлено'); loadIncome(); }catch(e){toast('Ошибка');} }
 async function toggleIncome(id,active){ try{ await api('/api/income/'+id,{method:'POST',body:JSON.stringify({active:!!active})}); loadIncome(); }catch(e){toast('Ошибка');} }
 async function delIncome(id){ try{ await api('/api/income/'+id,{method:'DELETE'}); toast('Удалено'); loadIncome(); }catch(e){toast('Ошибка');} }
+let _incEditPer='monthly', _incEditOwner='me', _incEditCur='RUB', _incEditId=null;
+async function openIncEdit(id){
+  const inc=(await api('/api/income')).sources||[];
+  const s=inc.find(x=>x.id===id); if(!s){toast('Не найдено');return;}
+  _incEditId=id; _incEditPer=s.period; _incEditOwner=s.owner; _incEditCur=s.currency;
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Источник: ${s.name}</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <input id="ie-n" class="inp" placeholder="Название" value="${(s.name||'').replace(/"/g,'&quot;')}" style="margin-bottom:8px">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="ie-a" class="inp" type="number" inputmode="decimal" value="${s.amount}" style="flex:2">
+      <select id="ie-c" class="inp" style="flex:1"><option value="RUB"${_incEditCur==='RUB'?' selected':''}>RUB</option><option value="USD"${_incEditCur==='USD'?' selected':''}>USD</option></select></div>
+    <div class="t2" style="color:var(--muted);margin:0 2px 4px">Срок окончания (если ограничен)</div>
+    <input id="ie-end" class="inp" type="date" value="${s.end_date||''}" style="margin-bottom:10px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button id="iep-m" class="chip${_incEditPer==='monthly'?' on':''}" onclick="setIncEditPer('monthly')">Мес</button>
+      <button id="iep-y" class="chip${_incEditPer==='yearly'?' on':''}" onclick="setIncEditPer('yearly')">Год</button>
+      <span style="width:4px"></span>
+      <button id="ieo-me" class="chip${_incEditOwner==='me'?' on':''}" onclick="setIncEditOwner('me')">Я</button>
+      <button id="ieo-wife" class="chip${_incEditOwner==='wife'?' on':''}" onclick="setIncEditOwner('wife')">Жена</button>
+      <button class="btn" style="margin-left:auto" onclick="saveIncEdit()">Сохранить</button></div>`;
+  document.getElementById('ov').style.display='flex';
+}
+function setIncEditPer(p){ _incEditPer=p; document.getElementById('iep-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('iep-y').className='chip'+(p==='yearly'?' on':''); }
+function setIncEditOwner(o){ _incEditOwner=o; document.getElementById('ieo-me').className='chip'+(o==='me'?' on':''); document.getElementById('ieo-wife').className='chip'+(o==='wife'?' on':''); }
+async function saveIncEdit(){
+  const body={name:document.getElementById('ie-n').value.trim(),
+    amount:parseFloat(document.getElementById('ie-a').value)||0,
+    currency:document.getElementById('ie-c').value, period:_incEditPer, owner:_incEditOwner,
+    end_date:document.getElementById('ie-end').value||null};
+  if(!body.name||!body.amount){toast('Имя и сумма');return;}
+  try{ await api('/api/income/'+_incEditId,{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadIncome(); }catch(e){toast('Ошибка');}
+}
 
 // ---- детали операции + правка категорий ----
 async function openTx(id){
