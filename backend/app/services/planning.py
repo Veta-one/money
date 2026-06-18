@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from math import ceil
 
@@ -23,11 +24,16 @@ def avg_monthly_expense(db: Session) -> float:
 
 
 def obligatory_monthly(db: Session) -> float:
-    """Сумма активных регулярных РАСХОДОВ в месяц (для safe-to-spend)."""
+    """Сумма активных регулярных РАСХОДОВ в пересчёте на месяц (для safe-to-spend)."""
     total = 0.0
     for r in (db.query(models.Recurring)
               .filter(models.Recurring.active.is_(True), models.Recurring.type == "expense").all()):
-        total += r.amount if r.period == "monthly" else r.amount * 4.33
+        if r.period == "yearly":
+            total += r.amount / 12
+        elif r.period == "weekly":
+            total += r.amount * 4.33
+        else:
+            total += r.amount
     return round(total, 2)
 
 
@@ -64,6 +70,7 @@ def detect_recurring(db: Session, months: int = 3, max_per_month: float = 1.6, t
                     models.Transaction.datetime >= start,
                     models.Transaction.merchant.isnot(None)).all())
     existing = {(r.name or "").strip().lower() for r in db.query(models.Recurring).all()}
+    dismissed = set(json.loads(get_setting(db, "dismissed_recurring") or "[]"))
     agg: dict[str, dict] = {}
     for merch, dt, amt in rows:
         mn = (merch or "").strip()
@@ -75,7 +82,7 @@ def detect_recurring(db: Session, months: int = 3, max_per_month: float = 1.6, t
     cands = []
     for mn, a in agg.items():
         nm, cnt = len(a["months"]), len(a["amounts"])
-        if nm >= 2 and cnt / nm <= max_per_month and mn.lower() not in existing:
+        if nm >= 2 and cnt / nm <= max_per_month and mn.lower() not in existing and mn not in dismissed:
             amts = sorted(a["amounts"])
             median = amts[len(amts) // 2]
             cands.append({"name": mn[:60], "amount": round(median), "months": nm})

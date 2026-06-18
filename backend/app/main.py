@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from aiogram.types import Update
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -25,7 +27,7 @@ from .services.dashboard import get_dashboard
 from .services.digests import send_digest
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
                               take_networth_snapshot)
-from .services.fx import compute_net_worth, to_rub
+from .services.fx import compute_net_worth, get_usd_rub, to_rub
 from .services.planning import detect_recurring, goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
 
@@ -105,7 +107,7 @@ async def accounts(user: dict = Depends(current_user), db: Session = Depends(get
     out = [{"id": a.id, "name": a.name, "type": a.type, "currency": a.currency,
             "owner": a.owner, "balance": a.balance,
             "rub": to_rub(a.balance, a.currency, db)} for a in rows]
-    return {"accounts": out, "net_worth": compute_net_worth(db)}
+    return {"accounts": out, "net_worth": compute_net_worth(db), "usd_rate": round(get_usd_rub(db), 2)}
 
 
 class BalanceIn(BaseModel):
@@ -239,6 +241,20 @@ async def delete_recurring(rec_id: int, user: dict = Depends(current_user),
     return {"ok": True}
 
 
+class DismissIn(BaseModel):
+    name: str
+
+
+@app.post("/api/recurring/dismiss")
+async def dismiss_recurring(body: DismissIn, user: dict = Depends(current_user),
+                            db: Session = Depends(get_session)):
+    lst = json.loads(get_setting(db, "dismissed_recurring") or "[]")
+    if body.name not in lst:
+        lst.append(body.name)
+    set_setting(db, "dismissed_recurring", json.dumps(lst, ensure_ascii=False))
+    return {"ok": True}
+
+
 # ---------- долги ----------
 
 class DebtIn(BaseModel):
@@ -315,9 +331,12 @@ def _recompute_tx_category(tx) -> None:
 
 @app.get("/api/categories")
 async def list_categories(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    counts = dict(db.query(models.Transaction.category_id, func.count(models.Transaction.id))
+                  .filter(models.Transaction.category_id.isnot(None))
+                  .group_by(models.Transaction.category_id).all())
     cats = (db.query(models.Category)
-            .filter(models.Category.type == "expense", models.Category.archived.is_(False))
-            .order_by(models.Category.name).all())
+            .filter(models.Category.type == "expense", models.Category.archived.is_(False)).all())
+    cats.sort(key=lambda c: (-counts.get(c.id, 0), c.name))   # самые частые — первыми
     return {"categories": [{"id": c.id, "name": c.name} for c in cats]}
 
 

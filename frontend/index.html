@@ -8,8 +8,7 @@
 <style>
   :root{
     --bg:#f3f4f6; --card:#ffffff; --ink:#1b1c20; --text:#15161a; --muted:#8b909a;
-    --line:#eceef1; --accent:#1b1c20;
-    --violet:#7c5cff; --blue:#2f8bff; --green:#18c171; --orange:#ff8a3d; --red:#ff4d54; --pink:#ff5c9d; --teal:#10b3c6;
+    --line:#eceef1; --green:#18c171; --red:#ff4d54;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;background:var(--bg);color:var(--text);
@@ -20,32 +19,27 @@
   .head .hi{font-size:15px;font-weight:600}
   .head .sub{font-size:12px;color:var(--muted)}
   svg.ic{display:block}
-  /* hero */
   .hero{background:var(--ink);color:#fff;border-radius:24px;padding:22px 20px}
   .hero .label{font-size:13px;color:#a9adb6}
   .hero .big{font-size:34px;font-weight:800;letter-spacing:-.5px;margin:6px 0 4px}
   .hero .big .cur{font-size:18px;color:#a9adb6;font-weight:700;margin-left:4px}
   .hero .sub{font-size:13px;color:#c7cad1}
-  /* cards */
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
   .card{background:var(--card);border-radius:18px;padding:16px}
   .card .k{font-size:12px;color:var(--muted)}
   .card .v{font-size:20px;font-weight:700;margin-top:6px}
   .v .cur{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
-  h2{font-size:14px;font-weight:700;margin:22px 4px 10px;display:flex;align-items:center;gap:7px}
-  /* chart */
+  h2{font-size:14px;font-weight:700;margin:22px 4px 10px}
   .chartcard{background:var(--card);border-radius:18px;padding:16px 14px 10px}
-  /* category rows */
   .catlist{background:var(--card);border-radius:18px;padding:6px 16px}
   .cat{padding:12px 0;border-bottom:1px solid var(--line)}
   .cat:last-child{border-bottom:none}
-  .cat .top{display:flex;align-items:center;gap:10px}
-  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .cat .top{display:flex;align-items:center;gap:11px}
+  .cdot{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none}
   .cat .nm{flex:1;font-size:14px}
   .cat .am{font-size:14px;font-weight:700}
   .track{height:6px;border-radius:6px;background:var(--line);margin-top:9px;overflow:hidden}
   .track > i{display:block;height:100%;border-radius:6px}
-  /* list rows */
   .row{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:8px}
   .sq{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
   .row .mid{flex:1;min-width:0}
@@ -59,37 +53,36 @@
   .inp{width:100%;background:var(--bg);border:1.5px solid transparent;border-radius:12px;color:var(--text);
     font-size:15px;padding:11px 12px}
   .inp:focus{border-color:var(--ink);outline:none}
-  /* goals */
   .goal{background:var(--card);border-radius:18px;padding:16px;margin-bottom:10px}
   .goal .gh{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .goal .gn{font-size:15px;font-weight:700}
   .goal .gv{font-size:13px;color:var(--muted)}
   .goal .meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:9px}
-  .btn{background:var(--ink);color:#fff;border:none;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn{background:var(--ink);color:#fff;border:none;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:600;cursor:pointer;flex:none}
   .btn.full{width:100%}
-  .btn.ghost{background:var(--bg);color:var(--text)}
   .chip{background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:12px;
-    padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer}
+    padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;flex:none}
   .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .iconbtn{background:var(--bg);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+  .catpick{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);
+    border-radius:13px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  .iconbtn{background:var(--bg);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer;color:var(--text)}
   .empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:14px;line-height:1.5}
   .loader{text-align:center;color:var(--muted);padding:70px 0}
   .err{color:var(--red);text-align:center;padding:40px 16px}
-  /* nav */
   .nav{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:4px;
     background:var(--ink);border-radius:22px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.22)}
   .nav button{background:none;border:none;color:#9a9ea8;display:flex;align-items:center;gap:7px;
     padding:10px 16px;border-radius:16px;font-size:13px;font-weight:600;cursor:pointer}
   .nav button.active{background:#2c2e35;color:#fff}
   .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff;
-    padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+    padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
   .toast.show{opacity:1}
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;z-index:50}
   .sheet{background:var(--card);width:100%;border-radius:24px 24px 0 0;padding:18px 16px 30px;max-height:82vh;overflow:auto}
   .sheeth{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
   .drow{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
   .drow:last-child{border-bottom:none}
-  .catchip{background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex:none}
+  .catchip{background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:5px}
   .catgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 </style>
 </head>
@@ -108,8 +101,9 @@
 const tg = window.Telegram?.WebApp;
 try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgroundColor?.('#f3f4f6'); }catch(e){}
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
+const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
 const CUR='₽';
-let _sug=[], _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me';
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly';
 
 // ---- Tabler icons ----
 const P = {
@@ -120,13 +114,53 @@ const P = {
   coin:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M14.8 9a2 2 0 0 0 -1.8 -1h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1 -1.8 -1"/><path d="M12 6v2"/><path d="M12 16v2"/>',
   swap:'<path d="M3 8h14l-3 -3"/><path d="M21 16h-14l3 3"/>',
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
-  pencil:'<path d="M4 20h4l10.5 -10.5a2.1 2.1 0 0 0 -3 -3l-10.5 10.5v3"/><path d="M13.5 6.5l3 3"/>',
   trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
   x:'<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
+  cart:'<path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M17 17h-11v-14h-2M6 5l14 1l-1 7h-13"/>',
+  car:'<path d="M5 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M15 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-6 0h-4M3 9h13"/>',
+  bus:'<path d="M6 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M16 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M4 17h-2v-11a1 1 0 0 1 1 -1h14a5 7 0 0 1 5 7v5h-2m-6 0h-6M2 10h17M7 5v5"/>',
+  cup:'<path d="M5 8h11v4a4 4 0 0 1 -4 4h-3a4 4 0 0 1 -4 -4zM16 9h2a2 2 0 0 1 0 4h-2M7 4v1M10 4v1M13 4v1"/>',
+  home:'<path d="M5 12l-2 0l9 -9l9 9l-2 0M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/>',
+  kid:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M9 10l.01 0M15 10l.01 0M9.5 15a3.5 3.5 0 0 0 5 0"/>',
+  scissors:'<path d="M6 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M6 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M8.6 8.6l10.4 10.4M8.6 15.4l10.4 -10.4"/>',
+  pill:'<path d="M4.5 12.5l8 -8a4.94 4.94 0 0 1 7 7l-8 8a4.94 4.94 0 0 1 -7 -7M8.5 8.5l7 7"/>',
+  flame:'<path d="M12 12c2 -2.96 0 -7 -1 -8c0 3.038 -1.773 4.741 -3 6c-1.226 1.26 -2 3.24 -2 5a6 6 0 1 0 12 0c0 -1.532 -1.056 -3.94 -2 -5c-1.786 3 -2.791 3 -4 2"/>',
+  book:'<path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0M3 6l0 13M12 6l0 13M21 6l0 13"/>',
+  shirt:'<path d="M15 4l6 2v5h-3v8a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1v-8h-3v-5l6 -2a3 3 0 0 0 6 0"/>',
+  film:'<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2zM8 4l0 16M16 4l0 16M4 8l4 0M4 16l4 0M4 12l16 0M16 8l4 0M16 16l4 0"/>',
+  beer:'<path d="M5 8h10v8a3 3 0 0 1 -3 3h-4a3 3 0 0 1 -3 -3zM15 9h2a2 2 0 0 1 2 2v1a2 2 0 0 1 -2 2h-2M8 4v2M11 4v2"/>',
+  smoke:'<path d="M3 16h14v3h-14zM19 16v3M16 12a3 3 0 0 1 0 -6M13 12a3 3 0 0 1 0 -6"/>',
+  gift:'<path d="M3 8m0 1a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1zM12 8l0 13M5 12l0 7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7M7 8a2.5 2.5 0 0 1 0 -5a4.8 8 0 0 1 5 5a4.8 8 0 0 1 5 -5a2.5 2.5 0 0 1 0 5"/>',
+  leaf:'<path d="M5 21c.5 -4.5 2.5 -8 7 -10M9 18c6.218 0 10.5 -3.288 11 -12v-2h-4.014c-9 0 -11.986 4 -12 9c0 1 0 3 2 5h3z"/>',
+  phone:'<path d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2"/>',
+  tv:'<path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2zM16 3l-4 4l-4 -4"/>',
+  bank:'<path d="M3 21l18 0M3 10l18 0M5 6l7 -3l7 3M4 10l0 11M20 10l0 11M8 14l0 3M12 14l0 3M16 14l0 3"/>',
+  box:'<path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9zM12 12l8 -4.5M12 12l0 9M12 12l-8 -4.5"/>',
+  tool:'<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/>',
+  bag:'<path d="M6.331 8h11.339a2 2 0 0 1 1.977 2.304l-1.255 8.152a3 3 0 0 1 -2.966 2.544h-6.852a3 3 0 0 1 -2.965 -2.544l-1.255 -8.152a2 2 0 0 1 1.977 -2.304zM9 11v-5a3 3 0 0 1 6 0v5"/>',
+  percent:'<path d="M17 17m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0M7 7m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0M6 18l12 -12"/>',
+  tag:'<path d="M7.5 7.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3z"/>',
+  adjust:'<path d="M4 10a2 2 0 1 0 4 0a2 2 0 0 0 -4 0M6 4v4M6 12v8M10 16a2 2 0 1 0 4 0a2 2 0 0 0 -4 0M12 4v10M12 18v2M16 7a2 2 0 1 0 4 0a2 2 0 0 0 -4 0M18 4v1M18 9v11"/>',
+  pig:'<path d="M15 11l0 .01M5.173 8.378a3 3 0 1 1 4.656 -1.377M16 4l0 3.803a6.019 6.019 0 0 1 2.658 3.197h1.341a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-1.342c-.336 .95 -.907 1.8 -1.658 2.473v2.027a1.5 1.5 0 0 1 -3 0v-.583a6.04 6.04 0 0 1 -1 .083h-4a6.04 6.04 0 0 1 -1 -.083v.583a1.5 1.5 0 0 1 -3 0v-2.027a6 6 0 0 1 3.5 -10.473h2.5l4.5 -3z"/>',
 };
-function icon(n, sz, col){ return `<svg class="ic" width="${sz||22}" height="${sz||22}" viewBox="0 0 24 24" fill="none" stroke="${col||'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`; }
+function icon(n, sz, col){ return `<svg class="ic" width="${sz||22}" height="${sz||22}" viewBox="0 0 24 24" fill="none" stroke="${col||'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||P.tag}</svg>`; }
 
-const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7'];
+const CAT_ICON=[
+  [['продукт'],'cart'],[['кафе','рестор'],'cup'],[['автобус'],'bus'],
+  [['бибика','авто','машин','бензин','ремонт','проезд','такси','попутк'],'car'],
+  [['штраф'],'flame'],[['дет','милан','данил','милашк'],'kid'],[['инструмент'],'tool'],
+  [['интернет-покуп','покупк','озон','маркет'],'bag'],[['коммунал','жкх','квартир','мебель','дом'],'home'],
+  [['красот','косметик','парикмах','уход'],'scissors'],[['мед','лекарств','аптек','стоматол','гемотест','здоров'],'pill'],
+  [['налог'],'flame'],[['образован','учеб'],'book'],[['одежд','обувь'],'shirt'],
+  [['отдых','развлеч','кино'],'film'],[['пивас','пиво','алког'],'beer'],[['сига','табак'],'smoke'],
+  [['подар'],'gift'],[['сад','огород'],'leaf'],[['связь','телефон'],'phone'],[['техник'],'tv'],
+  [['банк','комисс'],'bank'],[['хозтовар','быт'],'box'],[['зарплат','доход'],'wallet'],
+  [['кешбэк'],'coin'],[['процент'],'percent'],[['продал'],'tag'],
+  [['депозит','вклад','накоплен'],'pig'],[['коррект'],'adjust'],
+];
+function catIcon(name){ const n=(name||'').toLowerCase(); for(const [keys,ic] of CAT_ICON){ if(keys.some(k=>n.includes(k))) return ic; } return 'tag'; }
+
+const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b'];
 function color(s){ let h=0; for(const c of (s||'')) h=(h*31+c.charCodeAt(0))>>>0; return PAL[h%PAL.length]; }
 function tint(hex){ return hex+'22'; }
 
@@ -140,7 +174,6 @@ async function api(path, opts){
 function toast(t){ const e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),1400); }
 function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err">Доступ только владельцу.<br>Открой приложение из бота.</div>'; }
 
-// nav labels with icons
 document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span>Главная</span>';
 document.getElementById('t-capital').innerHTML=icon('wallet',20)+'<span>Капитал</span>';
 document.getElementById('t-goals').innerHTML=icon('target',20)+'<span>Цели</span>';
@@ -153,13 +186,14 @@ function tab(t){
   ({dashboard:loadDashboard,capital:loadCapital,goals:loadGoals})[t]();
 }
 
-function barChart(data, w=330, h=128){
+function barChart(data, w=330, h=144){
   const max=Math.max(1,...data.map(d=>d.spent));
-  const n=data.length||1, gap=12, bw=(w-gap*(n-1))/n, base=h-22;
+  const n=data.length||1, gap=12, bw=(w-gap*(n-1))/n, base=h-22, top=20;
   let s='';
   data.forEach((d,i)=>{
-    const bh=Math.max(3, d.spent/max*(base-6)), x=i*(bw+gap), y=base-bh;
+    const bh=Math.max(3, d.spent/max*(base-top)), x=i*(bw+gap), y=base-bh;
     s+=`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="6" fill="var(--ink)"/>`;
+    if(d.spent>0) s+=`<text x="${x+bw/2}" y="${y-6}" text-anchor="middle" font-size="10.5" fill="#15161a" font-weight="700">${fmtK(d.spent)}</text>`;
     s+=`<text x="${x+bw/2}" y="${h-5}" text-anchor="middle" font-size="11" fill="#8b909a">${d.label}</text>`;
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
@@ -169,8 +203,7 @@ async function loadDashboard(){
   try{
     const [d,t]=await Promise.all([api('/api/dashboard'),api('/api/trends')]);
     const name=tg?.initDataUnsafe?.user?.first_name||'';
-    const cats=d.by_category||[], mx=Math.max(1,...cats.map(c=>c.sum)), rec=d.recent||[];
-    const months=(t.months||[]);
+    const cats=d.by_category||[], mx=Math.max(1,...cats.map(c=>c.sum)), rec=d.recent||[], months=(t.months||[]);
     document.getElementById('v-dashboard').innerHTML=`
       <div class="head"><div><div class="hi">Привет${name?', '+name:''}</div><div class="sub">${d.month}</div></div></div>
       <div class="hero">
@@ -185,20 +218,20 @@ async function loadDashboard(){
       ${d.forecast_total>0?`<div class="card" style="margin-top:12px"><div class="k">Прогноз трат в этом месяце</div>
         <div class="v">≈ ${fmt(d.forecast_total)}<span class="cur">${CUR}</span></div>
         <div class="track" style="margin-top:10px"><i style="width:${Math.min(100,Math.round(d.spent/d.forecast_total*100))}%;background:var(--ink)"></i></div>
-        <div class="t2" style="margin-top:8px">потрачено ${fmt(d.spent)} из ≈ ${fmt(d.forecast_total)} ${CUR}</div></div>`:''}
+        <div class="t2" style="margin-top:8px;color:var(--muted)">потрачено ${fmt(d.spent)} из ≈ ${fmt(d.forecast_total)} ${CUR}</div></div>`:''}
       ${months.some(m=>m.spent>0)?`<h2>Траты по месяцам</h2><div class="chartcard">${barChart(months)}</div>`:''}
       <h2>По категориям</h2>
       ${cats.length?`<div class="catlist">`+cats.map(c=>`
-        <div class="cat"><div class="top"><span class="dot" style="background:${color(c.name)}"></span>
+        <div class="cat"><div class="top"><span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
         <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR}</span></div>
-        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`).join('')+`</div>`
+        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`).join('')+`</div>`
         :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
       <h2>Последние операции</h2>
-      ${rec.length?rec.map(x=>{const col=color(x.merchant||'op');return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
-        <div class="sq" style="background:${tint(col)};color:${col}">${icon(x.type==='income'?'coin':x.type==='transfer'?'swap':'receipt',20)}</div>
+      ${rec.length?rec.map(x=>{const key=x.category||x.merchant||'op';const col=color(key);const inn=x.type==='income'||x.amount<0;const ic=x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);return `<div class="row" onclick="openTx(${x.id})" style="cursor:pointer">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
         <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div>
         <div class="t2">${new Date(x.dt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>
-        <div class="amt ${(x.type==='income'||x.amount<0)?'inc':'exp'}">${(x.type==='income'||x.amount<0)?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`}).join('')
+        <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`}).join('')
         :`<div class="empty">Операций пока нет.</div>`}`;
   }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
@@ -211,7 +244,7 @@ async function loadCapital(){
       <div class="head"><div class="hi">Капитал</div></div>
       <div class="hero"><div class="label">Чистый капитал</div>
         <div class="big">${fmt(a.net_worth)}<span class="cur">${CUR}</span></div>
-        <div class="sub">всё сведено к рублю по курсу ЦБ</div></div>
+        <div class="sub">сведено к рублю · $1 = ${fmt(a.usd_rate)} ${CUR} (ЦБ)</div></div>
       <h2>Счета</h2>
       ${accs.map(ac=>{const col=color(ac.name);return `<div class="row">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>
@@ -236,8 +269,7 @@ async function loadCapital(){
           <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽">
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
       <h2>Ожидаемый доход в месяц</h2>
-      <div class="card"><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>
-      <div class="empty" style="padding:14px 4px">Меняй балансы — капитал и «свободно в месяц» пересчитаются.</div>`;
+      <div class="card"><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>`;
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
@@ -250,14 +282,12 @@ async function closeDebt(id){ try{ await api('/api/debts/'+id+'/close',{method:'
 async function loadGoals(){
   try{
     const [g,r]=await Promise.all([api('/api/goals'),api('/api/recurring')]);
-    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[]; _sug=sug.suggestions||[]; _cands=r.candidates||[];
+    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[]; _cands=r.candidates||[]; _recPer='monthly';
     document.getElementById('v-goals').innerHTML=`
       <div class="head"><div class="hi">Цели</div></div>
       <div class="hero"><div class="label">Можешь откладывать в месяц</div>
         <div class="big">${fmt(sug.capacity)}<span class="cur">${CUR}</span></div>
         <div class="sub">доход − обязательные − траты</div></div>
-      ${_sug.length?`<h2>Предложения</h2><div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 2px">`
-        +_sug.map((x,i)=>`<button class="chip" onclick="mkSug(${i})">${icon('plus',15)} ${x.name} · ${fmt(x.target_amount)} ${CUR}</button>`).join('')+`</div>`:''}
       <h2>Мои цели</h2>
       ${goals.length?goals.map(go=>{const col=color(go.name);return `<div class="goal">
         <div class="gh"><div class="gn">${go.name}</div><div class="gv">${fmt(go.current_amount)} / ${fmt(go.target_amount)} ${CUR}</div></div>
@@ -267,8 +297,8 @@ async function loadGoals(){
           <input class="inp" type="number" inputmode="decimal" placeholder="внести ₽" id="ad-${go.id}" style="flex:1">
           <button class="btn" onclick="addGoal(${go.id},${go.current_amount})">Внести</button>
           <button class="iconbtn" onclick="delGoal(${go.id})">${icon('trash',18)}</button></div></div>`}).join('')
-        :`<div class="empty">Целей пока нет — выбери предложенную выше.</div>`}
-      <h2>Добавить свою</h2>
+        :`<div class="empty">Целей пока нет — создай ниже.</div>`}
+      <h2>Добавить цель</h2>
       <div class="card">
         <input id="ng-n" class="inp" placeholder="Название" style="margin-bottom:8px">
         <div style="display:flex;gap:8px">
@@ -277,28 +307,35 @@ async function loadGoals(){
         <button class="btn full" style="margin-top:10px" onclick="newGoal()">Создать цель</button></div>
       <h2>Регулярные платежи</h2>
       ${rec.length?rec.map(x=>{const col=color(x.name);return `<div class="row">
-        <div class="sq" style="background:${tint(col)};color:${col}">${icon('swap',20)}</div>
-        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · в месяц</div></div>
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(x.name),18)}</div>
+        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · ${x.period==='yearly'?'в год':'в месяц'}</div></div>
         <div class="amt exp">${fmt(x.amount)} ${CUR}</div>
-        <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join('')
-        :`<div class="empty" style="padding:14px 4px">Добавь ЖКХ, связь, подписки — уменьшат «свободно в месяц».</div>`}
-      ${_cands.length?`<div class="muted" style="font-size:12px;margin:12px 4px 6px">Похоже на регулярные — добавить:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 2px 4px">`+_cands.map((c,i)=>`<button class="chip" onclick="addRecCand(${i})">${icon('plus',14)} ${c.name} · ${fmt(c.amount)} ${CUR}</button>`).join('')+`</div>`:''}
-      <div class="card" style="margin-top:8px"><div style="display:flex;gap:8px">
-        <input id="nr-n" class="inp" placeholder="Напр.: ЖКХ" style="flex:1.4">
-        <input id="nr-a" class="inp" type="number" inputmode="decimal" placeholder="₽/мес">
-        <button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
+        <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join(''):''}
+      ${_cands.length?`<div class="muted" style="font-size:12px;margin:12px 4px 6px">Похоже на регулярные:</div>`+_cands.map((c,i)=>`<div class="row">
+        <div class="sq" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon('swap',18)}</div>
+        <div class="mid"><div class="t1">${c.name}</div><div class="t2">~${fmt(c.amount)} ${CUR} · ${c.months} мес</div></div>
+        <button class="iconbtn" onclick="addRecCand(${i})">${icon('plus',18)}</button>
+        <button class="iconbtn" onclick="dismissCand(${i})">${icon('x',18)}</button></div>`).join(''):''}
+      <div class="card" style="margin-top:8px">
+        <input id="nr-n" class="inp" placeholder="Название (напр. Интернет)" style="margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="nr-a" class="inp" type="number" inputmode="decimal" placeholder="₽" style="flex:1">
+          <button id="per-m" class="chip on" onclick="setPer('monthly')">Мес</button>
+          <button id="per-y" class="chip" onclick="setPer('yearly')">Год</button>
+          <button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
   }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('v-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
-async function mkSug(i){ try{ await api('/api/goals',{method:'POST',body:JSON.stringify(_sug[i])}); toast('Цель создана'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t=parseFloat(document.getElementById('ng-t').value),p=parseFloat(document.getElementById('ng-p').value)||0;
   if(!n||!t){toast('Имя и сумма');return;} try{ await api('/api/goals',{method:'POST',body:JSON.stringify({name:n,target_amount:t,monthly_plan:p})}); toast('Создано'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function addGoal(id,cur){ const v=parseFloat(document.getElementById('ad-'+id).value); if(!v){toast('Сумма');return;}
   try{ await api('/api/goals/'+id,{method:'POST',body:JSON.stringify({current_amount:cur+v})}); toast('Внесено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
+function setPer(p){ _recPer=p; document.getElementById('per-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('per-y').className='chip'+(p==='yearly'?' on':''); }
 async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
-  if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
+  if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
-async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense',period:'monthly'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 
 // ---- детали операции + правка категорий ----
 async function openTx(id){
@@ -308,13 +345,16 @@ async function openTx(id){
     renderDetail(d);
   }catch(e){ toast('Ошибка'); }
 }
+function catchipHtml(kind,id,name){
+  const col=name?color(name):'var(--muted)';
+  return `<button class="catchip" style="${name?`border-color:${col};color:${col}`:''}" onclick="openPick('${kind}',${id})">${name?icon(catIcon(name),14):''}${name||'выбрать'}</button>`;
+}
 function renderDetail(d){
   const items=d.items||[];
   const rows = items.length
     ? items.map(it=>`<div class="drow"><div class="mid"><div class="t1">${it.name}</div><div class="t2">${fmt(it.sum)} ${CUR}</div></div>
-        <button class="catchip" onclick="openPick('item',${it.id})">${it.category||'выбрать'}</button></div>`).join('')
-    : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>
-        <button class="catchip" onclick="openPick('tx',${d.id})">${d.category||'выбрать'}</button></div>`;
+        ${catchipHtml('item',it.id,it.category)}</div>`).join('')
+    : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>${catchipHtml('tx',d.id,d.category)}</div>`;
   document.getElementById('sheet').innerHTML=`<div class="sheeth">
       <div><div class="t1">${d.merchant||'Операция'}</div><div class="t2">${fmt(Math.abs(d.amount))} ${CUR} · ${new Date(d.dt).toLocaleDateString('ru-RU')}</div></div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}`;
@@ -323,7 +363,7 @@ function renderDetail(d){
 function openPick(kind,id){ _pickKind=kind; _pickId=id;
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Выбери категорию</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <div class="catgrid">`+_cats.map(c=>`<button class="chip" onclick="pickCat(${c.id})">${c.name}</button>`).join('')+`</div>`;
+    <div class="catgrid">`+_cats.map(c=>`<button class="catpick" style="border-color:${color(c.name)};color:${color(c.name)}" onclick="pickCat(${c.id})">${icon(catIcon(c.name),15)}<span>${c.name}</span></button>`).join('')+`</div>`;
 }
 async function pickCat(cid){
   try{

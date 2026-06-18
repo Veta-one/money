@@ -44,10 +44,16 @@ def get_dashboard(db: Session) -> dict:
     forecast_total = round(sum(fc.values()), 2)
 
     recent = (db.query(models.Transaction)
-              .order_by(models.Transaction.datetime.desc()).limit(10).all())
+              .order_by(models.Transaction.datetime.desc()).limit(12).all())
+
+    def _cn(cid):
+        c = db.get(models.Category, cid) if cid else None
+        return c.name if c else None
+
     recent_out = [{
         "id": t.id, "dt": t.datetime.isoformat(), "amount": round(t.amount, 2),
         "currency": t.currency, "merchant": t.merchant or "", "type": t.type,
+        "category": _cn(t.category_id),
     } for t in recent]
 
     net_worth = compute_net_worth(db)
