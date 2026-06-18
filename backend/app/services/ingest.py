@@ -71,18 +71,37 @@ async def _ingest_receipt(qr: dict) -> dict:
                                                        json.dumps(scan, ensure_ascii=False)[:800])
             return {"status": "error", "text": "Чек получен, но не разобрал состав (структуру вижу в логах)."}
 
-        acc = _default_account(db)
         is_return = int(qr.get("n", 1)) == 2     # 2 = возврат прихода → деньги назад
         sign = -1 if is_return else 1
+        total_signed = parsed["total"] * sign
         merchant = parsed["merchant"] or parsed["retail_place"]
-        tx = models.Transaction(
-            account_id=acc.id if acc else None, datetime=parsed["datetime"],
-            amount=parsed["total"] * sign, currency="RUB", base_amount_rub=parsed["total"] * sign,
-            fx_rate=1.0, type="expense", merchant=("Возврат: " + merchant) if is_return else merchant,
-            source="receipt", status="confirmed", dedup_key=f"{qr['fn']}_{qr['i']}_{qr['fp']}",
-        )
-        db.add(tx)
-        db.flush()
+        disp_merchant = ("Возврат: " + merchant) if is_return else merchant
+
+        # склейка: ищем уже существующую операцию (выписка/ручная) на ту же сумму ±72ч без чека
+        lo = parsed["datetime"] - timedelta(hours=72)
+        hi = parsed["datetime"] + timedelta(hours=72)
+        match = next((c for c in db.query(models.Transaction)
+                      .filter(models.Transaction.datetime >= lo, models.Transaction.datetime <= hi,
+                              models.Transaction.source != "receipt").all()
+                      if abs((c.base_amount_rub or 0.0) - total_signed) < 0.01 and not c.receipt), None)
+
+        if match:
+            tx = match                                # обогащаем найденную операцию
+            tx.datetime = parsed["datetime"]          # точное время из чека
+            tx.merchant = disp_merchant
+            tx.type = "expense"
+            tx.source = "receipt"
+            tx.status = "confirmed"
+        else:
+            acc = _default_account(db)
+            tx = models.Transaction(
+                account_id=acc.id if acc else None, datetime=parsed["datetime"],
+                amount=total_signed, currency="RUB", base_amount_rub=total_signed,
+                fx_rate=1.0, type="expense", merchant=disp_merchant,
+                source="receipt", status="confirmed", dedup_key=f"{qr['fn']}_{qr['i']}_{qr['fp']}",
+            )
+            db.add(tx)
+            db.flush()
         db.add(models.Receipt(
             transaction_id=tx.id, fn=str(qr["fn"]), fd=str(qr["i"]), fp=str(qr["fp"]),
             t=str(qr["t"]), s=str(qr["s"]), n=int(qr["n"]),
@@ -99,8 +118,10 @@ async def _ingest_receipt(qr: dict) -> dict:
             review = review or c["needs_review"]
         tx.category_id = _dominant(parsed["items"], cats)
         db.commit()
-        return {"status": "ok", "tx_id": tx.id, "review": review,
-                "text": _receipt_text(db, parsed, cats)}
+        text = _receipt_text(db, parsed, cats)
+        if match:
+            text = "🔗 Привязал чек к операции от " + tx.datetime.strftime("%d.%m.%Y") + " — без дубля\n\n" + text
+        return {"status": "ok", "tx_id": tx.id, "review": review, "text": text}
     finally:
         db.close()
 
@@ -222,8 +243,8 @@ async def import_statement(content: bytes) -> dict:
             if db.query(models.Transaction).filter_by(dedup_key=dk).first():
                 skipped += 1
                 continue
-            # склейка: если уже есть чек/операция на ту же сумму ±36ч — не дублируем
-            lo, hi = r["datetime"] - timedelta(hours=36), r["datetime"] + timedelta(hours=36)
+            # склейка: если уже есть чек/операция на ту же сумму ±72ч — не дублируем
+            lo, hi = r["datetime"] - timedelta(hours=72), r["datetime"] + timedelta(hours=72)
             cands = (db.query(models.Transaction)
                      .filter(models.Transaction.datetime >= lo, models.Transaction.datetime <= hi).all())
             if any(abs(c.base_amount_rub - r["amount"]) < 0.01 and c.source != "statement" for c in cands):
