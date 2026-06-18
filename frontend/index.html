@@ -539,7 +539,7 @@ async function loadGoals(){
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(x.name),18)}</div>
         <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · ${x.period==='yearly'?'в год':'в месяц'}</div></div>
         <div class="amt exp">${fmt(x.amount)} ${CUR}</div>
-        <button class="iconbtn" onclick="openRecEdit(${x.id},${x.amount})">${icon('edit',18)}</button>
+        <button class="iconbtn" onclick="openRecEdit(${x.id},${x.amount},'${(x.name||'').replace(/'/g,'&#39;')}')">${icon('edit',18)}</button>
         <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join(''):''}
       ${_cands.length?`<div class="muted" style="font-size:12px;margin:12px 4px 6px">Похоже на регулярные:</div>`+_cands.map((c,i)=>`<div class="row">
         <div class="sq" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon('swap',18)}</div>
@@ -564,15 +564,19 @@ function setPer(p){ _recPer=p; document.getElementById('per-m').className='chip'
 async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
   if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
-function openRecEdit(id,amount){
-  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Изменить сумму</div>
+function openRecEdit(id,amount,name){
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Регулярный платёж</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <div style="display:flex;gap:8px"><input id="re-a" class="inp" type="number" inputmode="decimal" value="${amount}" style="flex:1">
+    <input id="re-n" class="inp" placeholder="Название" value="${(name||'').replace(/"/g,'&quot;')}" style="margin-bottom:8px">
+    <div style="display:flex;gap:8px"><input id="re-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽" value="${amount}" style="flex:1">
       <button class="btn" onclick="saveRec(${id})">Сохранить</button></div>`;
   document.getElementById('ov').style.display='flex';
 }
-async function saveRec(id){ const v=parseFloat(document.getElementById('re-a').value); if(!v){toast('Сумма');return;}
-  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify({amount:v})}); toast('Сохранено'); closeOv(); loadGoals(); }catch(e){toast('Ошибка');} }
+async function saveRec(id){
+  const name=document.getElementById('re-n').value.trim();
+  const v=parseFloat(document.getElementById('re-a').value);
+  if(!name||!v){toast('Имя и сумма');return;}
+  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify({name,amount:v})}); toast('Сохранено'); closeOv(); loadGoals(); }catch(e){toast('Ошибка');} }
 async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense',period:'monthly'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 
