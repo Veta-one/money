@@ -95,11 +95,13 @@
 <body>
   <div id="v-dashboard"><div class="loader">Загрузка…</div></div>
   <div id="v-ops" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div id="v-income" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-capital" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-goals" style="display:none"><div class="loader">Загрузка…</div></div>
   <div class="nav">
     <button id="t-dashboard" class="active" onclick="tab('dashboard')"></button>
     <button id="t-ops" onclick="tab('ops')"></button>
+    <button id="t-income" onclick="tab('income')"></button>
     <button id="t-capital" onclick="tab('capital')"></button>
     <button id="t-goals" onclick="tab('goals')"></button>
   </div>
@@ -111,7 +113,7 @@ try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgrou
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
 const CUR='₽';
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly';
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me';
 
 // ---- Tabler icons ----
 const P = {
@@ -123,6 +125,7 @@ const P = {
   swap:'<path d="M3 8h14l-3 -3"/><path d="M21 16h-14l3 3"/>',
   list:'<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M5 6v.01"/><path d="M5 12v.01"/><path d="M5 18v.01"/>',
   search:'<path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/>',
+  cash:'<path d="M7 9m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/><path d="M14 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 9v-2a2 2 0 0 0 -2 -2h-10a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h2"/>',
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
   trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
   x:'<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
@@ -186,10 +189,11 @@ function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err"
 
 document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span class="lbl">Главная</span>';
 document.getElementById('t-ops').innerHTML=icon('list',20)+'<span class="lbl">Операции</span>';
+document.getElementById('t-income').innerHTML=icon('cash',20)+'<span class="lbl">Доходы</span>';
 document.getElementById('t-capital').innerHTML=icon('wallet',20)+'<span class="lbl">Капитал</span>';
 document.getElementById('t-goals').innerHTML=icon('target',20)+'<span class="lbl">Цели</span>';
 
-const TABS=['dashboard','ops','capital','goals'];
+const TABS=['dashboard','ops','income','capital','goals'];
 let _tab='dashboard';
 function tab(t){
   _tab=t;
@@ -197,9 +201,9 @@ function tab(t){
     document.getElementById('v-'+x).style.display=x===t?'block':'none';
     document.getElementById('t-'+x).classList.toggle('active',x===t);
   }
-  ({dashboard:loadDashboard,ops:loadOps,capital:loadCapital,goals:loadGoals})[t]();
+  ({dashboard:loadDashboard,ops:loadOps,income:loadIncome,capital:loadCapital,goals:loadGoals})[t]();
 }
-function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,capital:loadCapital,goals:loadGoals})[_tab](); }
+function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,income:loadIncome,capital:loadCapital,goals:loadGoals})[_tab](); }
 
 function barChart(data, w=330, h=144){
   const max=Math.max(1,...data.map(d=>d.spent));
@@ -212,6 +216,17 @@ function barChart(data, w=330, h=144){
     s+=`<text x="${x+bw/2}" y="${h-5}" text-anchor="middle" font-size="11" fill="#8b909a">${d.label}</text>`;
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
+}
+function donut(items, sz=148){
+  const r=sz/2-13, c=2*Math.PI*r, cx=sz/2, cy=sz/2;
+  const total=items.reduce((s,i)=>s+i.value,0)||1;
+  let off=0, segs='';
+  items.forEach(it=>{ const len=Math.max(0,it.value/total*c);
+    segs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="13" stroke-dasharray="${len} ${c-len}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    off+=len; });
+  return `<svg viewBox="0 0 ${sz} ${sz}" width="${sz}" height="${sz}" style="flex:none">${segs}
+    <text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" fill="#8b909a">всего</text>
+    <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="15" font-weight="800" fill="#15161a">${fmtK(total)}</text></svg>`;
 }
 
 async function loadDashboard(){
@@ -283,8 +298,8 @@ async function loadCapital(){
           <input id="dn" class="inp" placeholder="Кто" style="flex:1.4">
           <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽">
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
-      <h2>Ожидаемый доход в месяц</h2>
-      <div class="card"><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>`;
+      <h2>Ожидаемый доход (запасной)</h2>
+      <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:8px">Используется, только если во вкладке «Доходы» не заданы источники.</div><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>`;
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
@@ -419,6 +434,67 @@ function renderOps(){
 }
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
+
+// ---- доходы по источникам ----
+async function loadIncome(){
+  try{
+    const d=await api('/api/income');
+    const srcs=d.sources||[], bd=d.breakdown||[], nudges=d.nudges||[];
+    const nudgeHtml=nudges.length?`<div class="card" style="margin-top:12px;border:1.5px solid #ffd9a0;background:#fff7ec">
+      <div class="k" style="color:#c77700;font-weight:700">Пора продлить</div>
+      ${nudges.map(n=>`<div class="t1" style="margin-top:6px">${n.name} <span class="muted" style="font-weight:600">· до ${new Date(n.end_date).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'2-digit'})}</span></div>`).join('')}</div>`:'';
+    const srcHtml=srcs.length?srcs.map(s=>{
+      const col=color(s.name), cur=s.currency==='RUB'?'₽':s.currency;
+      const per=s.period==='yearly'?'/год':s.period==='weekly'?'/нед':'/мес';
+      const hint=(s.currency!=='RUB'||s.period!=='monthly')?' · '+fmt(s.plan)+' ₽/мес':'';
+      const right=s.end_date?'до '+new Date(s.end_date).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'}):(s.plan>0&&s.fact>=s.plan?'получено':'ожидается');
+      return `<div class="goal">
+        <div class="gh"><div class="gn">${s.name}${s.owner==='wife'?' <span class="muted" style="font-size:12px;font-weight:600">· жена</span>':''}</div>
+          <div class="gv">${fmt(s.fact)} / ${fmt(s.plan)} ₽</div></div>
+        <div class="track" style="margin-top:11px"><i style="width:${s.pct}%;background:${col}"></i></div>
+        <div class="meta"><span>${fmt(s.amount)} ${cur}${per}${hint}</span><span>${right}</span></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="chip" onclick="toggleIncome(${s.id},${s.active?0:1})">${s.active?'Выключить':'Включить'}</button>
+          <button class="iconbtn" onclick="delIncome(${s.id})">${icon('trash',18)}</button></div></div>`;
+    }).join(''):`<div class="empty">Источников дохода пока нет.<br>Добавь Шкулёв, Turnvoice, пособия — план дохода сложится сам.</div>`;
+    const bdHtml=bd.length?`<div class="chartcard" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center">
+        ${donut(bd.map(b=>({value:b.amount,color:color(b.name)})))}
+        <div style="flex:1;min-width:150px">${bd.map(b=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+          <span style="width:10px;height:10px;border-radius:3px;background:${color(b.name)};flex:none"></span>
+          <span style="flex:1;font-size:13px">${b.name}</span><span style="font-size:13px;font-weight:700">${fmt(b.amount)} ₽</span></div>`).join('')}</div></div>`
+      :`<div class="empty">В этом месяце доходов ещё не было.</div>`;
+    document.getElementById('v-income').innerHTML=`
+      <div class="head"><div class="hi">Доходы</div></div>
+      <div class="hero"><div class="label">План дохода в месяц</div>
+        <div class="big">${fmt(d.plan_total)}<span class="cur">₽</span></div>
+        <div class="sub">факт за месяц: ${fmt(d.fact_total)} ₽${d.unattributed>0?' · не распознано '+fmt(d.unattributed):''}</div></div>
+      ${nudgeHtml}
+      <h2>Источники</h2>
+      ${srcHtml}
+      <h2>Откуда пришло (за месяц)</h2>
+      ${bdHtml}
+      <h2>Добавить источник</h2>
+      <div class="card">
+        <input id="is-n" class="inp" placeholder="Название (Шкулёв, Turnvoice, пособие…)" style="margin-bottom:8px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input id="is-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма" style="flex:1.3">
+          <select id="is-c" class="inp" style="flex:1"><option value="RUB">RUB</option><option value="USD">USD</option></select></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="ip-m" class="chip on" onclick="setIncPer('monthly')">Мес</button>
+          <button id="ip-y" class="chip" onclick="setIncPer('yearly')">Год</button>
+          <span style="width:6px"></span>
+          <button id="io-me" class="chip on" onclick="setIncOwner('me')">Я</button>
+          <button id="io-wife" class="chip" onclick="setIncOwner('wife')">Жена</button>
+          <button class="btn" style="margin-left:auto" onclick="addIncome()">${icon('plus',18,'#fff')}</button></div></div>`;
+    _incPer='monthly'; _incOwner='me';
+  }catch(e){ e.message==='AUTH'?authErr('income'):document.getElementById('v-income').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+function setIncPer(p){ _incPer=p; document.getElementById('ip-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('ip-y').className='chip'+(p==='yearly'?' on':''); }
+function setIncOwner(o){ _incOwner=o; document.getElementById('io-me').className='chip'+(o==='me'?' on':''); document.getElementById('io-wife').className='chip'+(o==='wife'?' on':''); }
+async function addIncome(){ const n=document.getElementById('is-n').value.trim(), a=parseFloat(document.getElementById('is-a').value), c=document.getElementById('is-c').value;
+  if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/income',{method:'POST',body:JSON.stringify({name:n,amount:a,currency:c,period:_incPer,owner:_incOwner})}); toast('Добавлено'); loadIncome(); }catch(e){toast('Ошибка');} }
+async function toggleIncome(id,active){ try{ await api('/api/income/'+id,{method:'POST',body:JSON.stringify({active:!!active})}); loadIncome(); }catch(e){toast('Ошибка');} }
+async function delIncome(id){ try{ await api('/api/income/'+id,{method:'DELETE'}); toast('Удалено'); loadIncome(); }catch(e){toast('Ошибка');} }
 
 // ---- детали операции + правка категорий ----
 async function openTx(id){

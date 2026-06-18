@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from .fx import compute_net_worth
+from .income import expected_income_monthly
 from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
-from .settings_store import get_setting
 
 
 def get_dashboard(db: Session) -> dict:
@@ -58,8 +58,7 @@ def get_dashboard(db: Session) -> dict:
 
     net_worth = compute_net_worth(db)
 
-    exp = get_setting(db, "expected_monthly_income")
-    expected = float(exp) if exp is not None else (settings.expected_monthly_income or 0.0)
+    expected = expected_income_monthly(db)
     obligatory = obligatory_monthly(db)
     goals_plan = goals_monthly_plan(db)
     safe_to_spend = round(max(expected - spent - obligatory - goals_plan, 0.0), 2)

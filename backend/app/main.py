@@ -20,11 +20,13 @@ from . import bot as botmod
 from . import models  # noqa: F401  — регистрируем таблицы в metadata
 from .config import settings
 from .db import Base, SessionLocal, engine, get_session
+from .migrations import run_migrations
 from .security import current_user
 from .services.backup import make_and_send_backup
 from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
+from .services.income import income_overview
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
                               take_networth_snapshot)
 from .services.fx import compute_net_worth, get_usd_rub, to_rub
@@ -36,8 +38,9 @@ scheduler = AsyncIOScheduler(timezone=settings.timezone)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # dev: создаём таблицы автоматически. На проде — alembic.
+    # таблицы + лёгкие миграции (ADD COLUMN / индексы) для живой БД
     Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
     _db0 = SessionLocal()
     try:
         take_networth_snapshot(_db0)   # стартовый снимок капитала
@@ -289,7 +292,9 @@ class RecurringIn(BaseModel):
 
 @app.get("/api/recurring")
 async def list_recurring(user: dict = Depends(current_user), db: Session = Depends(get_session)):
-    rows = db.query(models.Recurring).filter(models.Recurring.active.is_(True)).all()
+    rows = (db.query(models.Recurring)
+            .filter(models.Recurring.active.is_(True),
+                    models.Recurring.type == "expense").all())
     return {"recurring": [{"id": r.id, "name": r.name, "amount": r.amount, "type": r.type,
                            "period": r.period, "day": r.day} for r in rows],
             "candidates": detect_recurring(db)}
@@ -327,6 +332,76 @@ async def dismiss_recurring(body: DismissIn, user: dict = Depends(current_user),
     if body.name not in lst:
         lst.append(body.name)
     set_setting(db, "dismissed_recurring", json.dumps(lst, ensure_ascii=False))
+    return {"ok": True}
+
+
+# ---------- доходы по источникам ----------
+
+class IncomeIn(BaseModel):
+    name: str
+    amount: float
+    currency: str = "RUB"
+    period: str = "monthly"
+    owner: str = "me"
+    day: int | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class IncomePatch(BaseModel):
+    name: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+    period: str | None = None
+    owner: str | None = None
+    end_date: str | None = None
+    active: bool | None = None
+
+
+@app.get("/api/income")
+async def income(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return income_overview(db)
+
+
+@app.post("/api/income")
+async def create_income(body: IncomeIn, user: dict = Depends(current_user),
+                        db: Session = Depends(get_session)):
+    r = models.Recurring(
+        name=body.name[:128], amount=abs(body.amount), currency=(body.currency or "RUB"),
+        period=body.period if body.period in ("monthly", "yearly", "weekly") else "monthly",
+        owner=body.owner if body.owner in ("me", "wife") else "me",
+        day=body.day, type="income", active=True,
+        start_date=date.fromisoformat(body.start_date) if body.start_date else None,
+        end_date=date.fromisoformat(body.end_date) if body.end_date else None,
+    )
+    db.add(r)
+    db.commit()
+    return {"id": r.id}
+
+
+@app.post("/api/income/{rec_id}")
+async def patch_income(rec_id: int, body: IncomePatch, user: dict = Depends(current_user),
+                       db: Session = Depends(get_session)):
+    r = db.get(models.Recurring, rec_id)
+    if not r or r.type != "income":
+        raise HTTPException(404, "no source")
+    for field in ("name", "amount", "currency", "period", "owner", "active"):
+        v = getattr(body, field)
+        if v is not None:
+            setattr(r, field, v)
+    if body.end_date is not None:
+        r.end_date = date.fromisoformat(body.end_date) if body.end_date else None
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/income/{rec_id}")
+async def delete_income(rec_id: int, user: dict = Depends(current_user),
+                        db: Session = Depends(get_session)):
+    r = db.get(models.Recurring, rec_id)
+    if r and r.type == "income":
+        db.delete(r)
+        db.commit()
     return {"ok": True}
 
 

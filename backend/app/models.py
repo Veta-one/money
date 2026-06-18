@@ -63,6 +63,7 @@ class Transaction(Base):
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
     merchant: Mapped[str | None] = mapped_column(String(256))
     counterparty_account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
+    recurring_id: Mapped[int | None] = mapped_column(ForeignKey("recurring.id"))  # источник дохода
     source: Mapped[str] = mapped_column(String(16))        # receipt|statement|text|voice|photo
     note: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="confirmed")  # confirmed|needs_review
@@ -141,6 +142,7 @@ class Recurring(Base):
     type: Mapped[str] = mapped_column(String(16))         # income|expense
     reminder: Mapped[bool] = mapped_column(Boolean, default=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    owner: Mapped[str] = mapped_column(String(16), default="me")  # me|wife (для доходов)
 
 
 class Deposit(Base):

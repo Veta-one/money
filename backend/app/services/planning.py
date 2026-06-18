@@ -107,7 +107,8 @@ def goal_view(g: models.Goal) -> dict:
 
 
 def suggest_goals(db: Session) -> dict:
-    expected = float(get_setting(db, "expected_monthly_income") or 0)
+    from .income import expected_income_monthly
+    expected = expected_income_monthly(db)
     spend = avg_monthly_expense(db)
     capacity = max(round(expected - spend), 0)
     monthly = spend or 50000
