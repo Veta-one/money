@@ -58,23 +58,25 @@ def _json_from(raw: str):
         return None
 
 
-async def classify_texts(texts: list[str], cats: list[str]) -> list[str | None]:
-    """Возвращает список названий категорий (или None) по позициям texts."""
+async def classify_texts(texts: list[str], cats: list[str], chunk: int = 25) -> list[str | None]:
+    """Категория (или None) по позициям. Бьём на пачки — иначе LLM ломает JSON на больших списках."""
     if not texts:
         return []
-    prompt = (
-        "Ты — категоризатор личных трат. Отнеси каждую позицию к ОДНОЙ категории из списка.\n"
-        f"Категории: {', '.join(cats)}.\n"
-        "Верни СТРОГО JSON-массив строк (по одной категории на позицию, в том же порядке). "
-        "Если позиция совсем непонятна — верни null.\n\n"
-        + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
-    )
-    arr = _json_from(await gemini.text(prompt))
     valid = {c.lower(): c for c in cats}
     out: list[str | None] = []
-    for x in (arr or []):
-        out.append(valid.get(x.lower()) if isinstance(x, str) else None)
-    return (out + [None] * len(texts))[:len(texts)]
+    for start in range(0, len(texts), chunk):
+        part = texts[start:start + chunk]
+        prompt = (
+            "Ты — категоризатор личных трат. Отнеси каждую позицию к ОДНОЙ категории из списка.\n"
+            f"Категории: {', '.join(cats)}.\n"
+            "Верни СТРОГО JSON-массив строк (по одной категории на позицию, в том же порядке). "
+            "Если позиция совсем непонятна — верни null.\n\n"
+            + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(part))
+        )
+        arr = _json_from(await gemini.text(prompt))
+        got = [valid.get(x.lower()) if isinstance(x, str) else None for x in (arr or [])]
+        out.extend((got + [None] * len(part))[:len(part)])
+    return out
 
 
 async def categorize_items(db: Session, items: list[dict], inn: str | None) -> list[dict]:

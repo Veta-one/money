@@ -152,6 +152,39 @@ async def ingest_voice(data: bytes) -> dict:
     return res
 
 
+async def recategorize_uncategorized() -> dict:
+    """Проставить категории расходам без категории (правила → LLM пачками по продавцу)."""
+    db = SessionLocal()
+    try:
+        txs = (db.query(models.Transaction)
+               .filter(models.Transaction.type == "expense",
+                       models.Transaction.category_id.is_(None)).all())
+        merchants = list({t.merchant for t in txs if t.merchant})
+        cat_map: dict[str, int | None] = {}
+        unknown = []
+        for mname in merchants:
+            cid = rule_category_id(db, None, mname)
+            if cid:
+                cat_map[mname] = cid
+            else:
+                unknown.append(mname)
+        if unknown:
+            names = await classify_texts(unknown, category_names(db, ("expense",)))
+            for mname, cname in zip(unknown, names):
+                cobj = category_by_name(db, cname)
+                cat_map[mname] = cobj.id if cobj else None
+        updated = 0
+        for t in txs:
+            cid = cat_map.get(t.merchant)
+            if cid:
+                t.category_id = cid
+                updated += 1
+        db.commit()
+        return {"updated": updated, "total": len(txs)}
+    finally:
+        db.close()
+
+
 async def import_statement(content: bytes) -> dict:
     """Импорт CSV-выписки: дедуп по номеру документа + склейка с чеками, категоризация."""
     db = SessionLocal()
