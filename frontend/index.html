@@ -331,6 +331,17 @@ async function loadCapital(){
           ${c.fx!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Курс $</span><span style="font-weight:700;color:${c.fx>=0?'var(--green)':'var(--red)'}">${c.fx>=0?'+':'−'}${fmt(Math.abs(c.fx))} ${CUR}</span></div>`:''}
           ${c.other!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Прочее (крипта, правки)</span><span style="font-weight:700">${c.other>=0?'+':'−'}${fmt(Math.abs(c.other))} ${CUR}</span></div>`:''}
         </div></div>`:''}
+      ${(c.allocation_currency||[]).length?`<h2>Распределение по валюте</h2>
+      <div class="chartcard" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center">
+        ${donut((c.allocation_currency||[]).map(x=>({value:x.sum,color:x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name)})))}
+        <div style="flex:1;min-width:150px">${(()=>{const tot=(c.allocation_currency||[]).reduce((s,y)=>s+y.sum,0)||1;return (c.allocation_currency||[]).map(x=>{const col=x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name);return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+          <span style="width:10px;height:10px;border-radius:3px;background:${col}"></span>
+          <span style="flex:1;font-size:13px">${x.name==='RUB'?'Рубли':x.name==='USD'?'Доллар (USDT/крипта)':x.name}</span>
+          <span style="font-size:13px;font-weight:700">${fmt(x.sum)} ₽ · ${Math.round(x.sum/tot*100)}%</span></div>`}).join('');})()}</div></div>`:''}
+      ${c.emergency&&c.emergency.months!=null?`<h2>Подушка безопасности</h2>
+      <div class="card"><div class="v">${c.emergency.months} <span class="cur">мес. расходов</span></div>
+        <div class="track" style="margin-top:10px"><i style="width:${Math.min(100,Math.round(c.emergency.months/c.emergency.target*100))}%;background:${c.emergency.months>=c.emergency.target?'var(--green)':'var(--ink)'}"></i></div>
+        <div class="t2" style="margin-top:8px;color:var(--muted)">${fmt(c.emergency.liquid)} ₽ ликвидных · цель ${c.emergency.target} мес ≈ ${fmt((c.emergency.avg_expense||0)*c.emergency.target)} ₽</div></div>`:''}
       <h2>Счета</h2>
       ${accs.map(ac=>{const col=color(ac.name);return `<div class="row">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>
