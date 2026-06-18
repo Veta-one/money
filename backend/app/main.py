@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -733,4 +734,10 @@ async def create_tx(body: TxIn, user: dict = Depends(current_user),
 # Статика мини-аппа — ПОСЛЕ всех /api и /webhook (mount на "/" перехватывает остальное).
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 if _FRONTEND.is_dir():
+    @app.get("/")
+    async def _index():
+        # без кэша — иначе Telegram WebView держит старый JS после деплоя
+        return FileResponse(str(_FRONTEND / "index.html"),
+                            headers={"Cache-Control": "no-store, max-age=0"})
+
     app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="static")
