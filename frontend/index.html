@@ -113,7 +113,7 @@ try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgrou
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
 const CUR='₽';
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me';
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null;
 
 // ---- Tabler icons ----
 const P = {
@@ -500,7 +500,8 @@ async function delIncome(id){ try{ await api('/api/income/'+id,{method:'DELETE'}
 async function openTx(id){
   try{
     const d=await api('/api/tx/'+id);
-    if(!_cats.length){ _cats=(await api('/api/categories')).categories||[]; }
+    if(d.type==='income'){ if(!_incCats.length){ _incCats=(await api('/api/categories?type=income')).categories||[]; } }
+    else if(!_cats.length){ _cats=(await api('/api/categories')).categories||[]; }
     renderDetail(d);
   }catch(e){ toast('Ошибка'); }
 }
@@ -509,26 +510,61 @@ function catchipHtml(kind,id,name){
   return `<button class="catchip" style="${name?`border-color:${col};color:${col}`:''}" onclick="openPick('${kind}',${id})">${name?icon(catIcon(name),14):''}${name||'выбрать'}</button>`;
 }
 function renderDetail(d){
-  const items=d.items||[];
-  const rows = items.length
-    ? items.map(it=>`<div class="drow"><div class="mid"><div class="t1">${it.name}</div><div class="t2">${fmt(it.sum)} ${CUR}</div></div>
-        ${catchipHtml('item',it.id,it.category)}</div>`).join('')
-    : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>${catchipHtml('tx',d.id,d.category)}</div>`;
+  _detail=d;
+  let rows;
+  if(d.type==='income'){
+    const cur=(d.sources||[]).find(s=>s.id===d.recurring_id);
+    const sn=cur?cur.name:null, sc=sn?color(sn):'var(--muted)';
+    rows=`<div class="drow"><div class="mid"><div class="t1">Категория</div></div>${catchipHtml('inccat',d.id,d.category)}</div>
+      <div class="drow"><div class="mid"><div class="t1">Источник</div></div>
+        <button class="catchip" style="${sn?`border-color:${sc};color:${sc}`:''}" onclick="openSrcPick(${d.id})">${sn?icon('cash',14):''}${sn||'выбрать'}</button></div>`;
+  } else {
+    const items=d.items||[];
+    rows = items.length
+      ? items.map(it=>`<div class="drow"><div class="mid"><div class="t1">${it.name}</div><div class="t2">${fmt(it.sum)} ${CUR}</div></div>
+          ${catchipHtml('item',it.id,it.category)}</div>`).join('')
+      : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>${catchipHtml('tx',d.id,d.category)}</div>`;
+  }
   document.getElementById('sheet').innerHTML=`<div class="sheeth">
       <div><div class="t1">${d.merchant||'Операция'}</div><div class="t2">${fmt(Math.abs(d.amount))} ${CUR} · ${new Date(d.dt).toLocaleDateString('ru-RU')}</div></div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}`;
   document.getElementById('ov').style.display='flex';
 }
 function openPick(kind,id){ _pickKind=kind; _pickId=id;
+  const cats=kind==='inccat'?_incCats:_cats;
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Выбери категорию</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <div class="catgrid">`+_cats.map(c=>`<button class="catpick" style="border-color:${color(c.name)};color:${color(c.name)}" onclick="pickCat(${c.id})">${icon(catIcon(c.name),15)}<span>${c.name}</span></button>`).join('')+`</div>`;
+    <div class="catgrid">`+cats.map(c=>`<button class="catpick" style="border-color:${color(c.name)};color:${color(c.name)}" onclick="pickCat(${c.id})">${icon(catIcon(c.name),15)}<span>${c.name}</span></button>`).join('')+`</div>`;
 }
 async function pickCat(cid){
   try{
     const url=_pickKind==='item'?'/api/items/'+_pickId:'/api/tx/'+_pickId;
     await api(url,{method:'POST',body:JSON.stringify({category_id:cid})});
-    toast('Сохранено'); closeOv(); refreshActive();
+    toast('Сохранено');
+    if(_pickKind==='inccat'){ refreshActive(); openTx(_pickId); }
+    else { closeOv(); refreshActive(); }
+  }catch(e){ toast('Ошибка'); }
+}
+function openSrcPick(id){ _pickId=id;
+  const srcs=(_detail&&_detail.sources)||[];
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Привязать к источнику</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    ${srcs.length?`<div class="catgrid">`+srcs.map(s=>`<button class="catpick" style="border-color:${color(s.name)};color:${color(s.name)}" onclick="pickSrc(${s.id})">${icon('cash',15)}<span>${s.name}</span></button>`).join('')+`</div>`:`<div class="muted" style="font-size:13px;padding:2px 2px 8px">Источников ещё нет — создай ниже или во вкладке «Доходы».</div>`}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <input id="ns-n" class="inp" placeholder="Новый источник" style="flex:1">
+      <button class="btn" onclick="createSrcFromTx()">Создать</button></div>
+    ${_detail&&_detail.recurring_id?`<button class="chip" style="margin-top:10px" onclick="pickSrc(null)">Отвязать</button>`:''}`;
+}
+async function pickSrc(rid){
+  try{ await api('/api/tx/'+_pickId+'/source',{method:'POST',body:JSON.stringify({recurring_id:rid})});
+    toast(rid?'Привязано':'Отвязано'); refreshActive(); openTx(_pickId); }catch(e){ toast('Ошибка'); }
+}
+async function createSrcFromTx(){
+  const n=document.getElementById('ns-n').value.trim(); if(!n){toast('Имя');return;}
+  try{
+    const r=await api('/api/income',{method:'POST',body:JSON.stringify({name:n,amount:Math.abs(_detail.amount)||0,currency:_detail.currency||'RUB',period:'monthly',owner:'me'})});
+    await api('/api/tx/'+_pickId+'/source',{method:'POST',body:JSON.stringify({recurring_id:r.id})});
+    toast('Создано и привязано'); refreshActive(); openTx(_pickId);
   }catch(e){ toast('Ошибка'); }
 }
 function closeOv(){ document.getElementById('ov').style.display='none'; }

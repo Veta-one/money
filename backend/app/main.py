@@ -26,7 +26,7 @@ from .services.backup import make_and_send_backup
 from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
-from .services.income import income_overview
+from .services.income import income_overview, learn_income_alias
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
                               take_networth_snapshot)
 from .services.fx import compute_net_worth, get_usd_rub, to_rub
@@ -480,12 +480,14 @@ def _recompute_tx_category(tx) -> None:
 
 
 @app.get("/api/categories")
-async def list_categories(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+async def list_categories(type: str = "expense", user: dict = Depends(current_user),
+                          db: Session = Depends(get_session)):
+    ctype = type if type in ("expense", "income", "transfer") else "expense"
     counts = dict(db.query(models.Transaction.category_id, func.count(models.Transaction.id))
                   .filter(models.Transaction.category_id.isnot(None))
                   .group_by(models.Transaction.category_id).all())
     cats = (db.query(models.Category)
-            .filter(models.Category.type == "expense", models.Category.archived.is_(False)).all())
+            .filter(models.Category.type == ctype, models.Category.archived.is_(False)).all())
     cats.sort(key=lambda c: (-counts.get(c.id, 0), c.name))   # самые частые — первыми
     return {"categories": [{"id": c.id, "name": c.name} for c in cats]}
 
@@ -502,9 +504,15 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
 
     items = [{"id": it.id, "name": it.name, "sum": it.sum, "qty": it.qty,
               "category_id": it.category_id, "category": cname(it.category_id)} for it in t.items]
+    src_list = None
+    if t.type == "income":
+        src_list = [{"id": r.id, "name": r.name} for r in db.query(models.Recurring)
+                    .filter(models.Recurring.type == "income", models.Recurring.active.is_(True))
+                    .order_by(models.Recurring.name).all()]
     return {"id": t.id, "merchant": t.merchant, "amount": t.amount, "currency": t.currency,
             "dt": t.datetime.isoformat(), "type": t.type, "source": t.source,
-            "category_id": t.category_id, "category": cname(t.category_id), "items": items}
+            "category_id": t.category_id, "category": cname(t.category_id), "items": items,
+            "recurring_id": t.recurring_id, "sources": src_list}
 
 
 class CatIn(BaseModel):
@@ -521,6 +529,24 @@ async def set_tx_category(tx_id: int, body: CatIn,
     t.status = "confirmed"
     db.commit()
     learn_rule(db, body.category_id, inn=(t.receipt.inn if t.receipt else None), pattern=t.merchant)
+    return {"ok": True}
+
+
+class SourceIn(BaseModel):
+    recurring_id: int | None = None
+
+
+@app.post("/api/tx/{tx_id}/source")
+async def set_tx_source(tx_id: int, body: SourceIn,
+                        user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """Привязать доходную операцию к источнику (Recurring income) + запомнить алиас."""
+    t = db.get(models.Transaction, tx_id)
+    if not t:
+        raise HTTPException(404, "no tx")
+    t.recurring_id = body.recurring_id
+    db.commit()
+    if body.recurring_id:
+        learn_income_alias(db, t.merchant, t.note, body.recurring_id)
     return {"ok": True}
 
 

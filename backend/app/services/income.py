@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from .fx import to_rub
-from .settings_store import get_setting
+from .settings_store import get_setting, set_setting
 
 
 def _norm(s: str | None) -> str:
@@ -41,13 +42,32 @@ def expected_income_monthly(db: Session) -> float:
     return float(val) if val is not None else (settings.expected_monthly_income or 0.0)
 
 
-def attribute_income(db: Session) -> None:
-    """Авто-матч: непривязанные income-транзакции → источник по совпадению имени."""
-    srcs = db.query(models.Recurring).filter(models.Recurring.type == "income").all()
-    if not srcs:
+def _aliases(db: Session) -> list[dict]:
+    raw = get_setting(db, "income_aliases")
+    try:
+        return json.loads(raw) if raw else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def learn_income_alias(db: Session, merchant: str | None, note: str | None, rec_id: int) -> None:
+    """Запоминает: этот продавец/назначение → этот источник (для авто-привязки впредь)."""
+    key = (_norm(merchant) or _norm(note))[:60]
+    if not key:
         return
+    lst = [a for a in _aliases(db) if a.get("m") != key]
+    lst.append({"m": key, "r": rec_id})
+    set_setting(db, "income_aliases", json.dumps(lst, ensure_ascii=False))
+
+
+def attribute_income(db: Session) -> None:
+    """Авто-матч непривязанных income-транзакций к источнику: по имени и по выученным алиасам."""
+    srcs = db.query(models.Recurring).filter(models.Recurring.type == "income").all()
+    valid_ids = {s.id for s in srcs}
     named = [(s.id, _norm(s.name)) for s in srcs if _norm(s.name)]
-    if not named:
+    aliases = [(a["m"], a["r"]) for a in _aliases(db)
+               if a.get("m") and a.get("r") in valid_ids]
+    if not named and not aliases:
         return
     txs = (db.query(models.Transaction)
            .filter(models.Transaction.type == "income",
@@ -55,11 +75,19 @@ def attribute_income(db: Session) -> None:
     changed = False
     for t in txs:
         hay = _norm(t.merchant) + " " + _norm(t.note)
+        match = None
         for sid, nm in named:
             if nm in hay:
-                t.recurring_id = sid
-                changed = True
+                match = sid
                 break
+        if match is None:
+            for m, r in aliases:
+                if m in hay:
+                    match = r
+                    break
+        if match is not None:
+            t.recurring_id = match
+            changed = True
     if changed:
         db.commit()
 
