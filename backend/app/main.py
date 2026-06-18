@@ -26,7 +26,7 @@ from .services.digests import send_digest
 from .services.trends import (monthly_spending, networth_series, snapshot_job,
                               take_networth_snapshot)
 from .services.fx import to_rub
-from .services.planning import goal_view, suggest_goals
+from .services.planning import detect_recurring, goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
 
 scheduler = AsyncIOScheduler(timezone=settings.timezone)
@@ -214,7 +214,8 @@ class RecurringIn(BaseModel):
 async def list_recurring(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     rows = db.query(models.Recurring).filter(models.Recurring.active.is_(True)).all()
     return {"recurring": [{"id": r.id, "name": r.name, "amount": r.amount, "type": r.type,
-                           "period": r.period, "day": r.day} for r in rows]}
+                           "period": r.period, "day": r.day} for r in rows],
+            "candidates": detect_recurring(db)}
 
 
 @app.post("/api/recurring")

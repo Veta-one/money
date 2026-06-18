@@ -55,6 +55,34 @@ def goals_monthly_plan(db: Session) -> float:
     return round(sum((g.monthly_plan or 0) for g in rows), 2)
 
 
+def detect_recurring(db: Session, months: int = 3, max_per_month: float = 1.6, top: int = 8) -> list[dict]:
+    """Находит периодические списания (подписки/ЖКХ): продавец в ≥2 месяцах и ~раз в месяц."""
+    start = datetime.now() - timedelta(days=months * 31)
+    rows = (db.query(models.Transaction.merchant, models.Transaction.datetime,
+                     models.Transaction.base_amount_rub)
+            .filter(models.Transaction.type == "expense",
+                    models.Transaction.datetime >= start,
+                    models.Transaction.merchant.isnot(None)).all())
+    existing = {(r.name or "").strip().lower() for r in db.query(models.Recurring).all()}
+    agg: dict[str, dict] = {}
+    for merch, dt, amt in rows:
+        mn = (merch or "").strip()
+        if not mn:
+            continue
+        a = agg.setdefault(mn, {"months": set(), "amounts": []})
+        a["months"].add((dt.year, dt.month))
+        a["amounts"].append(amt or 0.0)
+    cands = []
+    for mn, a in agg.items():
+        nm, cnt = len(a["months"]), len(a["amounts"])
+        if nm >= 2 and cnt / nm <= max_per_month and mn.lower() not in existing:
+            amts = sorted(a["amounts"])
+            median = amts[len(amts) // 2]
+            cands.append({"name": mn[:60], "amount": round(median), "months": nm})
+    cands.sort(key=lambda c: (-c["months"], -c["amount"]))
+    return cands[:top]
+
+
 def goal_view(g: models.Goal) -> dict:
     target = g.target_amount or 0
     current = g.current_amount or 0

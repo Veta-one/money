@@ -108,7 +108,7 @@ const tg = window.Telegram?.WebApp;
 try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgroundColor?.('#f3f4f6'); }catch(e){}
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const CUR='₽';
-let _sug=[], _cats=[], _pickKind=null, _pickId=null;
+let _sug=[], _cats=[], _cands=[], _pickKind=null, _pickId=null;
 
 // ---- Tabler icons ----
 const P = {
@@ -228,7 +228,7 @@ async function saveInc(v){ try{ await api('/api/settings',{method:'POST',body:JS
 async function loadGoals(){
   try{
     const [g,r]=await Promise.all([api('/api/goals'),api('/api/recurring')]);
-    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[]; _sug=sug.suggestions||[];
+    const goals=g.goals||[], sug=g.suggest||{}, rec=r.recurring||[]; _sug=sug.suggestions||[]; _cands=r.candidates||[];
     document.getElementById('v-goals').innerHTML=`
       <div class="head"><div class="hi">Цели</div></div>
       <div class="hero"><div class="label">Можешь откладывать в месяц</div>
@@ -260,6 +260,7 @@ async function loadGoals(){
         <div class="amt exp">${fmt(x.amount)} ${CUR}</div>
         <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join('')
         :`<div class="empty" style="padding:14px 4px">Добавь ЖКХ, связь, подписки — уменьшат «свободно в месяц».</div>`}
+      ${_cands.length?`<div class="muted" style="font-size:12px;margin:12px 4px 6px">Похоже на регулярные — добавить:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 2px 4px">`+_cands.map((c,i)=>`<button class="chip" onclick="addRecCand(${i})">${icon('plus',14)} ${c.name} · ${fmt(c.amount)} ${CUR}</button>`).join('')+`</div>`:''}
       <div class="card" style="margin-top:8px"><div style="display:flex;gap:8px">
         <input id="nr-n" class="inp" placeholder="Напр.: ЖКХ" style="flex:1.4">
         <input id="nr-a" class="inp" type="number" inputmode="decimal" placeholder="₽/мес">
@@ -275,6 +276,7 @@ async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); 
 async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
   if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
+async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 
 // ---- детали операции + правка категорий ----
 async function openTx(id){
