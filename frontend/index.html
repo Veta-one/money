@@ -349,8 +349,8 @@ async function loadCapital(){
           <input id="dn" class="inp" placeholder="Кто" style="flex:1.4">
           <input id="da" class="inp" type="number" inputmode="decimal" placeholder="₽">
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
-      <h2>Ожидаемый доход (запасной)</h2>
-      <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:8px">Используется, только если во вкладке «Доходы» не заданы источники.</div><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>`;
+      ${c.income_sources>0?'':`<h2>Ожидаемый доход (запасной)</h2>
+      <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:8px">Используется, только если во вкладке «Доходы» не заданы источники.</div><input class="inp" type="number" inputmode="decimal" value="${s.expected_monthly_income||0}" onchange="saveInc(this.value)"></div>`}`;
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }

@@ -59,4 +59,6 @@ def capital_overview(db: Session) -> dict:
         "series": series, "delta": delta, "delta_days": delta_days,
         "from_month_start": from_month_start,
         "savings": savings, "fx": fx, "other": other,
+        "income_sources": db.query(models.Recurring).filter(
+            models.Recurring.type == "income", models.Recurring.active.is_(True)).count(),
     }
