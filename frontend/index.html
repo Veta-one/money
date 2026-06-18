@@ -46,13 +46,13 @@
   .v .cur{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
   h2{font-size:13px;font-weight:700;margin:20px 4px 9px;letter-spacing:.1px}
   .ccards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-  .catcard{background:var(--card);border-radius:16px;padding:12px;display:flex;gap:10px;align-items:center}
-  .catcard .cc-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
-  .catcard .cc-body{flex:1;min-width:0}
-  .catcard .cc-top{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+  .catcard{background:var(--card);border-radius:16px;padding:11px 12px}
+  .catcard .cc-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .catcard .cc-left{display:flex;align-items:center;gap:7px;flex:1;min-width:0}
+  .catcard .cc-ic{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:none}
   .catcard .cc-a{font-size:15px;font-weight:800;letter-spacing:-.3px}
-  .catcard .cc-p{font-size:12px;font-weight:700;color:var(--muted)}
-  .catcard .cc-n{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .catcard .cc-p{font-size:12px;font-weight:700;color:var(--muted);flex:none}
+  .catcard .cc-n{font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .chartcard{background:var(--card);border-radius:18px;padding:16px 14px 10px}
   .catlist{background:var(--card);border-radius:18px;padding:6px 16px}
   .cat{padding:12px 0;border-bottom:1px solid var(--line)}
@@ -798,10 +798,12 @@ async function loadAnalytics(){
       <h2>Структура расходов</h2>
       ${bc.length?`<div class="card">${hbar(bc.map(c=>({value:c.sum,color:color(c.name),name:c.name})), {title:'Всего', compact:true})}</div>
         <div class="ccards">`+bc.slice(0,8).map(c=>{const tot=bc.reduce((s,x)=>s+x.sum,0)||1,col=color(c.name);return `<div class="catcard">
-          <div class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),18)}</div>
-          <div class="cc-body">
-            <div class="cc-top"><span class="cc-a">${fmt(c.sum)} ₽</span><span class="cc-p">${Math.round(c.sum/tot*100)}%</span></div>
-            <div class="cc-n">${c.name}</div></div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
+          <div class="cc-top">
+            <span class="cc-left">
+              <span class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),14)}</span>
+              <span class="cc-a">${fmt(c.sum)} ₽</span></span>
+            <span class="cc-p">${Math.round(c.sum/tot*100)}%</span></div>
+          <div class="cc-n">${c.name}</div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
       <h2>Куда уходит больше всего</h2>
       ${tm.length?tm.map(m=>{const me=(m.merchant||'').replace(/'/g,'&#39;');return `<div class="row" style="cursor:pointer" onclick="openMerchOps('${me}')"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
         <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`}).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
