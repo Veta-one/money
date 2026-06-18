@@ -7,16 +7,17 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .. import models
 from ..db import SessionLocal
 from . import receipt as receipt_parser
 from .categorize import (categorize_items, categorize_one, category_by_name,
-                         category_names)
+                         category_names, classify_texts, rule_category_id)
 from .fns import LkdrClient, LkdrError
 from .llm import gemini
 from .qr import decode_qrs_from_bytes, parse_fns_qr
+from .statement import parse_statement
 
 _EMOJI = {"expense": "🧾", "income": "📥", "transfer": "🔄"}
 
@@ -149,6 +150,56 @@ async def ingest_voice(data: bytes) -> dict:
     res = await ingest_text(text)
     res["text"] = f"🎙️ «{text[:120]}»\n\n" + res.get("text", "")
     return res
+
+
+async def import_statement(content: bytes) -> dict:
+    """Импорт CSV-выписки: дедуп по номеру документа + склейка с чеками, категоризация."""
+    db = SessionLocal()
+    try:
+        rows = parse_statement(content)
+        if not rows:
+            return {"status": "error", "text": "📄 Не нашёл операций. Нужен CSV-выписка из Райффайзена."}
+        acc = _default_account(db)
+        # категоризируем продавцов-расходы пакетом (правила → LLM)
+        merchants = list({r["merchant"] for r in rows if r["type"] == "expense" and r["merchant"]})
+        cat_map: dict[str, int | None] = {}
+        unknown = []
+        for mname in merchants:
+            cid = rule_category_id(db, None, mname)
+            if cid:
+                cat_map[mname] = cid
+            else:
+                unknown.append(mname)
+        if unknown:
+            names = await classify_texts(unknown, category_names(db, ("expense",)))
+            for mname, cname in zip(unknown, names):
+                cobj = category_by_name(db, cname)
+                cat_map[mname] = cobj.id if cobj else None
+
+        imported = skipped = 0
+        for r in rows:
+            dk = f"stmt_{r['doc']}" if r["doc"] else f"stmt_{r['datetime'].isoformat()}_{r['amount']}"
+            if db.query(models.Transaction).filter_by(dedup_key=dk).first():
+                skipped += 1
+                continue
+            # склейка: если уже есть чек/операция на ту же сумму ±36ч — не дублируем
+            lo, hi = r["datetime"] - timedelta(hours=36), r["datetime"] + timedelta(hours=36)
+            cands = (db.query(models.Transaction)
+                     .filter(models.Transaction.datetime >= lo, models.Transaction.datetime <= hi).all())
+            if any(abs(c.base_amount_rub - r["amount"]) < 0.01 and c.source != "statement" for c in cands):
+                skipped += 1
+                continue
+            db.add(models.Transaction(
+                account_id=acc.id if acc else None, datetime=r["datetime"], amount=r["amount"],
+                currency=r["currency"], base_amount_rub=r["amount"], fx_rate=1.0, type=r["type"],
+                category_id=cat_map.get(r["merchant"]) if r["type"] == "expense" else None,
+                merchant=r["merchant"][:256], source="statement", status="confirmed", dedup_key=dk))
+            imported += 1
+        db.commit()
+        return {"status": "ok",
+                "text": f"📄 Выписка импортирована\nДобавлено: <b>{imported}</b> · пропущено (дубли/склейка): {skipped} из {len(rows)}"}
+    finally:
+        db.close()
 
 
 async def _ingest_vision(image: bytes) -> dict:

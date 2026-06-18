@@ -122,16 +122,26 @@ async def on_photo(m: Message):
 async def on_document(m: Message):
     if not _owner(m):
         return
-    if not (m.document.mime_type or "").startswith("image/"):
-        await m.answer("Пришли фото чека, текст или голосовое.")
-        return
-    note = await m.answer("Обрабатываю файл… ⏳")
-    try:
-        data = await _download(m.document.file_id)
-        await _reply(note, await ingest.ingest_photo(data))
-    except Exception as e:  # noqa: BLE001
-        log.exception("document")
-        await note.edit_text(f"⚠️ Не смог обработать файл: {e}")
+    doc = m.document
+    name = (doc.file_name or "").lower()
+    mime = doc.mime_type or ""
+    if mime.startswith("image/"):
+        note = await m.answer("Обрабатываю фото… ⏳")
+        try:
+            await _reply(note, await ingest.ingest_photo(await _download(doc.file_id)))
+        except Exception as e:  # noqa: BLE001
+            log.exception("doc image")
+            await note.edit_text(f"⚠️ Не смог обработать файл: {e}")
+    elif name.endswith(".csv") or "csv" in mime:
+        note = await m.answer("Импортирую выписку… ⏳")
+        try:
+            res = await ingest.import_statement(await _download(doc.file_id))
+            await note.edit_text(res["text"], parse_mode="HTML")
+        except Exception as e:  # noqa: BLE001
+            log.exception("doc csv")
+            await note.edit_text(f"⚠️ Не смог импортировать выписку: {e}")
+    else:
+        await m.answer("Пришли фото чека, CSV-выписку, текст или голосовое.")
 
 
 @dp.message(F.voice | F.audio)
