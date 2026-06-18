@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MONEY</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#f3f4f6; --card:#ffffff; --ink:#1b1c20; --text:#15161a; --muted:#8b909a;
@@ -12,7 +14,8 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;background:var(--bg);color:var(--text);
-    font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+    font-family:'Inter',-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+    letter-spacing:-.1px}
   body{padding:14px 14px 96px}
   .muted{color:var(--muted)}
   .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
@@ -21,15 +24,22 @@
   svg.ic{display:block}
   .hero{background:var(--ink);color:#fff;border-radius:24px;padding:22px 20px}
   .hero .label{font-size:13px;color:#a9adb6}
-  .hero .big{font-size:34px;font-weight:800;letter-spacing:-.5px;margin:6px 0 4px}
+  .hero .big{font-size:30px;font-weight:800;letter-spacing:-.6px;margin:6px 0 4px}
   .hero .big .cur{font-size:18px;color:#a9adb6;font-weight:700;margin-left:4px}
   .hero .sub{font-size:13px;color:#c7cad1}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
   .card{background:var(--card);border-radius:18px;padding:16px}
   .card .k{font-size:12px;color:var(--muted)}
-  .card .v{font-size:20px;font-weight:700;margin-top:6px}
+  .card .v{font-size:18px;font-weight:800;margin-top:6px;letter-spacing:-.3px}
   .v .cur{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
-  h2{font-size:14px;font-weight:700;margin:22px 4px 10px}
+  h2{font-size:13px;font-weight:700;margin:20px 4px 9px;letter-spacing:.1px}
+  .ccards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .catcard{background:var(--card);border-radius:16px;padding:13px 14px}
+  .catcard .cc-top{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+  .catcard .cc-a{font-size:15px;font-weight:800;letter-spacing:-.3px}
+  .catcard .cc-p{font-size:12px;font-weight:700;color:var(--muted)}
+  .catcard .cc-n{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .catcard .cc-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;margin-top:12px}
   .chartcard{background:var(--card);border-radius:18px;padding:16px 14px 10px}
   .catlist{background:var(--card);border-radius:18px;padding:6px 16px}
   .cat{padding:12px 0;border-bottom:1px solid var(--line)}
@@ -233,16 +243,24 @@ function barChart(data, w=330, h=144){
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
 }
-function donut(items, sz=148){
-  const r=sz/2-13, c=2*Math.PI*r, cx=sz/2, cy=sz/2;
-  const total=items.reduce((s,i)=>s+i.value,0)||1;
-  let off=0, segs='';
-  items.forEach(it=>{ const len=Math.max(0,it.value/total*c);
-    segs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="13" stroke-dasharray="${len} ${c-len}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;
-    off+=len; });
-  return `<svg viewBox="0 0 ${sz} ${sz}" width="${sz}" height="${sz}" style="flex:none">${segs}
+function donut(items, sz=216){
+  const data=(items||[]).filter(i=>i.value>0);
+  const cx=sz/2, cy=sz/2, sw=18, r=sz/2 - sw/2 - 28;
+  const C=2*Math.PI*r, total=data.reduce((s,i)=>s+i.value,0)||1;
+  const gap=data.length>1?Math.min(0.05*C,10):0;
+  let ring='', pills='', acc=0;
+  data.forEach(it=>{
+    const seg=it.value/total*C, len=Math.max(1,seg-gap);
+    ring+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    const a=((acc+seg/2)/C)*2*Math.PI - Math.PI/2, pr=r+sw/2+12;
+    const px=cx+pr*Math.cos(a), py=cy+pr*Math.sin(a), pct=Math.round(it.value/total*100);
+    if(pct>=4){ const w=pct>=10?30:25;
+      pills+=`<rect x="${(px-w/2).toFixed(1)}" y="${(py-10).toFixed(1)}" width="${w}" height="20" rx="10" fill="#fff" stroke="${it.color}" stroke-width="1.5"/><text x="${px.toFixed(1)}" y="${(py+4).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${it.color}">${pct}%</text>`; }
+    acc+=seg;
+  });
+  return `<svg viewBox="0 0 ${sz} ${sz}" width="100%" style="display:block;max-width:${sz}px;margin:0 auto">${ring}${pills}
     <text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" fill="#8b909a">всего</text>
-    <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="15" font-weight="800" fill="#15161a">${fmtK(total)}</text></svg>`;
+    <text x="${cx}" y="${cy+17}" text-anchor="middle" font-size="20" font-weight="800" fill="#15161a" letter-spacing="-0.5">${fmtK(total)}</text></svg>`;
 }
 function cashflowChart(data, w=330, h=160){
   const max=Math.max(1,...data.flatMap(d=>[d.income,d.expense]));
@@ -629,10 +647,11 @@ async function loadAnalytics(){
       <h2>Сравнение с прошлым периодом</h2>
       <div class="catlist">${cmpHtml}</div>
       <h2>Структура расходов</h2>
-      ${bc.length?`<div class="catlist">`+bc.map(c=>`<div class="cat"><div class="top">
-        <span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
-        <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR}</span></div>
-        <div class="track"><i style="width:${Math.round(c.sum/bcMax*100)}%;background:${color(c.name)}"></i></div></div>`).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
+      ${bc.length?`<div class="chartcard">${donut(bc.map(c=>({value:c.sum,color:color(c.name)})))}</div>
+        <div class="ccards">`+bc.slice(0,8).map(c=>{const tot=bc.reduce((s,x)=>s+x.sum,0)||1,col=color(c.name);return `<div class="catcard">
+          <div class="cc-top"><span class="cc-a">${fmt(c.sum)} ₽</span><span class="cc-p">${Math.round(c.sum/tot*100)}%</span></div>
+          <div class="cc-n">${c.name}</div>
+          <div class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),18)}</div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
       <h2>Куда уходит больше всего</h2>
       ${tm.length?tm.map(m=>`<div class="row"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
         <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
