@@ -280,25 +280,26 @@ function barChart(data, w=330, h=144){
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
 }
-function donut(items, sz=216){
+function hbar(items, opts){
   const data=(items||[]).filter(i=>i.value>0);
-  const cx=sz/2, cy=sz/2, sw=18, r=sz/2 - sw/2 - 28;
-  const C=2*Math.PI*r, total=data.reduce((s,i)=>s+i.value,0)||1;
-  const gap=data.length>1?Math.min(0.05*C,10):0;
-  let ring='', pills='', acc=0;
-  data.forEach(it=>{
-    const seg=it.value/total*C, len=Math.max(1,seg-gap);
-    ring+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 ${cx} ${cy})"/>`;
-    const a=((acc+seg/2)/C)*2*Math.PI - Math.PI/2, pr=r+sw/2+12;
-    const px=cx+pr*Math.cos(a), py=cy+pr*Math.sin(a), pct=Math.round(it.value/total*100);
-    if(pct>=4){ const w=pct>=10?30:25;
-      pills+=`<rect x="${(px-w/2).toFixed(1)}" y="${(py-10).toFixed(1)}" width="${w}" height="20" rx="10" fill="#fff" stroke="${it.color}" stroke-width="1.5"/><text x="${px.toFixed(1)}" y="${(py+4).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${it.color}">${pct}%</text>`; }
-    acc+=seg;
-  });
-  return `<svg viewBox="0 0 ${sz} ${sz}" width="100%" style="display:block;max-width:${sz}px;margin:0 auto">${ring}${pills}
-    <text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" fill="#8b909a">всего</text>
-    <text x="${cx}" y="${cy+17}" text-anchor="middle" font-size="20" font-weight="800" fill="#15161a" letter-spacing="-0.5">${fmtK(total)}</text></svg>`;
+  const total=data.reduce((s,i)=>s+i.value,0)||1;
+  const title=(opts&&opts.title)||'Всего';
+  const showLegend=!(opts&&opts.compact);
+  const segs=data.map(it=>{const pct=it.value/total*100;return `<div style="flex:${Math.max(0.6,pct).toFixed(2)};background:${it.color};min-width:3px"></div>`;}).join('');
+  const legend=showLegend?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+    ${data.map(it=>{const pct=Math.round(it.value/total*100);return `<div style="display:flex;align-items:center;gap:8px">
+      <span style="width:10px;height:10px;border-radius:3px;background:${it.color};flex:none"></span>
+      <span style="flex:1;font-size:13px">${it.name||''}</span>
+      <span style="font-size:12px;color:var(--muted);font-weight:600;min-width:32px;text-align:right">${pct}%</span>
+      <span style="font-size:13px;font-weight:700;min-width:60px;text-align:right">${fmt(it.value)} ₽</span></div>`}).join('')}</div>`:'';
+  return `<div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:12px;color:var(--muted)">${title}</span>
+      <span style="font-size:20px;font-weight:800;letter-spacing:-.5px">${fmt(total)} ₽</span></div>
+    <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--line);gap:2px">${segs}</div>
+    ${legend}</div>`;
 }
+function donut(items){ return hbar((items||[]).map(it=>({...it, name:it.name||''}))); }
 function cashflowChart(data, w=330, h=160){
   const max=Math.max(1,...data.flatMap(d=>[d.income,d.expense]));
   const n=data.length||1, gap=14, grp=(w-gap*(n-1))/n, bw=Math.max(5,grp/2-3), base=h-20, top=26;
@@ -388,12 +389,7 @@ async function loadCapital(){
           ${c.other!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Прочее (крипта, правки)</span><span style="font-weight:700">${c.other>=0?'+':'−'}${fmt(Math.abs(c.other))} ${CUR}</span></div>`:''}
         </div></div>`:''}
       ${(c.allocation_currency||[]).length?`<h2>Распределение по валюте</h2>
-      <div class="chartcard" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center">
-        ${donut((c.allocation_currency||[]).map(x=>({value:x.sum,color:x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name)})))}
-        <div style="flex:1;min-width:150px">${(()=>{const tot=(c.allocation_currency||[]).reduce((s,y)=>s+y.sum,0)||1;return (c.allocation_currency||[]).map(x=>{const col=x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name);return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
-          <span style="width:10px;height:10px;border-radius:3px;background:${col}"></span>
-          <span style="flex:1;font-size:13px">${x.name==='RUB'?'Рубли':x.name==='USD'?'Доллар (USDT/крипта)':x.name}</span>
-          <span style="font-size:13px;font-weight:700">${fmt(x.sum)} ₽ · ${Math.round(x.sum/tot*100)}%</span></div>`}).join('');})()}</div></div>`:''}
+      <div class="card">${hbar((c.allocation_currency||[]).map(x=>({value:x.sum, color:x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name), name:x.name==='RUB'?'Рубли':x.name==='USD'?'Доллар (USDT/крипта)':x.name})), {title:'Всего активов'})}</div>`:''}
       ${c.emergency&&c.emergency.months!=null?`<h2>Подушка безопасности</h2>
       <div class="card"><div class="v">${c.emergency.months} <span class="cur">мес. расходов</span></div>
         <div class="track" style="margin-top:10px"><i style="width:${Math.min(100,Math.round(c.emergency.months/c.emergency.target*100))}%;background:${c.emergency.months>=c.emergency.target?'var(--green)':'var(--ink)'}"></i></div>
@@ -800,7 +796,7 @@ async function loadAnalytics(){
       <h2>Сравнение с прошлым периодом</h2>
       <div class="catlist">${cmpHtml}</div>
       <h2>Структура расходов</h2>
-      ${bc.length?`<div class="chartcard">${donut(bc.map(c=>({value:c.sum,color:color(c.name)})))}</div>
+      ${bc.length?`<div class="card">${hbar(bc.map(c=>({value:c.sum,color:color(c.name),name:c.name})), {title:'Всего', compact:true})}</div>
         <div class="ccards">`+bc.slice(0,8).map(c=>{const tot=bc.reduce((s,x)=>s+x.sum,0)||1,col=color(c.name);return `<div class="catcard">
           <div class="cc-ic" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),18)}</div>
           <div class="cc-body">
@@ -858,11 +854,7 @@ async function loadIncome(){
           <button class="iconbtn" onclick="openIncEdit(${s.id})">${icon('edit',18)}</button>
           <button class="iconbtn" onclick="delIncome(${s.id})">${icon('trash',18)}</button></div></div>`;
     }).join(''):`<div class="empty">Источников дохода пока нет.<br>Добавь Шкулёв, Turnvoice, пособия — план дохода сложится сам.</div>`;
-    const bdHtml=bd.length?`<div class="chartcard" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center">
-        ${donut(bd.map(b=>({value:b.amount,color:color(b.name)})))}
-        <div style="flex:1;min-width:150px">${bd.map(b=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
-          <span style="width:10px;height:10px;border-radius:3px;background:${color(b.name)};flex:none"></span>
-          <span style="flex:1;font-size:13px">${b.name}</span><span style="font-size:13px;font-weight:700">${fmt(b.amount)} ₽</span></div>`).join('')}</div></div>`
+    const bdHtml=bd.length?`<div class="card">${hbar(bd.map(b=>({value:b.amount,color:color(b.name),name:b.name})), {title:'Всего за месяц'})}</div>`
       :`<div class="empty">В этом месяце доходов ещё не было.</div>`;
     document.getElementById('v-income').innerHTML=`
       <div class="head"><div class="hi">Доходы</div></div>
