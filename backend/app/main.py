@@ -22,6 +22,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine, get_session
 from .migrations import run_migrations
 from .security import current_user
+from .services.alerts import nudge_job
 from .services.analytics import analytics_overview
 from .services.backup import make_and_send_backup
 from .services.budget import budget_overview
@@ -73,6 +74,8 @@ async def lifespan(_app: FastAPI):
                           id="backup", replace_existing=True)
         scheduler.add_job(snapshot_job, "cron", hour=3, minute=0,
                           id="snapshot", replace_existing=True)
+        scheduler.add_job(nudge_job, "cron", hour=10, minute=30,
+                          id="nudge", replace_existing=True)
         scheduler.start()
     yield
     if scheduler.running:

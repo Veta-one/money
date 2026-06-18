@@ -16,6 +16,7 @@ from . import models
 from .config import settings
 from .db import SessionLocal
 from .services import ingest
+from .services.alerts import tx_alerts
 from .services.backup import make_and_send_backup
 from .services.categorize import learn_rule
 from .services.digests import build_daily, build_monthly, build_weekly
@@ -61,6 +62,18 @@ def _cat_keyboard(db, tx_id: int) -> InlineKeyboardMarkup:
 
 async def _reply(note: Message, res: dict) -> None:
     await note.edit_text(res.get("text") or "Готово", parse_mode="HTML", reply_markup=_kb(res))
+    tx_id = res.get("tx_id")
+    if tx_id:
+        db = SessionLocal()
+        try:
+            msgs = tx_alerts(db, tx_id)
+        finally:
+            db.close()
+        for msg in msgs:
+            try:
+                await note.answer(msg, parse_mode="HTML")
+            except Exception:  # noqa: BLE001
+                pass
 
 
 # ---------- команды и приём ----------

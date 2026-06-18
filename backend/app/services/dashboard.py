@@ -44,16 +44,16 @@ def get_dashboard(db: Session) -> dict:
     prev_cat = _sum_by_category(db, prev_start, month_start)
 
     cat_rows = (
-        db.query(models.Category.name,
+        db.query(models.Category.id, models.Category.name,
                  func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0).label("s"))
         .join(models.Transaction, models.Transaction.category_id == models.Category.id)
         .filter(models.Transaction.type == "expense",
                 models.Transaction.datetime >= month_start)
-        .group_by(models.Category.name)
+        .group_by(models.Category.id, models.Category.name)
         .order_by(func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0).desc())
         .limit(8).all()
     )
-    by_category = [{"name": n, "sum": round(float(s), 2)} for n, s in cat_rows]
+    by_category = [{"id": cid, "name": n, "sum": round(float(s), 2)} for cid, n, s in cat_rows]
     fc = category_forecast(db)
     for c in by_category:
         c["expected"] = fc.get(c["name"], 0.0)

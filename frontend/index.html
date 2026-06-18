@@ -293,7 +293,7 @@ async function loadDashboard(){
       ${months.some(m=>m.spent>0)?`<h2>Траты по месяцам</h2><div class="chartcard">${barChart(months)}</div>`:''}
       <h2>По категориям</h2>
       ${cats.length?`<div class="catlist">`+cats.map(c=>`
-        <div class="cat"><div class="top"><span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
+        <div class="cat" onclick="openCatOps(${c.id})" style="cursor:pointer"><div class="top"><span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
         <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR} ${dBadge(c.sum,c.prev,true)}</span></div>
         <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`).join('')+`</div>`
         :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
@@ -485,6 +485,7 @@ function renderOps(){
 }
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
+function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
 
 // ---- аналитика ----
 async function loadAnalytics(){
