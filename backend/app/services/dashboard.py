@@ -14,6 +14,7 @@ from .analytics import _sum_by_category
 from .fx import compute_net_worth
 from .income import expected_income_monthly
 from .planning import category_forecast, goals_monthly_plan, obligatory_monthly
+from .trends import category_sparkline
 
 
 def needs_review(t) -> bool:
@@ -75,6 +76,7 @@ def get_dashboard(db: Session) -> dict:
     for c in by_category:
         c["expected"] = fc.get(c["name"], 0.0)
         c["prev"] = round(prev_cat.get(c["name"], 0.0), 2)
+        c["sparkline"] = category_sparkline(db, c["id"], months=6)
     forecast_total = round(sum(fc.values()), 2)
 
     recent = (db.query(models.Transaction)

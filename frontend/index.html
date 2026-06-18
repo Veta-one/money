@@ -123,15 +123,38 @@
   .drow:last-child{border-bottom:none}
   .catchip{background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:5px}
   .catgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  /* плавная смена табов */
+  [id^="v-"]{animation:fadein .18s ease-out}
+  @keyframes fadein{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+  /* skeleton-loader */
+  .skel{background:linear-gradient(90deg,var(--line) 0%,#f7f8fa 50%,var(--line) 100%);
+    background-size:200% 100%;animation:shimmer 1.4s linear infinite;border-radius:8px}
+  html.dark .skel{background:linear-gradient(90deg,#2c2e35 0%,#3a3d45 50%,#2c2e35 100%);background-size:200% 100%}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .skel-hero{height:106px;border-radius:24px;margin-bottom:12px}
+  .skel-card{height:70px;border-radius:18px}
+  .skel-row{height:56px;border-radius:16px;margin-bottom:8px}
+  .skel-h2{height:14px;width:40%;margin:22px 4px 14px}
+  /* глобальный FAB «+» — quick add */
+  .fab-add{position:fixed;right:18px;bottom:84px;width:54px;height:54px;border-radius:18px;border:none;
+    background:var(--ink);color:#fff;box-shadow:0 12px 26px rgba(0,0,0,.25);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;z-index:45;transition:transform .12s}
+  .fab-add:active{transform:scale(.92)}
+  html.dark .fab-add{background:#3a3d45}
+  /* heatmap */
+  .heat{display:grid;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;gap:3px;padding:4px 0}
+  .heat-cell{width:11px;height:11px;border-radius:3px;background:var(--line)}
+  .heat-leg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:10px;justify-content:flex-end}
+  .heat-leg-sq{width:10px;height:10px;border-radius:3px}
 </style>
 </head>
 <body>
-  <div id="v-dashboard"><div class="loader">Загрузка…</div></div>
-  <div id="v-ops" style="display:none"><div class="loader">Загрузка…</div></div>
-  <div id="v-analytics" style="display:none"><div class="loader">Загрузка…</div></div>
-  <div id="v-income" style="display:none"><div class="loader">Загрузка…</div></div>
-  <div id="v-capital" style="display:none"><div class="loader">Загрузка…</div></div>
-  <div id="v-goals" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div id="v-dashboard"></div>
+  <div id="v-ops" style="display:none"></div>
+  <div id="v-analytics" style="display:none"></div>
+  <div id="v-income" style="display:none"></div>
+  <div id="v-capital" style="display:none"></div>
+  <div id="v-goals" style="display:none"></div>
   <div class="nav">
     <button id="t-dashboard" class="active" onclick="tab('dashboard')"></button>
     <button id="t-ops" onclick="tab('ops')"></button>
@@ -141,6 +164,7 @@
     <button id="t-goals" onclick="tab('goals')"></button>
   </div>
   <div class="toast" id="toast"></div>
+  <button id="fab-add" class="fab-add" onclick="openTxForm()" title="Добавить операцию"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
   <div id="ov" class="ov" style="display:none" onclick="if(event.target.id==='ov')closeOv()"><div id="sheet" class="sheet"></div></div>
 <script>
 const tg = window.Telegram?.WebApp;
@@ -232,11 +256,101 @@ const CAT_ICON=[
 function catIcon(name){ const o=_catIcon[name]; if(o) return o; const n=(name||'').toLowerCase(); for(const [keys,ic] of CAT_ICON){ if(keys.some(k=>n.includes(k))) return ic; } return 'tag'; }
 
 const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b'];
+// Бренд-цвета РФ-банков — узнавание счёта с первого взгляда.
+const BANK_BRAND=[
+  [['тинькоф','t-bank','т-банк','tinkoff'],'#FFDD2D'],
+  [['сбер','sber'],'#21A038'],
+  [['райф','raif'],'#FED800'],
+  [['альфа','alfa'],'#EF3124'],
+  [['втб','vtb'],'#0A2973'],
+  [['газпром'],'#0079C2'],
+  [['озон','ozon'],'#005BFF'],
+  [['яндекс','yandex'],'#FFCC00'],
+  [['почта'],'#5A3B91'],
+  [['открыти'],'#1FB4E8'],
+  [['мтс'],'#E30613'],
+  [['крипт','usdt','usdc'],'#26A17B'],
+  [['наличн','cash'],'#22c55e'],
+  [['депозит','вклад'],'#8b5cf6'],
+];
 function color(s){ const o=_catColor[s]; if(o) return o; let h=0; for(const c of (s||'')) h=(h*31+c.charCodeAt(0))>>>0; return PAL[h%PAL.length]; }
+function bankColor(name){ const n=(name||'').toLowerCase(); for(const [keys,c] of BANK_BRAND){ if(keys.some(k=>n.includes(k))) return c; } return color(name||'счёт'); }
 const _catColor={};   // имя → выбранный цвет (заполняется при загрузке категорий)
 function catIconOverride(name){ return _catIcon[name] || null; }
 const _catIcon={};
 function tint(hex){ return hex+'22'; }
+// Спарклайн: маленький SVG-график по массиву чисел.
+function spark(arr, w=64, h=18, col){
+  const a=(arr||[]).map(Number); if(a.length<2) return '';
+  const max=Math.max(...a), min=Math.min(...a), rng=(max-min)||1;
+  const c=col||'var(--muted)';
+  const pts=a.map((v,i)=>`${(i*w/(a.length-1)).toFixed(1)},${(h-2-(v-min)/rng*(h-4)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:inline-block;vertical-align:middle"><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+// Skeleton-loader: ставится перед await api(), убирается рендером.
+const SKEL={
+  dashboard:`<div class="head"><div class="skel" style="height:18px;width:120px;border-radius:6px"></div></div>
+    <div class="skel skel-hero"></div>
+    <div class="grid2"><div class="skel skel-card"></div><div class="skel skel-card"></div></div>
+    <div class="grid2"><div class="skel skel-card"></div><div class="skel skel-card"></div></div>
+    <div class="skel skel-h2"></div>
+    <div class="skel" style="height:148px;border-radius:18px;margin-bottom:8px"></div>
+    <div class="skel skel-h2"></div>
+    <div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>`,
+  ops:`<div class="head"><div class="skel" style="height:18px;width:120px;border-radius:6px"></div></div>
+    <div class="grid2"><div class="skel skel-card"></div><div class="skel skel-card"></div></div>
+    <div class="skel skel-h2"></div>
+    ${Array(6).fill('<div class="skel skel-row"></div>').join('')}`,
+  analytics:`<div class="head"><div class="skel" style="height:18px;width:120px;border-radius:6px"></div></div>
+    <div class="skel skel-h2"></div><div class="skel" style="height:96px;border-radius:18px"></div>
+    <div class="skel skel-h2"></div><div class="skel" style="height:170px;border-radius:18px"></div>
+    <div class="skel skel-h2"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>`,
+  income:`<div class="head"><div class="skel" style="height:18px;width:120px;border-radius:6px"></div></div>
+    <div class="skel skel-hero"></div>
+    <div class="skel skel-h2"></div>
+    <div class="skel" style="height:120px;border-radius:18px;margin-bottom:8px"></div>
+    <div class="skel" style="height:120px;border-radius:18px"></div>`,
+  capital:`<div class="head"><div class="skel" style="height:18px;width:120px;border-radius:6px"></div></div>
+    <div class="skel skel-hero"></div>
+    <div class="skel" style="height:96px;border-radius:18px;margin-bottom:8px"></div>
+    <div class="skel skel-h2"></div><div class="skel" style="height:144px;border-radius:18px"></div>`,
+  goals:`<div class="head"><div class="skel" style="height:18px;width:120px;border-radius:6px"></div></div>
+    <div class="skel skel-hero"></div>
+    <div class="skel skel-h2"></div>
+    <div class="skel" style="height:120px;border-radius:18px;margin-bottom:8px"></div>
+    <div class="skel" style="height:120px;border-radius:18px"></div>`,
+};
+function showSkel(kind){ const el=document.getElementById('v-'+kind); if(el) el.innerHTML=SKEL[kind]||''; }
+// Heatmap: грид 7×N недель + цветовая шкала по интенсивности.
+function hmap(data, opts){
+  const pts=(data&&data.points)||[]; if(!pts.length) return '';
+  const map=Object.fromEntries(pts.map(p=>[p.date,p.spent]));
+  const mx=Math.max(1,...pts.map(p=>p.spent));
+  const days=(opts&&opts.days)||365, today=new Date();
+  // выровняем end на воскресенье (последняя колонка), считаем недели назад
+  const end=new Date(today); end.setHours(0,0,0,0);
+  const start=new Date(end); start.setDate(end.getDate()-(days-1));
+  // двигаем start на ближайший понедельник назад чтобы было ровно 7 строк
+  const dow0=(start.getDay()+6)%7;  // пн=0
+  start.setDate(start.getDate()-dow0);
+  const accent=(opts&&opts.color)||'#ff4d54';
+  // вычислим цвет в 5 ступеней
+  const level=v=>v<=0?0:v<mx*0.15?1:v<mx*0.35?2:v<mx*0.65?3:4;
+  const op=l=>l===0?0:[0,.15,.35,.6,1][l];
+  const cells=[];
+  for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+    const key=d.toISOString().slice(0,10), v=map[key]||0, l=level(v);
+    const title=`${new Date(key).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}: ${fmt(v)} ₽`;
+    cells.push(`<div class="heat-cell" title="${title}" style="${l>0?`background:${accent};opacity:${op(l)}`:''}"></div>`);
+  }
+  const total=pts.reduce((s,p)=>s+p.spent,0);
+  const monthsAgo=Math.round((days/30)*10)/10;
+  return `<div class="card" style="overflow-x:auto"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <span class="k">Календарь трат · ${monthsAgo} мес</span>
+      <span style="font-size:12px;color:var(--muted)">всего ${fmt(total)} ₽</span></div>
+    <div class="heat" style="min-width:${Math.ceil(cells.length/7)*14}px">${cells.join('')}</div>
+    <div class="heat-leg"><span>меньше</span>${[0,1,2,3,4].map(l=>`<span class="heat-leg-sq" style="${l>0?`background:${accent};opacity:${op(l)}`:'background:var(--line)'}"></span>`).join('')}<span>больше</span></div></div>`;
+}
 
 async function api(path, opts){
   const o=opts||{}; o.headers=Object.assign({'X-Telegram-Init-Data':tg?.initData||'','Content-Type':'application/json'},o.headers||{});
@@ -261,9 +375,12 @@ function tab(t){
   if(t!==_tab) tap('light');
   _tab=t;
   for(const x of TABS){
-    document.getElementById('v-'+x).style.display=x===t?'block':'none';
+    const el=document.getElementById('v-'+x);
+    el.style.display=x===t?'block':'none';
+    if(x===t){ el.style.animation='none'; el.offsetHeight; el.style.animation=''; }  // рестарт fade
     document.getElementById('t-'+x).classList.toggle('active',x===t);
   }
+  showSkel(t);
   ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[t]();
 }
 function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[_tab](); }
@@ -385,10 +502,10 @@ async function loadDashboard(){
         <div class="t2" style="margin-top:8px;color:var(--muted)">потрачено ${fmt(d.spent)} из ≈ ${fmt(d.forecast_total)} ${CUR}</div></div>`:''}
       ${months.some(m=>m.spent>0)?`<h2>Траты по месяцам</h2><div class="chartcard">${barChart(months)}</div>`:''}
       <h2>По категориям</h2>
-      ${cats.length?`<div class="catlist">`+cats.map(c=>`
-        <div class="cat" onclick="openCatOps(${c.id})" style="cursor:pointer"><div class="top"><span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
-        <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR} ${dBadge(c.sum,c.prev,true)}</span></div>
-        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${color(c.name)}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`).join('')+`</div>`
+      ${cats.length?`<div class="catlist">`+cats.map(c=>{const col=color(c.name);return `
+        <div class="cat" onclick="openCatOps(${c.id})" style="cursor:pointer"><div class="top"><span class="cdot" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),16)}</span>
+        <span class="nm">${c.name}</span>${(c.sparkline&&c.sparkline.length>1)?`<span style="margin-right:6px">${spark(c.sparkline,52,16,col)}</span>`:''}<span class="am">${fmt(c.sum)} ${CUR} ${dBadge(c.sum,c.prev,true)}</span></div>
+        <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${col}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`}).join('')+`</div>`
         :`<div class="empty">Трат за месяц нет.<br>Пришли боту чек, текст или голосовое.</div>`}
       <h2>Последние операции</h2>
       ${rec.length?groupedTx(rec):`<div class="empty">Операций пока нет.</div>`}
@@ -431,8 +548,8 @@ async function loadCapital(){
           ${c.eta_months?`<div class="t2" style="margin-top:6px;color:var(--muted)">при +${fmt(c.monthly_save)} ₽/мес ≈ ${c.eta_months} мес (до ${new Date(c.eta_date).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})})</div>`:(c.net_worth>=c.target?`<div class="t2" style="margin-top:6px;color:var(--green)">Цель достигнута</div>`:'')}`:''}
         <div class="meta" style="margin-top:10px"><span class="muted">Отложено в этом месяце</span><span style="font-weight:700;color:${(c.saved_month||0)>=0?'var(--green)':'var(--red)'}">${(c.saved_month||0)>=0?'+':'−'}${fmt(Math.abs(c.saved_month||0))} ${CUR}</span></div></div>
       <h2>Счета</h2>
-      ${accs.map(ac=>{const col=color(ac.name);return `<div class="row">
-        <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>
+      ${accs.map(ac=>{const col=bankColor(ac.name);return `<div class="row">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(ac.name)==='tag'?'wallet':catIcon(ac.name),20)}</div>
         <div class="mid"><div class="t1">${ac.name}</div>
         <div class="t2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
         <input class="num" type="number" inputmode="decimal" value="${ac.balance}" onchange="saveBal(${ac.id},this.value)" style="width:92px">
@@ -776,7 +893,7 @@ async function saveTx(){
 // ---- аналитика ----
 async function loadAnalytics(){
   try{
-    const [d,b,ch]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup')]);
+    const [d,b,ch,hm]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup'), api('/api/heatmap?days=180').catch(()=>({points:[]}))]);
     _bud=b.items||[];
     const t=d.totals||{}, cf=d.cashflow||[], cmp=d.compare||[], bc=d.by_category||[], tm=d.top_merchants||[], subs=d.subscriptions||{items:[]};
     const pc=(v,l)=>`<button class="chip${_anPeriod===v?' on':''}" onclick="setAnPeriod('${v}')">${l}</button>`;
@@ -808,6 +925,7 @@ async function loadAnalytics(){
       <div class="head"><div class="hi">Аналитика</div></div>
       <h2 style="margin-top:6px">Финансовое здоровье</h2>
       ${chHtml}
+      ${(hm.points||[]).length?`<h2>Календарь трат</h2>${hmap(hm,{days:180})}`:''}
       ${insHtml}
       <h2>Бюджет · ${new Date(b.month+'-01').toLocaleDateString('ru-RU',{month:'long'})}</h2>
       ${budCard}
@@ -1044,7 +1162,11 @@ async function createSrcFromTx(){
     toast('Создано и привязано'); refreshActive(); openTx(_pickId);
   }catch(e){ toast('Ошибка'); }
 }
-function closeOv(){ document.getElementById('ov').style.display='none'; }
+function closeOv(){ document.getElementById('ov').style.display='none'; toggleFab(true); }
+function toggleFab(show){ const f=document.getElementById('fab-add'); if(f) f.style.display=show?'flex':'none'; }
+// автоматически прячем FAB пока открыт оверлей
+new MutationObserver(()=>{const ov=document.getElementById('ov'); toggleFab(!ov || ov.style.display==='none'); })
+  .observe(document.getElementById('ov'),{attributes:true,attributeFilter:['style']});
 
 // ---- настройки ----
 const ICON_SET=['cart','cup','bus','car','flame','kid','tool','bag','home','scissors','pill','book','shirt','film','beer','smoke','gift','leaf','phone','tv','bank','box','wallet','coin','swap','tag','percent','pig','adjust','target','receipt','cash'];

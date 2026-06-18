@@ -24,12 +24,12 @@ const M = {
     net_worth: 854000, net_worth_delta: 38400,
     needs_review: 3, forecast_total: 168000,
     by_category: [
-      { id: 1, name: 'Продукты', sum: 28400, prev: 31200 },
-      { id: 2, name: 'Кафе и рестораны', sum: 12300, prev: 9800 },
-      { id: 3, name: 'Транспорт', sum: 8200, prev: 7400 },
-      { id: 4, name: 'Подписки', sum: 4900, prev: 4900 },
-      { id: 5, name: 'Дети', sum: 6700, prev: 5400 },
-      { id: 6, name: 'Мед. услуги, лекарства', sum: 3600, prev: 1200 },
+      { id: 1, name: 'Продукты', sum: 28400, prev: 31200, sparkline: [24000, 26500, 31200, 29800, 31200, 28400] },
+      { id: 2, name: 'Кафе и рестораны', sum: 12300, prev: 9800, sparkline: [7800, 8400, 9100, 9800, 11200, 12300] },
+      { id: 3, name: 'Транспорт', sum: 8200, prev: 7400, sparkline: [6900, 7100, 7800, 7400, 7900, 8200] },
+      { id: 4, name: 'Подписки', sum: 4900, prev: 4900, sparkline: [4700, 4700, 4900, 4900, 4900, 4900] },
+      { id: 5, name: 'Дети', sum: 6700, prev: 5400, sparkline: [5100, 5400, 5800, 5400, 6200, 6700] },
+      { id: 6, name: 'Мед. услуги, лекарства', sum: 3600, prev: 1200, sparkline: [800, 1200, 900, 1200, 2400, 3600] },
     ],
     recent: [
       { id: 101, dt: '2026-06-17T18:30:00', merchant: 'Пятёрочка', amount: 740, currency: 'RUB', type: 'expense', category: 'Продукты', base_rub: 740 },
@@ -171,14 +171,27 @@ const M = {
   },
   '/api/accounts': {
     accounts: [
-      { id: 1, name: 'Основная карта', type: 'card', currency: 'RUB', owner: 'me', balance: 215000, rub: 215000 },
-      { id: 2, name: 'Наличные', type: 'cash', currency: 'RUB', owner: 'me', balance: 32000, rub: 32000 },
-      { id: 3, name: 'Депозит', type: 'deposit', currency: 'RUB', owner: 'me', balance: 380000, rub: 380000 },
+      { id: 1, name: 'Тинькофф Black', type: 'card', currency: 'RUB', owner: 'me', balance: 215000, rub: 215000 },
+      { id: 2, name: 'Сбер Mir', type: 'card', currency: 'RUB', owner: 'me', balance: 48000, rub: 48000 },
+      { id: 3, name: 'Альфа-вклад', type: 'deposit', currency: 'RUB', owner: 'me', balance: 380000, rub: 380000 },
       { id: 4, name: 'Крипта (USDT)', type: 'crypto', currency: 'USD', owner: 'me', balance: 2117, rub: 154000 },
-      { id: 5, name: 'Карта партнёра', type: 'external', currency: 'RUB', owner: 'wife', balance: 73000, rub: 73000 },
+      { id: 5, name: 'Райффайзен (партнёр)', type: 'external', currency: 'RUB', owner: 'wife', balance: 73000, rub: 73000 },
     ],
     net_worth: 854000, usd_rate: 72.75,
   },
+  '/api/heatmap': (() => {
+    const today = new Date('2026-06-18');
+    const pts = [];
+    for (let i = 180; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const dow = d.getDay();
+      const base = dow === 0 || dow === 6 ? 1.8 : 1.0;
+      const noise = Math.abs(Math.sin(i * 1.3) + Math.cos(i * 0.7));
+      const v = Math.round(base * 1500 * (0.3 + noise));
+      if (v > 500 && (i * 17) % 100 > 15) pts.push({ date: d.toISOString().slice(0, 10), spent: v });
+    }
+    return { days: 180, points: pts, max: Math.max(...pts.map(p => p.spent)) };
+  })(),
   '/api/debts': { debts: [], owed_to_me: 0, i_owe: 0 },
   '/api/deposits': {
     deposits: [

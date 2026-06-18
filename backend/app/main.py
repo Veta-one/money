@@ -34,8 +34,8 @@ from .services.dashboard import get_dashboard, needs_review
 from .services.deposits import deposits_overview
 from .services.digests import send_digest
 from .services.income import income_overview, learn_income_alias
-from .services.trends import (monthly_spending, networth_series, snapshot_job,
-                              take_networth_snapshot)
+from .services.trends import (daily_spending, monthly_spending, networth_series,
+                              snapshot_job, take_networth_snapshot)
 from .services.fx import compute_net_worth, get_usd_rub, to_rub, usd_history
 from .services.planning import detect_recurring, goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
@@ -238,6 +238,16 @@ async def fx_history(currency: str = "USD", days: int = 365,
     pts = usd_history(db, days)
     return {"currency": "USD", "days": days, "points": pts,
             "latest": pts[-1]["rate"] if pts else None}
+
+
+@app.get("/api/heatmap")
+async def heatmap(days: int = 365,
+                  user: dict = Depends(current_user),
+                  db: Session = Depends(get_session)):
+    days = max(30, min(int(days), 365 * 2))
+    pts = daily_spending(db, days)
+    mx = max((p["spent"] for p in pts), default=0.0)
+    return {"days": days, "points": pts, "max": round(mx, 2)}
 
 
 class TargetIn(BaseModel):
