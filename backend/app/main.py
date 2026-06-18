@@ -22,6 +22,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine, get_session
 from .migrations import run_migrations
 from .security import current_user
+from .services.analytics import analytics_overview
 from .services.backup import make_and_send_backup
 from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard
@@ -101,6 +102,12 @@ async def dashboard(user: dict = Depends(current_user), db: Session = Depends(ge
 @app.get("/api/trends")
 async def trends(user: dict = Depends(current_user), db: Session = Depends(get_session)):
     return {"months": monthly_spending(db), "networth": networth_series(db)}
+
+
+@app.get("/api/analytics")
+async def analytics(period: str = "month", user: dict = Depends(current_user),
+                    db: Session = Depends(get_session)):
+    return analytics_overview(db, period)
 
 
 @app.get("/api/transactions")

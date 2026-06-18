@@ -95,12 +95,14 @@
 <body>
   <div id="v-dashboard"><div class="loader">Загрузка…</div></div>
   <div id="v-ops" style="display:none"><div class="loader">Загрузка…</div></div>
+  <div id="v-analytics" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-income" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-capital" style="display:none"><div class="loader">Загрузка…</div></div>
   <div id="v-goals" style="display:none"><div class="loader">Загрузка…</div></div>
   <div class="nav">
     <button id="t-dashboard" class="active" onclick="tab('dashboard')"></button>
     <button id="t-ops" onclick="tab('ops')"></button>
+    <button id="t-analytics" onclick="tab('analytics')"></button>
     <button id="t-income" onclick="tab('income')"></button>
     <button id="t-capital" onclick="tab('capital')"></button>
     <button id="t-goals" onclick="tab('goals')"></button>
@@ -113,7 +115,7 @@ try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#f3f4f6'); tg?.setBackgrou
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
 const CUR='₽';
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null;
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month';
 
 // ---- Tabler icons ----
 const P = {
@@ -126,6 +128,7 @@ const P = {
   list:'<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M5 6v.01"/><path d="M5 12v.01"/><path d="M5 18v.01"/>',
   search:'<path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/>',
   cash:'<path d="M7 9m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/><path d="M14 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 9v-2a2 2 0 0 0 -2 -2h-10a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h2"/>',
+  chart:'<path d="M3 13a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M9 9a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M15 5a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M4 20h14"/>',
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
   trash:'<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3h6v3"/>',
   x:'<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
@@ -189,11 +192,12 @@ function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err"
 
 document.getElementById('t-dashboard').innerHTML=icon('dashboard',20)+'<span class="lbl">Главная</span>';
 document.getElementById('t-ops').innerHTML=icon('list',20)+'<span class="lbl">Операции</span>';
+document.getElementById('t-analytics').innerHTML=icon('chart',20)+'<span class="lbl">Аналитика</span>';
 document.getElementById('t-income').innerHTML=icon('cash',20)+'<span class="lbl">Доходы</span>';
 document.getElementById('t-capital').innerHTML=icon('wallet',20)+'<span class="lbl">Капитал</span>';
 document.getElementById('t-goals').innerHTML=icon('target',20)+'<span class="lbl">Цели</span>';
 
-const TABS=['dashboard','ops','income','capital','goals'];
+const TABS=['dashboard','ops','analytics','income','capital','goals'];
 let _tab='dashboard';
 function tab(t){
   _tab=t;
@@ -201,9 +205,9 @@ function tab(t){
     document.getElementById('v-'+x).style.display=x===t?'block':'none';
     document.getElementById('t-'+x).classList.toggle('active',x===t);
   }
-  ({dashboard:loadDashboard,ops:loadOps,income:loadIncome,capital:loadCapital,goals:loadGoals})[t]();
+  ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[t]();
 }
-function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,income:loadIncome,capital:loadCapital,goals:loadGoals})[_tab](); }
+function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[_tab](); }
 
 function barChart(data, w=330, h=144){
   const max=Math.max(1,...data.map(d=>d.spent));
@@ -227,6 +231,19 @@ function donut(items, sz=148){
   return `<svg viewBox="0 0 ${sz} ${sz}" width="${sz}" height="${sz}" style="flex:none">${segs}
     <text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="11" fill="#8b909a">всего</text>
     <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="15" font-weight="800" fill="#15161a">${fmtK(total)}</text></svg>`;
+}
+function cashflowChart(data, w=330, h=152){
+  const max=Math.max(1,...data.flatMap(d=>[d.income,d.expense]));
+  const n=data.length||1, gap=14, grp=(w-gap*(n-1))/n, bw=Math.max(5,grp/2-3), base=h-20, top=14;
+  let s='';
+  data.forEach((d,i)=>{
+    const x=i*(grp+gap);
+    const ih=Math.max(2,d.income/max*(base-top)), eh=Math.max(2,d.expense/max*(base-top));
+    s+=`<rect x="${x}" y="${base-ih}" width="${bw}" height="${ih}" rx="4" fill="var(--green)"/>`;
+    s+=`<rect x="${x+bw+3}" y="${base-eh}" width="${bw}" height="${eh}" rx="4" fill="var(--ink)"/>`;
+    s+=`<text x="${x+grp/2}" y="${h-4}" text-anchor="middle" font-size="10" fill="#8b909a">${new Date(d.ym+'-01').toLocaleDateString('ru-RU',{month:'short'})}</text>`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
 }
 
 async function loadDashboard(){
@@ -434,6 +451,49 @@ function renderOps(){
 }
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
+
+// ---- аналитика ----
+async function loadAnalytics(){
+  try{
+    const d=await api('/api/analytics?period='+_anPeriod);
+    const t=d.totals||{}, cf=d.cashflow||[], cmp=d.compare||[], bc=d.by_category||[], tm=d.top_merchants||[], subs=d.subscriptions||{items:[]};
+    const pc=(v,l)=>`<button class="chip${_anPeriod===v?' on':''}" onclick="setAnPeriod('${v}')">${l}</button>`;
+    const cmpHtml=cmp.length?cmp.map(c=>{const up=c.delta>0,col=up?'var(--red)':'var(--green)';return `<div class="cat"><div class="top">
+        <span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
+        <span class="nm">${c.name}</span><span class="am" style="color:${col}">${up?'+':'−'}${fmt(Math.abs(c.delta))} ${CUR}</span></div>
+        <div class="t2" style="margin-top:4px;color:var(--muted)">${fmt(c.prev)} → ${fmt(c.cur)} ${CUR}${c.delta_pct!=null?' · '+(up?'+':'')+c.delta_pct+'%':' · новое'}</div></div>`}).join(''):`<div class="empty">Нет данных для сравнения.</div>`;
+    const bcMax=Math.max(1,...bc.map(c=>c.sum));
+    document.getElementById('v-analytics').innerHTML=`
+      <div class="head"><div class="hi">Аналитика</div></div>
+      <div class="filt">${pc('month','Месяц')}${pc('quarter','Квартал')}${pc('year','Год')}</div>
+      <div class="grid2" style="margin-top:0">
+        <div class="card"><div class="k">Доход</div><div class="v" style="color:var(--green)">${fmt(t.income)}<span class="cur">${CUR}</span></div></div>
+        <div class="card"><div class="k">Расход</div><div class="v">${fmt(t.expense)}<span class="cur">${CUR}</span></div></div></div>
+      <div class="card" style="margin-top:12px"><div class="k">Накоплено за период · норма сбережений ${t.savings_rate||0}%</div>
+        <div class="v" style="color:${(t.net||0)>=0?'var(--green)':'var(--red)'}">${(t.net||0)>=0?'+':'−'}${fmt(Math.abs(t.net||0))}<span class="cur">${CUR}</span></div></div>
+      <h2>Доходы и расходы по месяцам</h2>
+      <div class="chartcard">${cashflowChart(cf)}
+        <div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:12px;color:var(--muted)">
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--green);margin-right:5px"></span>доход</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink);margin-right:5px"></span>расход</span></div></div>
+      <h2>Сравнение с прошлым периодом</h2>
+      <div class="catlist">${cmpHtml}</div>
+      <h2>Структура расходов</h2>
+      ${bc.length?`<div class="catlist">`+bc.map(c=>`<div class="cat"><div class="top">
+        <span class="cdot" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon(catIcon(c.name),16)}</span>
+        <span class="nm">${c.name}</span><span class="am">${fmt(c.sum)} ${CUR}</span></div>
+        <div class="track"><i style="width:${Math.round(c.sum/bcMax*100)}%;background:${color(c.name)}"></i></div></div>`).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
+      <h2>Куда уходит больше всего</h2>
+      ${tm.length?tm.map(m=>`<div class="row"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
+        <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
+      <h2>Подписки и регулярные</h2>
+      <div class="card"><div class="k">В месяц на регулярные</div><div class="v">${fmt(subs.total)}<span class="cur">${CUR}</span></div></div>
+      ${(subs.items||[]).length?`<div style="margin-top:8px">`+subs.items.map(x=>`<div class="row"><div class="sq" style="background:${tint(color(x.name))};color:${color(x.name)}">${icon(catIcon(x.name),20)}</div>
+        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.period==='yearly'?'в год':x.period==='weekly'?'в неделю':'в месяц'}</div></div>
+        <div class="amt">${fmt(x.amount)} ${CUR}</div></div>`).join('')+`</div>`:''}`;
+  }catch(e){ e.message==='AUTH'?authErr('analytics'):document.getElementById('v-analytics').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
+}
+function setAnPeriod(p){ _anPeriod=p; loadAnalytics(); }
 
 // ---- доходы по источникам ----
 async function loadIncome(){
