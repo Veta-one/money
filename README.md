@@ -1,65 +1,203 @@
 # MONEY — личный финансовый помощник
 
-Telegram-бот (ввод: фото чеков / текст / голос) + веб мини-апп (дашборд) + аналитика.
-Для одного пользователя. Подробная спецификация — в [SPEC.md](SPEC.md).
+Telegram-бот + веб мини-апп для учёта личных финансов одного пользователя.
+Принимает чеки (фото с QR → ФНС), текст, голос и банковские выписки, сам всё
+категоризирует нейросетью и показывает дашборд: траты, капитал, цели, прогнозы.
 
-## Архитектура (кратко)
-- **Backend** — Python, FastAPI + aiogram в одном процессе (бот через webhook).
-- **БД** — SQLite (WAL) через SQLAlchemy ORM. Один пользователь → не нужен отдельный сервер БД; легко бэкапить; при необходимости меняется на Postgres сменой `DATABASE_URL`.
-- **Frontend** — React + Telegram WebApp SDK (папка `frontend/`, добавим на Фазе 1).
-- **Деплой** — Docker Compose: `app` (FastAPI) + `nginx` (статика + TLS-прокси). На слабом VPS можно перейти на bare systemd.
+- Бот: **@money_veta_bot** · Мини-апп: **https://money.vetaone.site** · Репозиторий: private `Veta-one/money`
+- Боевой сервер: `166.88.159.91` (контейнер `money_app` за общим Caddy)
 
-## Безопасность
-- Вход в мини-апп — по Telegram `initData` (HMAC-подпись токеном бота), проверяется на сервере (`app/security.py`).
-- **Вайтлист на один `OWNER_TG_ID`** — бот и API отвечают только владельцу.
-- Webhook защищён `WEBHOOK_SECRET` (заголовок Telegram).
-- Секреты — в `.env` (в `.gitignore`), не в коде. Файл БД и токены ФНС — в `backend/data/` (бэкапить эту папку).
-- Бэкап БД — зашифрованный, в приватный Telegram-канал.
-- Все вызовы LLM/ФНС — только на сервере; ключи наружу не уходят.
+> README — актуальное состояние сервиса. [SPEC.md](SPEC.md) — исходная спецификация/видение.
 
-## Структура
+---
+
+## Возможности
+
+**Ввод (бот):**
+- 🧾 Фото чека с QR → распознаём QR → API ФНС `/scan` → состав по товарам.
+- 📷 Фото без QR (ценник/квитанция) → vision-нейросеть определяет трату.
+- ✍️ Текст: «такси 300», «зарплата 135000», «дал Пете 5000 в долг».
+- 🎙️ Голос → расшифровка (Gemini) → как текст.
+- 📄 CSV-выписка Райффайзена (файлом) → импорт со склейкой и категоризацией.
+
+**Обработка:**
+- Категоризация по позициям: правила (`CategoryRule`) → LLM (Gemini) → порог уверенности; **учится** на правках.
+- Склейка/дедуп: чек обогащает банковскую операцию; повторы не дублируются (по `fn+fd+fp` и по сумме±время).
+- Возвраты (чек `operationType=2`) → минус-расход. Долги (занял/дал) → влияют на капитал, не на траты.
+
+**Мини-апп (3 вкладки):**
+- **Главная** — safe-to-spend, потрачено/капитал, прогноз месяца, график трат по месяцам, разбивка по категориям (иконки), последние операции; тап операции → правка категорий по позициям.
+- **Капитал** — net worth (мультивалюта по курсу ЦБ), счета с правкой баланса, долги, ожидаемый доход.
+- **Цели** — прогресс/прогноз достижения, создание целей, регулярные платежи (мес/год) + авто-детект кандидатов.
+
+**Расчёты:** safe-to-spend = доход − траты − обязательные − взносы в цели; net worth в рублях; прогноз по категориям (среднее за 3 мес); персональная норма сбережений.
+
+**Уведомления (по расписанию, МSK):** дайджест ежедневно 21:00 / еженедельно вс 20:00 / месячно 1-го 10:00. Команды `/report`, `/week`, `/month`. Бэкап БД 03:30, снимок капитала 03:00.
+
+---
+
+## Архитектура
+
+```
+Telegram ──webhook──▶ FastAPI (один процесс) ──▶ SQLite (WAL)
+   │                     ├─ aiogram (бот)
+   │                     ├─ REST API (/api/*) для мини-аппа
+   │                     ├─ APScheduler (дайджесты, бэкап, снимок капитала)
+   │                     └─ services: qr, fns, llm, categorize, ingest, …
+   ▼
+Caddy (общий на сервере) ──TLS──▶ money.vetaone.site → money_app:8000
+```
+
+- **Один процесс** Python: FastAPI отдаёт API + статику мини-аппа и принимает Telegram-webhook (без polling). На слабом VPS экономно.
+- **БД — SQLite (WAL)** через SQLAlchemy. Один пользователь → отдельный сервер БД не нужен, бэкап = один файл; при росте меняется на Postgres сменой `DATABASE_URL`.
+- **Frontend** — один файл `frontend/index.html` (ванильный HTML/CSS/JS + Telegram WebApp SDK, иконки Tabler инлайн). Отдаётся самим FastAPI (StaticFiles). Без сборки — надёжно на слабом сервере.
+- **Деплой** — Docker (контейнер `money_app`) в существующей сети Caddy `my_server_caddy_net`; **свой nginx/порты 80-443 не поднимаем** — маршрут даёт общий Caddy.
+
+## Стек
+Python 3.12 · FastAPI · aiogram 3 · SQLAlchemy 2 · APScheduler · httpx · opencv+pyzbar (QR) · cryptography (бэкап) · Docker · Caddy. Frontend — vanilla JS + Telegram WebApp SDK.
+
+---
+
+## Структура репозитория
+
 ```
 backend/
   app/
-    main.py            # FastAPI + webhook
-    config.py          # настройки из .env
-    db.py              # engine + сессия (SQLite WAL)
-    models.py          # схема БД (SPEC §3)
-    security.py        # проверка Telegram initData + вайтлист
-    bot.py             # aiogram-хендлеры
-    seed_categories.py # заливка categories.json в БД
+    main.py            # FastAPI: API мини-аппа, webhook, lifespan, планировщик
+    config.py          # настройки из .env (pydantic-settings)
+    db.py              # SQLAlchemy engine + сессия (SQLite WAL)
+    models.py          # схема БД (все таблицы)
+    security.py        # проверка Telegram initData + вайтлист владельца
+    bot.py             # aiogram: приём фото/текст/голос/CSV, команды, инлайн-правка категории
+    seed_categories.py # заливка categories.json
+    seed_accounts.py   # заведение счетов
     services/
-      qr.py            # распознавание QR с фото
-      fns.py           # клиент API ФНС (lkdr.nalog.ru)
+      qr.py            # распознавание QR (opencv + pyzbar)
+      fns.py           # клиент API ФНС lkdr.nalog.ru (логин/refresh/scan)
+      receipt.py       # парсинг ответа ФНС /scan → товары
+      statement.py     # парсер CSV-выписки Райффайзена
+      ingest.py        # оркестратор приёма (фото/текст/голос/выписка → транзакции)
+      categorize.py    # категоризация: правила → Gemini → порог; обучение
+      llm.py           # Gemini (ротация ключей на 429/5xx) + OpenRouter
+      dashboard.py     # сводка для дашборда
+      planning.py      # цели, прогноз, обязательные, авто-детект регулярных
+      fx.py            # курс USD (ЦБ) → рубли, net worth
+      trends.py        # траты по месяцам, снимки net worth
+      digests.py       # тексты и отправка дайджестов
+      backup.py        # зашифрованный бэкап БД в Telegram
+      settings_store.py# key-value настройки в БД
   requirements.txt
   .env.example
-  data/                # SQLite + tokens.json (gitignored)
-deploy/                # Dockerfile, docker-compose.yml, nginx.conf
+  data/                # SQLite (money.db) + tokens.json ФНС — gitignored, бэкапим
+frontend/index.html    # мини-апп (vanilla, Telegram WebApp)
+deploy/                # Dockerfile, docker-compose.yml, caddy-money.conf
 categories.json        # дерево категорий пользователя
-SPEC.md                # спецификация
+.github/workflows/     # автодеплой (не активен — нужен scope workflow)
+SPEC.md                # исходная спецификация
 ```
+
+---
+
+## Модель данных (SQLite)
+
+`accounts` (счета: card/cash/deposit/crypto/external, валюта, владелец me/wife, баланс) ·
+`categories` (expense/income/transfer, иерархия) ·
+`transactions` (сумма+валюта+`base_amount_rub`, тип, категория, продавец, источник, `dedup_key`) ·
+`transaction_items` (позиции чека, своя категория) ·
+`receipts` (фискальные данные: fn/fd/fp, JSON ответа ФНС) ·
+`category_rules` (выученные правила) · `recurring` (регулярные, period monthly/yearly) ·
+`goals` · `debts` · `deposits` · `net_worth_snapshots` · `fx_rates` · `external_reports` (для сверки жены) · `settings` (key-value).
+
+---
+
+## API (всё под `current_user`: заголовок `X-Telegram-Init-Data`, только владелец)
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/api/health` | проверка (без авторизации) |
+| GET | `/api/dashboard` | сводка главной |
+| GET | `/api/trends` | траты по месяцам + снимки капитала |
+| GET | `/api/accounts` · POST `/api/accounts/{id}` | счета + правка баланса |
+| GET/POST | `/api/settings` | ожидаемый доход |
+| GET | `/api/categories` | категории (частые сверху) |
+| GET `/api/tx/{id}` · POST `/api/tx/{id}` · POST `/api/items/{id}` | детали операции, смена категории операции/позиции |
+| GET/POST `/api/goals` · POST `/api/goals/{id}` · DELETE | цели |
+| GET/POST `/api/recurring` · DELETE · POST `/api/recurring/dismiss` | регулярные + скрытие кандидатов |
+| GET/POST `/api/debts` · POST `/api/debts/{id}/close` · DELETE | долги |
+| POST | `/webhook` | приём Telegram (проверка `WEBHOOK_SECRET`) |
+
+Бот-команды: `/start`, `/report`, `/week`, `/month`, `/backup`.
+
+---
+
+## ФНС (lkdr.nalog.ru)
+
+- Логин по SMS защищён Yandex SmartCaptcha и режется по не-RU IP (`blocked.ip`) → делается **вручную в браузере** на российском IP, токены импортируются в `data/tokens.json` (`token`, `refreshToken`, `sourceDeviceId`).
+- `/scan` и refresh работают с любого IP (в т.ч. US-сервер). Refresh-токен долгоживущий → ручной логин редко.
+- ⚠️ Суммы в ответе `/scan` приходят **в рублях** (float), не в копейках.
+- Если ФНС начнёт блокировать IP сервера — задать `FNS_PROXY` (RU-прокси), применится только к запросам ФНС.
+
+## LLM
+
+- **Gemini** (прямые ключи Google AI, `GEMINI_KEYS` через запятую) — голос, vision, парсинг текста, категоризация. Ротация ключей на 429/5xx. Модель `GEMINI_MODEL` (сейчас `gemini-2.5-flash`).
+- **OpenRouter** (`OPENROUTER_PAID_KEY`, `PAID_MODEL`) — для тяжёлой аналитики.
+- Все вызовы — на сервере; ключи наружу не уходят.
+
+## Безопасность
+
+- Аутентификация мини-аппа — Telegram `initData` (HMAC токеном бота, `app/security.py`), **вайтлист одного `OWNER_TG_ID`**; чужим — 401/403.
+- Webhook — секрет `WEBHOOK_SECRET` (заголовок Telegram).
+- Секреты в `.env` (gitignored). `tokens.json`, БД, фото чеков, референсы — не в гите.
+- Бэкап БД — зашифрован (Fernet, ключ из `BACKUP_PASSPHRASE`), уходит в личку владельца.
+
+---
+
+## Конфигурация (`backend/.env`, см. `.env.example`)
+
+`BOT_TOKEN`, `OWNER_TG_ID`, `WEBHOOK_SECRET`, `PUBLIC_URL` · `DATABASE_URL` ·
+`FNS_TOKENS_PATH`, `FNS_PROXY` · `GEMINI_KEYS`, `GEMINI_MODEL`, `OPENROUTER_PAID_KEY`, `PAID_MODEL` ·
+`BACKUP_CHAT_ID`, `BACKUP_PASSPHRASE` · `BASE_CURRENCY`, `EXPECTED_MONTHLY_INCOME`, `TIMEZONE`.
+
+## Деплой / обновление (боевой сервер)
+
+Сервер: `/root/money` (клон репо, read-only deploy-key), общий Caddy маршрутизирует поддомен.
+
+```bash
+# обновить прод (вручную):
+ssh root@166.88.159.91
+cd /root/money && git pull --ff-only
+cd deploy && docker compose up -d --build
+```
+
+- Caddy: блок `money.vetaone.site → money_app:8000` в `/home/your_user/my_server/caddy_config/Caddyfile`
+  (см. `deploy/caddy-money.conf`), reload: `docker exec caddy_dispatcher caddy reload --config /etc/caddy/Caddyfile`.
+- Контейнер ограничен `mem_limit 512m` (защита соседних сервисов на VPS).
+- Webhook ставится автоматически на старте (по `PUBLIC_URL`).
+- Сидинг при первом запуске: `docker compose exec app python -m app.seed_categories` и `python -m app.seed_accounts`.
+- Автодеплой (GitHub Actions, `.github/workflows/deploy.yml`) готов, но **не активен** — нужен `gh auth refresh -h github.com -s workflow` + секреты репозитория.
 
 ## Локальный запуск (dev)
+
 ```bash
 cd backend
-python -m venv .venv && . .venv/bin/activate    # Windows: .venv\Scripts\activate
+python -m venv .venv && .venv\Scripts\activate     # Linux/mac: . .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # заполни BOT_TOKEN, OWNER_TG_ID, WEBHOOK_SECRET
+copy .env.example .env        # заполнить BOT_TOKEN, OWNER_TG_ID, WEBHOOK_SECRET, GEMINI_KEYS …
 python -m app.seed_categories ../categories.json
-uvicorn app.main:app --reload
-# проверка: GET http://localhost:8000/api/health
+python -m app.seed_accounts
+uvicorn app.main:app --reload   # http://localhost:8000/api/health
 ```
+Перед коммитом фронта: `node --check` извлечённого `<script>` (ошибка в JS вешает весь мини-апп).
 
-## Деплой на VPS
-1. Установить Docker + docker-compose, склонировать репо.
-2. `cp backend/.env.example backend/.env` и заполнить (BOT_TOKEN, OWNER_TG_ID, WEBHOOK_SECRET, PUBLIC_URL=https://домен, ключи LLM, бэкап).
-3. Прописать домен в `deploy/nginx.conf`, получить сертификат (`certbot`), раскомментировать блок 443.
-4. `cd deploy && docker compose up -d --build`.
-5. Залить категории: `docker compose exec app python -m app.seed_categories`.
-6. Webhook Telegram выставляется автоматически при старте (по `PUBLIC_URL`).
+## Бэкап / восстановление
 
-## Что нужно от тебя для запуска
-- Домен (привязать к VPS).
-- Токен бота от @BotFather + твой `OWNER_TG_ID` (узнать у @userinfobot).
-- Доступ/характеристики VPS (ОС, RAM) — чтобы выбрать Docker vs bare.
-- ID приватного канала для бэкапов + ключи OpenRouter (можно позже).
+- Авто: ежедневно 03:30 шифрованный дамп БД (`money_YYYYMMDD_HHMM.db.gz.enc`) в личку; вручную — `/backup`.
+- Восстановить: расшифровать паролем (`BACKUP_PASSPHRASE`, Fernet) → gunzip → положить как `data/money.db`.
+
+---
+
+## Статус (роадмап)
+
+**Готово:** ингест (чеки/текст/голос/выписка) · категоризация с обучением + правка по позициям · дашборд с иконками и графиком · капитал (мультивалюта, долги, net worth) · safe-to-spend · цели + прогноз · регулярные + авто-детект · прогноз по категориям · дайджесты · бэкап · возвраты · редизайн под референсы.
+
+**Осталось (зависит от данных/решений):** сверка счёта жены (нужны её отчёты) · персональная инфляция (нужна история чеков) · клик по месяцу → детали · автодеплой (scope) · чистка эмодзи в ответах бота · Alembic-миграции.
