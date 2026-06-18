@@ -685,8 +685,10 @@ function renderTxForm(){
       <input id="tf-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма" style="flex:2" value="${_txf.amount||''}">
       <select id="tf-c" class="inp" style="flex:1"><option value="RUB"${_txf.cur==='USD'?'':' selected'}>RUB</option><option value="USD"${_txf.cur==='USD'?' selected':''}>USD</option></select></div>
     ${_txf.type!=='transfer'?`<select id="tf-cat" class="inp" style="margin-bottom:8px"><option value="">Категория (необязательно)</option>${cats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`:''}
-    <input id="tf-m" class="inp" placeholder="${isInc?'Источник/откуда':'Продавец/описание'}" style="margin-bottom:8px" value="${(_txf.merchant||'').replace(/"/g,'&quot;')}">
-    <select id="tf-acc" class="inp" style="margin-bottom:8px"><option value="">Счёт (необязательно)</option>${_accs.map(a=>`<option value="${a.id}">${a.name}${a.currency!=='RUB'?' ('+a.currency+')':''}</option>`).join('')}</select>
+    <input id="tf-m" class="inp" placeholder="${_txf.type==='transfer'?'Описание перевода':isInc?'Источник/откуда':'Продавец/описание'}" style="margin-bottom:8px" value="${(_txf.merchant||'').replace(/"/g,'&quot;')}">
+    <select id="tf-acc" class="inp" style="margin-bottom:8px"><option value="">${_txf.type==='transfer'?'Со счёта':'Счёт (необязательно)'}</option>${_accs.map(a=>`<option value="${a.id}">${a.name}${a.currency!=='RUB'?' ('+a.currency+')':''}</option>`).join('')}</select>
+    ${_txf.type==='transfer'?`<select id="tf-acc2" class="inp" style="margin-bottom:8px"><option value="">На счёт</option>${_accs.map(a=>`<option value="${a.id}">${a.name}${a.currency!=='RUB'?' ('+a.currency+')':''}</option>`).join('')}</select>`:''}
+    <input id="tf-note" class="inp" placeholder="Заметка (необязательно)" style="margin-bottom:8px" value="${(_txf.note||'').replace(/"/g,'&quot;')}">
     <input id="tf-d" class="inp" type="date" style="margin-bottom:12px" value="${today}">
     <button class="btn full" onclick="saveTx()">Добавить</button>`;
 }
@@ -699,10 +701,13 @@ function txfType(t){
 async function saveTx(){
   const amount=parseFloat(document.getElementById('tf-a').value);
   if(!amount){ toast('Сумма'); return; }
+  const note=(document.getElementById('tf-note').value||'').trim();
   const body={type:_txf.type, amount:amount, currency:document.getElementById('tf-c').value,
-    merchant:(document.getElementById('tf-m').value||'').trim()||null, dt:document.getElementById('tf-d').value||null};
+    merchant:(document.getElementById('tf-m').value||'').trim()||null, note:note||null,
+    dt:document.getElementById('tf-d').value||null};
   const cat=document.getElementById('tf-cat'); if(cat&&cat.value) body.category_id=parseInt(cat.value);
   const acc=document.getElementById('tf-acc'); if(acc&&acc.value) body.account_id=parseInt(acc.value);
+  const acc2=document.getElementById('tf-acc2'); if(acc2&&acc2.value) body.counterparty_account_id=parseInt(acc2.value);
   try{ await api('/api/tx',{method:'POST',body:JSON.stringify(body)}); toast('Добавлено'); closeOv(); loadOps(); }catch(e){ toast('Ошибка'); }
 }
 
@@ -882,10 +887,18 @@ function renderDetail(d){
           ${catchipHtml('item',it.id,it.category)}</div>`).join('')
       : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>${catchipHtml('tx',d.id,d.category)}</div>`;
   }
+  const noteHtml=`<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
+    <div class="t2" style="color:var(--muted)">Заметка</div>
+    <div style="display:flex;gap:8px"><input id="tx-note" class="inp" placeholder="например: для отчёта…" value="${(d.note||'').replace(/"/g,'&quot;')}" style="flex:1">
+      <button class="btn" onclick="saveTxNote(${d.id})">OK</button></div></div>`;
   document.getElementById('sheet').innerHTML=`<div class="sheeth">
       <div><div class="t1">${d.merchant||'Операция'}</div><div class="t2">${fmt(Math.abs(d.amount))} ${CUR} · ${new Date(d.dt).toLocaleDateString('ru-RU')}</div></div>
-      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}`;
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}${noteHtml}`;
   document.getElementById('ov').style.display='flex';
+}
+async function saveTxNote(id){
+  try{ await api('/api/tx/'+id+'/note',{method:'POST',body:JSON.stringify({note:document.getElementById('tx-note').value})});
+    toast('Сохранено'); }catch(e){ toast('Ошибка'); }
 }
 function openPick(kind,id,parentId){ _pickKind=kind; _pickId=id;
   const cats=kind==='inccat'?_incCats:_cats;

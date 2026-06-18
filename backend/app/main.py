@@ -763,7 +763,7 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
                     .filter(models.Recurring.type == "income", models.Recurring.active.is_(True))
                     .order_by(models.Recurring.name).all()]
     return {"id": t.id, "merchant": t.merchant, "amount": t.amount, "currency": t.currency,
-            "dt": t.datetime.isoformat(), "type": t.type, "source": t.source,
+            "dt": t.datetime.isoformat(), "type": t.type, "source": t.source, "note": t.note,
             "category_id": t.category_id, "category": cname(t.category_id), "items": items,
             "recurring_id": t.recurring_id, "sources": src_list}
 
@@ -849,6 +849,7 @@ class TxIn(BaseModel):
     currency: str = "RUB"
     category_id: int | None = None
     account_id: int | None = None
+    counterparty_account_id: int | None = None
     merchant: str | None = None
     note: str | None = None
     dt: str | None = None
@@ -872,12 +873,28 @@ async def create_tx(body: TxIn, user: dict = Depends(current_user),
         amount=amt, currency=cur, base_amount_rub=base,
         fx_rate=(base / amt if amt else 1.0),
         category_id=body.category_id, account_id=body.account_id,
+        counterparty_account_id=body.counterparty_account_id,
         merchant=(body.merchant or None), note=(body.note or None),
         datetime=when, source="manual", status="confirmed",
     )
     db.add(t)
     db.commit()
     return {"id": t.id}
+
+
+class NoteIn(BaseModel):
+    note: str | None = None
+
+
+@app.post("/api/tx/{tx_id}/note")
+async def set_tx_note(tx_id: int, body: NoteIn,
+                      user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    t = db.get(models.Transaction, tx_id)
+    if not t:
+        raise HTTPException(404, "no tx")
+    t.note = (body.note or "").strip()[:500] or None
+    db.commit()
+    return {"ok": True}
 
 
 # Статика мини-аппа — ПОСЛЕ всех /api и /webhook (mount на "/" перехватывает остальное).
