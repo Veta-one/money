@@ -250,6 +250,17 @@ function cashflowChart(data, w=330, h=160){
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
 }
+function lineChart(data, w=330, h=120){
+  if(data.length<2) return '';
+  const vals=data.map(d=>d.total), min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
+  const pad=12, base=h-18, top=12, X=i=>pad+i*(w-2*pad)/(data.length-1), Y=v=>top+(1-(v-min)/rng)*(base-top);
+  const pts=data.map((d,i)=>`${X(i).toFixed(1)},${Y(d.total).toFixed(1)}`).join(' ');
+  let s=`<polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  s+=`<circle cx="${X(data.length-1)}" cy="${Y(data[data.length-1].total)}" r="3.5" fill="var(--ink)"/>`;
+  s+=`<text x="${pad}" y="${h-3}" font-size="10" fill="#8b909a">${new Date(data[0].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
+  s+=`<text x="${w-pad}" y="${h-3}" text-anchor="end" font-size="10" fill="#8b909a">${new Date(data[data.length-1].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
+}
 
 async function loadDashboard(){
   try{
@@ -299,13 +310,22 @@ async function loadDashboard(){
 
 async function loadCapital(){
   try{
-    const [a,s,dbt]=await Promise.all([api('/api/accounts'),api('/api/settings'),api('/api/debts')]);
+    const [a,s,dbt,c]=await Promise.all([api('/api/accounts'),api('/api/settings'),api('/api/debts'),api('/api/capital')]);
     const accs=a.accounts||[], debts=dbt.debts||[]; _debtDir='owed_to_me';
+    const per=c.from_month_start?'за месяц':'за '+c.delta_days+' дн.';
     document.getElementById('v-capital').innerHTML=`
       <div class="head"><div class="hi">Капитал</div></div>
       <div class="hero"><div class="label">Чистый капитал</div>
-        <div class="big">${fmt(a.net_worth)}<span class="cur">${CUR}</span></div>
-        <div class="sub">сведено к рублю · $1 = ${fmt(a.usd_rate)} ${CUR} (ЦБ)</div></div>
+        <div class="big">${fmt(c.net_worth)}<span class="cur">${CUR}</span></div>
+        <div class="sub">$1 = ${fmt(c.usd_rate)} ${CUR} (ЦБ)${c.delta!=null?' · '+(c.delta>=0?'↑ +':'↓ −')+fmt(Math.abs(c.delta))+' ₽ '+per:''}</div></div>
+      ${(c.series||[]).length>=2?`<h2>Динамика капитала</h2><div class="chartcard">${lineChart(c.series)}</div>`:''}
+      ${c.delta!=null?`<div class="card" style="margin-top:12px"><div class="k">Прирост ${per}</div>
+        <div class="v" style="color:${c.delta>=0?'var(--green)':'var(--red)'}">${c.delta>=0?'+':'−'}${fmt(Math.abs(c.delta))}<span class="cur">${CUR}</span></div>
+        <div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Сбережения</span><span style="font-weight:700;color:${c.savings>=0?'var(--green)':'var(--red)'}">${c.savings>=0?'+':'−'}${fmt(Math.abs(c.savings))} ${CUR}</span></div>
+          ${c.fx!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Курс $</span><span style="font-weight:700;color:${c.fx>=0?'var(--green)':'var(--red)'}">${c.fx>=0?'+':'−'}${fmt(Math.abs(c.fx))} ${CUR}</span></div>`:''}
+          ${c.other!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Прочее (крипта, правки)</span><span style="font-weight:700">${c.other>=0?'+':'−'}${fmt(Math.abs(c.other))} ${CUR}</span></div>`:''}
+        </div></div>`:''}
       <h2>Счета</h2>
       ${accs.map(ac=>{const col=color(ac.name);return `<div class="row">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon('wallet',20)}</div>

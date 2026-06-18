@@ -25,6 +25,7 @@ from .security import current_user
 from .services.analytics import analytics_overview
 from .services.backup import make_and_send_backup
 from .services.budget import budget_overview
+from .services.capital import capital_overview
 from .services.categorize import learn_rule
 from .services.dashboard import get_dashboard
 from .services.digests import send_digest
@@ -194,6 +195,11 @@ async def accounts(user: dict = Depends(current_user), db: Session = Depends(get
             "owner": a.owner, "balance": a.balance,
             "rub": to_rub(a.balance, a.currency, db)} for a in rows]
     return {"accounts": out, "net_worth": compute_net_worth(db), "usd_rate": round(get_usd_rub(db), 2)}
+
+
+@app.get("/api/capital")
+async def capital(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return capital_overview(db)
 
 
 class BalanceIn(BaseModel):
