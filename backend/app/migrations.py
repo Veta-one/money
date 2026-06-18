@@ -35,6 +35,7 @@ def run_migrations(engine: Engine) -> None:
         _add_column(conn, "transactions", "recurring_id", "recurring_id INTEGER")
         _add_column(conn, "goals", "account_id", "account_id INTEGER")
         _add_column(conn, "debts", "paid", "paid FLOAT DEFAULT 0")
+        _add_column(conn, "categories", "color", "color VARCHAR(16)")
 
         # индексы под выборки операций/доходов (datetime уже индексирован моделью)
         for name, ddl in (

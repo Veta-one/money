@@ -45,6 +45,7 @@ class Category(Base):
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
     type: Mapped[str] = mapped_column(String(16))          # expense|income|transfer
     icon: Mapped[str | None] = mapped_column(String(32))
+    color: Mapped[str | None] = mapped_column(String(16))   # hex, иначе автоцвет по имени
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
     children: Mapped[list["Category"]] = relationship()

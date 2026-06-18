@@ -143,11 +143,18 @@
   <div id="ov" class="ov" style="display:none" onclick="if(event.target.id==='ov')closeOv()"><div id="sheet" class="sheet"></div></div>
 <script>
 const tg = window.Telegram?.WebApp;
-const _isDark=(tg?.colorScheme==='dark')||window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-if(_isDark) document.documentElement.classList.add('dark');
-const _bgColor=_isDark?'#15161a':'#f3f4f6';
-try{ tg?.ready(); tg?.expand(); tg?.setHeaderColor?.(_bgColor); tg?.setBackgroundColor?.(_bgColor); }catch(e){}
-try{ tg?.onEvent?.('themeChanged', ()=>{ const dark=tg.colorScheme==='dark'; document.documentElement.classList.toggle('dark',dark); const bg=dark?'#15161a':'#f3f4f6'; tg.setHeaderColor?.(bg); tg.setBackgroundColor?.(bg); refreshActive(); }); }catch(e){}
+// Тема: 'auto' (по Telegram), 'light', 'dark'. По умолчанию — светлая.
+let _themePref = localStorage.getItem('money.theme') || 'light';
+function applyTheme(){
+  const dark = _themePref==='dark' || (_themePref==='auto' && tg?.colorScheme==='dark');
+  document.documentElement.classList.toggle('dark', dark);
+  const bg = dark?'#15161a':'#f3f4f6';
+  try{ tg?.setHeaderColor?.(bg); tg?.setBackgroundColor?.(bg); }catch(e){}
+}
+applyTheme();
+try{ tg?.ready(); tg?.expand(); }catch(e){}
+try{ tg?.onEvent?.('themeChanged', ()=>{ if(_themePref==='auto'){ applyTheme(); refreshActive(); } }); }catch(e){}
+function setTheme(p){ _themePref=p; localStorage.setItem('money.theme',p); applyTheme(); refreshActive(); }
 function tap(s){ try{ tg?.HapticFeedback?.impactOccurred?.(s||'light'); }catch(e){} }
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(n||0));
 const fmtK = n => { n=Math.round(n||0); return n>=1000 ? (Math.round(n/100)/10+'к').replace('.',',') : ''+n; };
@@ -169,6 +176,8 @@ const P = {
   list:'<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M5 6v.01"/><path d="M5 12v.01"/><path d="M5 18v.01"/>',
   search:'<path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6 -6"/>',
   cash:'<path d="M7 9m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/><path d="M14 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 9v-2a2 2 0 0 0 -2 -2h-10a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h2"/>',
+  gear:'<path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/>',
+  arrow:'<path d="M5 12l14 0"/><path d="M13 18l6 -6"/><path d="M13 6l6 6"/>',
   chart:'<path d="M3 13a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M9 9a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M15 5a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"/><path d="M4 20h14"/>',
   edit:'<path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"/><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z"/><path d="M16 5l3 3"/>',
   filter:'<path d="M4 4h16v2.172a2 2 0 0 1 -.586 1.414l-4.414 4.414v7l-6 2v-8.5l-4.48 -4.928a2 2 0 0 1 -.52 -1.345v-2.243z"/>',
@@ -219,10 +228,13 @@ const CAT_ICON=[
   [['кешбэк'],'coin'],[['процент'],'percent'],[['продал'],'tag'],
   [['депозит','вклад','накоплен'],'pig'],[['коррект'],'adjust'],
 ];
-function catIcon(name){ const n=(name||'').toLowerCase(); for(const [keys,ic] of CAT_ICON){ if(keys.some(k=>n.includes(k))) return ic; } return 'tag'; }
+function catIcon(name){ const o=_catIcon[name]; if(o) return o; const n=(name||'').toLowerCase(); for(const [keys,ic] of CAT_ICON){ if(keys.some(k=>n.includes(k))) return ic; } return 'tag'; }
 
 const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b'];
-function color(s){ let h=0; for(const c of (s||'')) h=(h*31+c.charCodeAt(0))>>>0; return PAL[h%PAL.length]; }
+function color(s){ const o=_catColor[s]; if(o) return o; let h=0; for(const c of (s||'')) h=(h*31+c.charCodeAt(0))>>>0; return PAL[h%PAL.length]; }
+const _catColor={};   // имя → выбранный цвет (заполняется при загрузке категорий)
+function catIconOverride(name){ return _catIcon[name] || null; }
+const _catIcon={};
 function tint(hex){ return hex+'22'; }
 
 async function api(path, opts){
@@ -320,7 +332,8 @@ async function loadDashboard(){
     const name=tg?.initDataUnsafe?.user?.first_name||'';
     const cats=d.by_category||[], mx=Math.max(1,...cats.map(c=>c.sum)), rec=d.recent||[], months=(t.months||[]);
     document.getElementById('v-dashboard').innerHTML=`
-      <div class="head"><div><div class="hi">Привет${name?', '+name:''}</div><div class="sub">${d.month}</div></div></div>
+      <div class="head"><div><div class="hi">Привет${name?', '+name:''}</div><div class="sub">${d.month}</div></div>
+        <button class="iconbtn" onclick="openSettings()" title="Настройки">${icon('gear',20)}</button></div>
       <div class="hero">
         <div class="label">Свободно до конца месяца</div>
         <div class="big">${fmt(d.safe_to_spend)}<span class="cur">${CUR}</span></div>
@@ -586,7 +599,7 @@ function opsQS(){
 async function loadOps(reset){
   if(reset!==false){ _ops.offset=0; _ops.items=[]; }
   try{
-    if(!_cats.length){ try{ _cats=(await api('/api/categories')).categories||[]; }catch(e){} }
+    if(!_cats.length){ try{ await loadCats(); }catch(e){} }
     const r=await api('/api/transactions?'+opsQS());
     _ops.items=_ops.items.concat(r.transactions||[]);
     _ops.more=r.has_more; _ops.count=r.count; _ops.se=r.sum_expense; _ops.si=r.sum_income;
@@ -660,8 +673,11 @@ function renderOps(){
     ${_opsBulk&&_opsSel.size?`<button class="fab" onclick="opsBulkPick()">Назначить категорию · ${_opsSel.size}</button>`:''}`;
 }
 function opsToggleFilt(){ _opsFiltOpen=!_opsFiltOpen; renderOps(); }
+function applyCatMaps(cats){ for(const c of (cats||[])){ if(c.color) _catColor[c.name]=c.color; if(c.icon) _catIcon[c.name]=c.icon; } }
+async function loadCats(){ const r=await api('/api/categories'); _cats=r.categories||[]; applyCatMaps(_cats); return _cats; }
+async function loadIncCats(){ const r=await api('/api/categories?type=income'); _incCats=r.categories||[]; applyCatMaps(_incCats); return _incCats; }
 async function openOpsCat(){
-  if(!_cats.length){ try{_cats=(await api('/api/categories')).categories||[];}catch(e){} }
+  if(!_cats.length){ try{await loadCats();}catch(e){} }
   const chips=`<button class="catpick" style="background:var(--bg);color:var(--text)" onclick="opsPickCat('')">${icon('list',16)}<span>Все категории</span></button>`
     +_cats.map(c=>`<button class="catpick" style="background:${tint(color(c.name))};color:${color(c.name)}" onclick="opsPickCat('${c.id}')">${icon(catIcon(c.name),16)}<span>${c.name}</span></button>`).join('');
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Категория</div>
@@ -688,8 +704,8 @@ async function opsBulkSave(catId){
     toast('Обновлено '+r.updated); _opsSel.clear(); _opsBulk=false; closeOv(); loadOps(); }catch(e){ toast('Ошибка'); }
 }
 async function openTxForm(){
-  if(!_cats.length){ try{_cats=(await api('/api/categories')).categories||[];}catch(e){} }
-  if(!_incCats.length){ try{_incCats=(await api('/api/categories?type=income')).categories||[];}catch(e){} }
+  if(!_cats.length){ try{await loadCats();}catch(e){} }
+  if(!_incCats.length){ try{await loadIncCats();}catch(e){} }
   if(!_accs.length){ try{_accs=((await api('/api/accounts')).accounts)||[];}catch(e){} }
   _txf={type:'expense'}; renderTxForm(); document.getElementById('ov').style.display='flex';
 }
@@ -880,8 +896,8 @@ async function delIncome(id){ try{ await api('/api/income/'+id,{method:'DELETE'}
 async function openTx(id){
   try{
     const d=await api('/api/tx/'+id);
-    if(d.type==='income'){ if(!_incCats.length){ _incCats=(await api('/api/categories?type=income')).categories||[]; } }
-    else if(!_cats.length){ _cats=(await api('/api/categories')).categories||[]; }
+    if(d.type==='income'){ if(!_incCats.length){ await loadIncCats(); } }
+    else if(!_cats.length){ await loadCats(); }
     renderDetail(d);
   }catch(e){ toast('Ошибка'); }
 }
@@ -967,6 +983,74 @@ async function createSrcFromTx(){
   }catch(e){ toast('Ошибка'); }
 }
 function closeOv(){ document.getElementById('ov').style.display='none'; }
+
+// ---- настройки ----
+const ICON_SET=['cart','cup','bus','car','flame','kid','tool','bag','home','scissors','pill','book','shirt','film','beer','smoke','gift','leaf','phone','tv','bank','box','wallet','coin','swap','tag','percent','pig','adjust','target','receipt','cash'];
+const COLOR_SET=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b','#84cc16','#06b6d4','#ec4899','#8b5cf6'];
+async function openSettings(){
+  const alertBig=(await api('/api/kv/alert_big').catch(()=>({value:null}))).value||'15000';
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Настройки</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <h2 style="margin-top:4px">Тема</h2>
+    <div class="filt">${['auto','Авто','light','Светлая','dark','Тёмная'].reduce((a,_,i,r)=>{ if(i%2)return a; const v=r[i],l=r[i+1]; return a+`<button class="chip${_themePref===v?' on':''}" onclick="setTheme('${v}');openSettings()">${l}</button>`; },'')}</div>
+    <h2>Уведомления</h2>
+    <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:6px">Алерт «крупная трата», ₽</div>
+      <div style="display:flex;gap:8px"><input id="st-big" class="inp" type="number" inputmode="decimal" value="${alertBig}" style="flex:1">
+        <button class="btn" onclick="saveBig()">OK</button></div>
+      <div class="t2" style="color:var(--muted);margin-top:8px">Дайджесты: каждый день 21:00, воскресенье 20:00, 1-го числа 10:00. Нудж продлений — 10:30.</div></div>
+    <h2>Категории</h2>
+    <button class="btn full" onclick="openCatMgr()">Управление категориями</button>
+    <h2>О приложении</h2>
+    <div class="card"><div class="t2">MONEY · личный финансовый помощник<br>Бот: @money_veta_bot<br>Открыть в браузере: <a href="https://money.vetaone.site" style="color:var(--ink);font-weight:600">money.vetaone.site</a></div></div>`;
+  document.getElementById('ov').style.display='flex';
+}
+async function saveBig(){ try{ await api('/api/kv/alert_big',{method:'POST',body:JSON.stringify({value:document.getElementById('st-big').value})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
+
+async function openCatMgr(){
+  await loadCats(); await loadIncCats();
+  const tops=_cats.filter(c=>!c.parent_id);
+  const row=c=>{const ic=catIcon(c.name),col=color(c.name);return `<div class="row" onclick="openCatEdit(${c.id})" style="cursor:pointer">
+    <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
+    <div class="mid"><div class="t1">${c.name}</div><div class="t2">${c.tx||0} оп.${c.parent_id?' · подкатегория':''}</div></div>${icon('arrow',18,'#8b909a')}</div>`};
+  let html='';
+  for(const p of tops){
+    html+=row(p);
+    const kids=_cats.filter(x=>x.parent_id===p.id);
+    for(const k of kids) html+=`<div style="padding-left:16px">${row(k)}</div>`;
+  }
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Категории расходов</div>
+      <button class="iconbtn" onclick="openSettings()">${icon('arrow',18)}</button></div>
+    <button class="btn full" style="margin-bottom:12px" onclick="openCatEdit(null)">+ Новая категория</button>
+    ${html}`;
+  document.getElementById('ov').style.display='flex';
+}
+let _editCat=null, _editCatParent=null, _editCatIcon=null, _editCatColor=null;
+function openCatEdit(id){
+  const c=id?_cats.find(x=>x.id===id):null;
+  _editCat=id; _editCatParent=c?(c.parent_id||0):0; _editCatIcon=c?(c.icon||catIcon(c.name)):'tag'; _editCatColor=c?(c.color||color(c.name)):COLOR_SET[0];
+  const parents=_cats.filter(x=>!x.parent_id && (!c || x.id!==c.id));
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${c?'Категория: '+c.name:'Новая категория'}</div>
+      <button class="iconbtn" onclick="openCatMgr()">${icon('x',18)}</button></div>
+    <input id="ce-n" class="inp" placeholder="Название" value="${c?(c.name||'').replace(/"/g,'&quot;'):''}" style="margin-bottom:10px">
+    <div class="t2" style="color:var(--muted);margin:0 2px 4px">Родитель</div>
+    <select id="ce-p" class="inp" style="margin-bottom:10px"><option value="0">— нет (топ-уровень)</option>${parents.map(p=>`<option value="${p.id}"${_editCatParent===p.id?' selected':''}>${p.name}</option>`).join('')}</select>
+    <div class="t2" style="color:var(--muted);margin:0 2px 4px">Цвет</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${COLOR_SET.map(co=>`<button onclick="_editCatColor='${co}';openCatEditRender()" style="width:32px;height:32px;border-radius:10px;border:${_editCatColor===co?'3px solid var(--ink)':'none'};background:${co};cursor:pointer"></button>`).join('')}</div>
+    <div class="t2" style="color:var(--muted);margin:0 2px 4px">Иконка</div>
+    <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:14px">${ICON_SET.map(ic=>`<button onclick="_editCatIcon='${ic}';openCatEditRender()" style="aspect-ratio:1;border-radius:10px;border:${_editCatIcon===ic?'2px solid '+_editCatColor:'1.5px solid var(--line)'};background:${tint(_editCatColor)};color:${_editCatColor};display:flex;align-items:center;justify-content:center;cursor:pointer">${icon(ic,18)}</button>`).join('')}</div>
+    <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="saveCat()">Сохранить</button>
+      ${c?`<button class="chip" style="border-color:var(--red);color:var(--red)" onclick="delCat(${c.id})">Удалить</button>`:''}</div>`;
+}
+function openCatEditRender(){ openCatEdit(_editCat); }
+async function saveCat(){
+  const name=document.getElementById('ce-n').value.trim(); if(!name){toast('Название');return;}
+  const body={name, parent_id:parseInt(document.getElementById('ce-p').value)||0, icon:_editCatIcon, color:_editCatColor};
+  try{ if(_editCat){ await api('/api/categories/'+_editCat,{method:'POST',body:JSON.stringify(body)}); }
+    else { body.type='expense'; await api('/api/categories',{method:'POST',body:JSON.stringify(body)}); }
+    toast('Сохранено'); _cats=[]; await loadCats(); openCatMgr(); }catch(e){toast('Ошибка');}
+}
+async function delCat(id){ try{ const r=await api('/api/categories/'+id,{method:'DELETE'});
+  toast(r.archived?'Архивирована':'Удалена'); _cats=[]; await loadCats(); openCatMgr(); }catch(e){toast('Ошибка');} }
 
 loadDashboard();
 // глубокая ссылка из бота: ?tx=ID → открыть операцию

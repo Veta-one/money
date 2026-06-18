@@ -745,9 +745,86 @@ async def list_categories(type: str = "expense", user: dict = Depends(current_us
     for c in cats:
         if c.parent_id:
             childsum[c.parent_id] = childsum.get(c.parent_id, 0) + counts.get(c.id, 0)
-    # родителя сортируем по сумме своих+дочерних использований
     cats.sort(key=lambda c: (-(counts.get(c.id, 0) + childsum.get(c.id, 0)), c.name))
-    return {"categories": [{"id": c.id, "name": c.name, "parent_id": c.parent_id} for c in cats]}
+    return {"categories": [{"id": c.id, "name": c.name, "parent_id": c.parent_id,
+                            "icon": c.icon, "color": c.color,
+                            "tx": counts.get(c.id, 0)} for c in cats]}
+
+
+class CategoryIn(BaseModel):
+    name: str
+    type: str = "expense"
+    parent_id: int | None = None
+    icon: str | None = None
+    color: str | None = None
+
+
+class CategoryPatch(BaseModel):
+    name: str | None = None
+    parent_id: int | None = None
+    icon: str | None = None
+    color: str | None = None
+
+
+@app.post("/api/categories")
+async def create_category(body: CategoryIn, user: dict = Depends(current_user),
+                          db: Session = Depends(get_session)):
+    ctype = body.type if body.type in ("expense", "income", "transfer") else "expense"
+    c = models.Category(name=body.name[:64], type=ctype, parent_id=body.parent_id,
+                        icon=body.icon, color=body.color)
+    db.add(c)
+    db.commit()
+    return {"id": c.id}
+
+
+@app.post("/api/categories/{cat_id}")
+async def patch_category(cat_id: int, body: CategoryPatch, user: dict = Depends(current_user),
+                         db: Session = Depends(get_session)):
+    c = db.get(models.Category, cat_id)
+    if not c:
+        raise HTTPException(404, "no category")
+    if body.name is not None:
+        c.name = body.name[:64]
+    if body.parent_id is not None:
+        c.parent_id = body.parent_id or None
+    if body.icon is not None:
+        c.icon = body.icon or None
+    if body.color is not None:
+        c.color = body.color or None
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/categories/{cat_id}")
+async def delete_category(cat_id: int, user: dict = Depends(current_user),
+                          db: Session = Depends(get_session)):
+    c = db.get(models.Category, cat_id)
+    if not c:
+        return {"ok": True}
+    used = (db.query(models.Transaction).filter(models.Transaction.category_id == cat_id).count()
+            + db.query(models.TransactionItem).filter(models.TransactionItem.category_id == cat_id).count())
+    if used:
+        c.archived = True   # есть привязки — архивируем, чтобы не осиротить операции
+    else:
+        db.delete(c)
+    db.commit()
+    return {"ok": True, "archived": bool(used)}
+
+
+class KVIn(BaseModel):
+    value: str
+
+
+@app.get("/api/kv/{key}")
+async def kv_get(key: str, user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    return {"key": key, "value": get_setting(db, key)}
+
+
+@app.post("/api/kv/{key}")
+async def kv_set(key: str, body: KVIn, user: dict = Depends(current_user),
+                 db: Session = Depends(get_session)):
+    set_setting(db, key, body.value)
+    return {"ok": True}
 
 
 @app.get("/api/tx/{tx_id}")
