@@ -886,7 +886,7 @@ async function loadIncome(){
           <button class="chip" onclick="toggleIncome(${s.id},${s.active?0:1})">${s.active?'Выключить':'Включить'}</button>
           <button class="iconbtn" onclick="openIncEdit(${s.id})">${icon('edit',18)}</button>
           <button class="iconbtn" onclick="delIncome(${s.id})">${icon('trash',18)}</button></div></div>`;
-    }).join(''):`<div class="empty">Источников дохода пока нет.<br>Добавь Шкулёв, Turnvoice, пособия — план дохода сложится сам.</div>`;
+    }).join(''):`<div class="empty">Источников дохода пока нет.<br>Добавь зарплату, фриланс, пособия — план дохода сложится сам.</div>`;
     const bdHtml=bd.length?`<div class="card">${hbar(bd.map(b=>({value:b.amount,color:color(b.name),name:b.name})), {title:'Всего за месяц'})}</div>`
       :`<div class="empty">В этом месяце доходов ещё не было.</div>`;
     document.getElementById('v-income').innerHTML=`
@@ -901,7 +901,7 @@ async function loadIncome(){
       ${bdHtml}
       <h2>Добавить источник</h2>
       <div class="card">
-        <input id="is-n" class="inp" placeholder="Название (Шкулёв, Turnvoice, пособие…)" style="margin-bottom:8px">
+        <input id="is-n" class="inp" placeholder="Название (зарплата, фриланс, пособие…)" style="margin-bottom:8px">
         <div style="display:flex;gap:8px;margin-bottom:8px">
           <input id="is-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма" style="flex:1.3">
           <select id="is-c" class="inp" style="flex:1"><option value="RUB">RUB</option><option value="USD">USD</option></select></div>

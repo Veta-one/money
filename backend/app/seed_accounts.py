@@ -5,11 +5,11 @@ from .db import Base, SessionLocal, engine
 from .models import Account
 
 ACCOUNTS = [
-    {"name": "Райффайзен", "type": "card", "currency": "RUB", "owner": "me"},
+    {"name": "Карта 1", "type": "card", "currency": "RUB", "owner": "me"},
     {"name": "Наличные", "type": "cash", "currency": "RUB", "owner": "me"},
-    {"name": "Крипта", "type": "crypto", "currency": "USD", "owner": "me", "balance": 8200.0},
-    {"name": "Сбер (жена)", "type": "external", "currency": "RUB", "owner": "wife", "is_external": True},
-    {"name": "Вклад (жена)", "type": "deposit", "currency": "RUB", "owner": "wife"},
+    {"name": "Крипта", "type": "crypto", "currency": "USD", "owner": "me", "balance": 0.0},
+    {"name": "Внешний счёт (2-й владелец)", "type": "external", "currency": "RUB", "owner": "wife", "is_external": True},
+    {"name": "Вклад (2-й владелец)", "type": "deposit", "currency": "RUB", "owner": "wife"},
 ]
 
 

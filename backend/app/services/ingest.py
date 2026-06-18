@@ -169,7 +169,7 @@ async def ingest_text(text: str) -> dict:
         data = _json_from(await gemini.text(prompt))
         if not data or not data.get("amount"):
             return {"status": "skip",
-                    "text": "Не понял сумму. Напиши, например: «такси 300», «зарплата 135000» или «дал Пете 5000 в долг»."}
+                    "text": "Не понял сумму. Напиши, например: «такси 300», «зарплата 135000» или «дал другу 5000 в долг»."}
         if data.get("type") == "debt" and data.get("counterparty"):
             return _save_debt(db, data)
         return await _save_simple(db, data, source="text", raw=text)
