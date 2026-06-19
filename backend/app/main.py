@@ -262,9 +262,9 @@ async def fire(user: dict = Depends(current_user), db: Session = Depends(get_ses
 
 
 @app.get("/api/forecast")
-async def forecast(years: int = 20, user: dict = Depends(current_user),
+async def forecast(years: int | None = None, user: dict = Depends(current_user),
                     db: Session = Depends(get_session)):
-    """Прогноз net worth на N лет (в сегодняшних рублях)."""
+    """Прогноз net worth на N лет. Если years не задан — горизонт = до пенсии + 5 (≥20)."""
     return net_worth_forecast(db, years)
 
 

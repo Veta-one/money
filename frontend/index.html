@@ -656,20 +656,22 @@ function _plural(n, forms){
   if(r10>=2 && r10<=4) return forms[1];
   return forms[2];
 }
+// Округление в том же виде, в каком число будет показано (для корректного склонения)
+function _yrShown(v){ return v>=10 ? Math.round(v) : Math.round(v*10)/10; }
 function _yrText(v){
   if(v==null) return '—';
   if(v===0) return '0';
   if(v>=10) return String(Math.round(v));
   return v.toFixed(1).replace('.0','').replace('.',',');
 }
-function renderFireCard(fr){
+function renderFireCard(fr, fc){
   const sc=fr.scenarios||[];
   const safe=sc[0]||{}, base=sc[1]||{}, aggr=sc[2]||{};
   // плитка сценария: hero-число лет + единица + цель/SWR мелким
   const tile=(s)=>{
     const v=s.years_to_fi;
     const numTxt=_yrText(v);
-    const unit=(v==null||v===0)?'':_plural(v,['год','года','лет']);
+    const unit=(v==null||v===0)?'':_plural(_yrShown(v),['год','года','лет']);
     const hero=v===0
       ? `<div style="font-size:14px;font-weight:700;color:var(--green);line-height:1.4;margin-top:10px">достигнут</div>`
       : `<div style="display:flex;align-items:baseline;gap:3px;justify-content:center;margin-top:8px">
@@ -694,7 +696,11 @@ function renderFireCard(fr){
   let rwNum='—', rwUnit='';
   if(rwm!=null){
     if(rwm>=24){ const y=Math.round(rwm/12); rwNum=String(y); rwUnit=_plural(y,['год','года','лет']); }
-    else { rwNum=String(rwm); rwUnit=_plural(rwm,['месяц','месяца','месяцев']); }
+    else {
+      const shown=rwm>=10?Math.round(rwm):Math.round(rwm*10)/10;
+      rwNum=String(shown).replace('.',',');
+      rwUnit=_plural(shown,['месяц','месяца','месяцев']);
+    }
   }
   // Coast FI
   const coastYear=new Date().getFullYear()+(fr.years_to_retire||0);
@@ -734,7 +740,19 @@ function renderFireCard(fr){
           </div>
         </div>
       </div>
-      <div style="margin-top:8px;font-size:10px;color:var(--muted);line-height:1.4;opacity:.65">Прогноз ≠ план. Пересматривай раз в год.</div>
+      ${fc&&(fc.points||[]).length>=2?(()=>{
+        const endYear=new Date().getFullYear()+fc.years;
+        const isPension=fr.years_to_retire>0 && Math.abs(fc.years - (fr.years_to_retire+5))<=1;
+        const sub=isPension?`до пенсии (${endYear})`:`до ${endYear}`;
+        return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <div style="font-size:14px;font-weight:700;letter-spacing:-.2px">Прогноз капитала</div>
+            <div style="font-size:11px;color:var(--muted)">${fc.years} ${_plural(fc.years,['год','года','лет'])} · ${sub}</div>
+          </div>
+          ${forecastChart(fc)}
+        </div>`;
+      })():''}
+      <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.4;opacity:.65">Прогноз ≠ план. Пересматривай раз в год.</div>
     </div>`;
 }
 function renderAllocDrift(al){
@@ -882,7 +900,7 @@ async function saveFireSettings(){
 }
 async function loadCapital(){
   try{
-    const [a,dbt,c,dep,fxh,fr,fc]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital'),api('/api/deposits'),api('/api/fx/history?days=365').catch(()=>({points:[]})), api('/api/fire').catch(()=>null), api('/api/forecast?years=20').catch(()=>null)]);
+    const [a,dbt,c,dep,fxh,fr,fc]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital'),api('/api/deposits'),api('/api/fx/history?days=365').catch(()=>({points:[]})), api('/api/fire').catch(()=>null), api('/api/forecast').catch(()=>null)]);
     const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _deps=dep.deposits||[]; _debtDir='owed_to_me';
     const per=c.from_month_start?'за месяц':'за '+c.delta_days+' дн.';
     document.getElementById('v-capital').innerHTML=`
@@ -899,8 +917,7 @@ async function loadCapital(){
           ${c.fx!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Курс $</span><span style="font-weight:700;color:${c.fx>=0?'var(--green)':'var(--red)'}">${c.fx>=0?'+':'−'}${fmt(Math.abs(c.fx))} ${CUR}</span></div>`:''}
           ${c.other!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Прочее (крипта, правки)</span><span style="font-weight:700">${c.other>=0?'+':'−'}${fmt(Math.abs(c.other))} ${CUR}</span></div>`:''}
         </div></div>`:''}
-      ${fr?renderFireCard(fr):''}
-      ${fc&&(fc.points||[]).length>=2?`<h2>Прогноз капитала · ${fc.years} лет</h2><div class="chartcard">${forecastChart(fc)}</div>`:''}
+      ${fr?renderFireCard(fr,fc):''}
       ${(c.allocation_currency||[]).length?`<h2>Распределение по валюте</h2>
       <div class="card">${hbar((c.allocation_currency||[]).map(x=>({value:x.sum, color:x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name), name:x.name==='RUB'?'Рубли':x.name==='USD'?'Доллар (USDT/крипта)':x.name})), {title:'Всего активов'})}${fr&&fr.allocation?renderAllocDrift(fr.allocation):''}</div>`:''}
       ${c.emergency&&c.emergency.months!=null?`<h2>Подушка безопасности</h2>

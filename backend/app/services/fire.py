@@ -196,14 +196,18 @@ def fire_metrics(db: Session) -> dict:
     }
 
 
-def net_worth_forecast(db: Session, years: int = 20) -> dict:
+def net_worth_forecast(db: Session, years: int | None = None) -> dict:
     """Прогноз капитала на N лет, в «сегодняшних рублях» (real terms).
 
     Допущения: ежемесячно копится `monthly_savings` (real), весь капитал растёт
     с реальной доходностью. Линия пересечения 3 FI-целей — отмечается.
+    Если years не задан — горизонт = max(20, лет до пенсии + 5), чтобы график
+    дотягивался до пенсии с запасом «жизни после».
     """
-    years = max(1, min(years, 50))
     p = _params(db)
+    if years is None:
+        years = max(20, int(p.get("years_to_retire") or 0) + 5)
+    years = max(1, min(years, 50))
     real_return = p["nominal"] - p["inflation"]
     r_m = real_return / 12.0
     annual_exp = p["custom_expenses"] if p["custom_expenses"] > 0 else _annual_expenses(db)
