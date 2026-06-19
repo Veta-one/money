@@ -394,6 +394,7 @@ class AccIn(BaseModel):
 
 class AccEdit(BaseModel):
     name: str | None = None
+    type: str | None = None
     currency: str | None = None
     owner: str | None = None
     balance: float | None = None
@@ -427,6 +428,8 @@ async def edit_account(acc_id: int, body: AccEdit, user: dict = Depends(current_
         raise HTTPException(404, "no account")
     if body.name is not None:
         a.name = body.name[:128]
+    if body.type is not None and body.type in ("card", "cash", "deposit", "crypto", "external"):
+        a.type = body.type
     if body.currency is not None:
         a.currency = body.currency.upper()
     if body.owner in ("me", "wife"):

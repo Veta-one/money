@@ -238,7 +238,7 @@ const CUR='₽';
 function plural(n,one,few,many){ n=Math.abs(n)%100; const k=n%10; if(n>10&&n<20)return many; if(k>1&&k<5)return few; if(k===1)return one; return many; }
 function dBadge(cur,prev,goodDown){ if(prev==null||prev===0)return ''; const diff=cur-prev; if(!diff)return ''; const pct=Math.round(diff/prev*100),up=diff>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'}${Math.abs(pct)}%</span>`; }
 function dBadgeAbs(delta,goodDown){ if(delta==null||!delta)return ''; const up=delta>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'} ${fmt(Math.abs(delta))} ₽</span>`; }
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _capPeriod='day', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _accCompound=true, _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true,
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _capPeriod='day', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _accType='card', _accCur='RUB', _accCompound=true, _depSrcId=0, _depCur='RUB', _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true,
 _opsBulk=false, _opsSel=new Set();
 
 // ---- Tabler icons ----
@@ -1092,27 +1092,111 @@ async function loadCapital(){
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',body:JSON.stringify({balance:parseFloat(v)||0})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
+const ACC_TYPES=[
+  {key:'card',  label:'Карта',     icon:'bank',   hint:'Дебетовая карта банка'},
+  {key:'cash',  label:'Наличные',  icon:'wallet', hint:'Деньги в кармане'},
+  {key:'crypto',label:'Крипта',    icon:'coin',   hint:'Криптокошелёк, биржа'},
+  {key:'external',label:'Внешний', icon:'box',    hint:'Чужой счёт, для долгов'},
+];
+const ACC_CURS=['RUB','USD','USDT'];
+function _accTypeMeta(t){ return ACC_TYPES.find(x=>x.key===t)||ACC_TYPES[0]; }
 function openAcc(id){
   const ac=id?_accs.find(a=>a.id===id):null;
-  _accEdit=id; _accOwner=ac?ac.owner:'me';
+  _accEdit=id;
+  _accOwner=ac?ac.owner:'me';
+  _accType=ac?(ac.type||'card'):'card';
+  _accCur=ac?(ac.currency||'RUB'):'RUB';
+  const meta=_accTypeMeta(_accType);
+  const accCol=ac?color(ac.name||'Счёт'):'#3b82f6';
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${ac?'Счёт: '+ac.name:'Новый счёт'}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <input id="ac-n" class="inp" placeholder="Название" style="margin-bottom:8px" value="${ac?(ac.name||'').replace(/"/g,'&quot;'):''}">
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input id="ac-b" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
-      <select id="ac-c" class="inp" style="flex:1"><option value="RUB"${ac&&ac.currency==='USD'?'':' selected'}>RUB</option><option value="USD"${ac&&ac.currency==='USD'?' selected':''}>USD</option></select></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span id="ao-chips" style="display:contents">${familyChips(_accOwner,'setAccOwner')}</span>
-      <button class="btn" style="margin-left:auto" onclick="saveAcc()">Сохранить</button></div>
-    <div class="t2" style="color:var(--muted);margin-top:14px;line-height:1.4">Чтобы деньги работали под процент — открой вклад/инвестицию во вкладке «Вклады». Это спишет деньги отсюда и положит на инструмент с доходностью.</div>
-    ${ac?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delAcc(${ac.id})">Удалить счёт</button>`:''}`;
+
+    <div id="ac-preview" style="background:linear-gradient(135deg,${tint(accCol)},var(--bg));border-radius:18px;padding:18px 16px;display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <div class="sq" style="width:48px;height:48px;background:${accCol};color:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center">${icon(meta.icon,24,'#fff')}</div>
+      <div style="flex:1;min-width:0">
+        <div id="ac-pv-name" style="font-size:15px;font-weight:700;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ac?ac.name:'Новый счёт'}</div>
+        <div id="ac-pv-type" style="font-size:11px;color:var(--muted);margin-top:2px">${meta.label} · ${ownerLabel?ownerLabel(_accOwner):_accOwner}</div>
+      </div>
+      <div style="text-align:right">
+        <div id="ac-pv-bal" style="font-size:18px;font-weight:800;letter-spacing:-.5px">${ac?fmt(ac.balance||0):'0'}</div>
+        <div id="ac-pv-cur" style="font-size:11px;color:var(--muted)">${_accCur}</div>
+      </div>
+    </div>
+
+    <div class="sec-head">Тип счёта</div>
+    <div class="card" style="padding:8px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+        ${ACC_TYPES.map(t=>`<button class="ac-typebtn${t.key===_accType?' on':''}" data-type="${t.key}" onclick="setAccType('${t.key}')" style="padding:10px 4px;border-radius:12px;border:1px solid var(--line);background:${t.key===_accType?'var(--ink)':'var(--bg)'};color:${t.key===_accType?'#fff':'var(--text)'};font-size:11px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:all .15s">
+          ${icon(t.icon,18,t.key===_accType?'#fff':'currentColor')}
+          <span>${t.label}</span></button>`).join('')}
+      </div>
+      <div id="ac-typehint" class="t2" style="color:var(--muted);margin-top:8px;padding:0 4px">${meta.hint}</div>
+    </div>
+
+    <div class="sec-head">Название</div>
+    <div class="card">
+      <input id="ac-n" class="inp" placeholder="Например: Райф · карта" value="${ac?(ac.name||'').replace(/"/g,'&quot;'):''}" oninput="_accPreviewName()">
+    </div>
+
+    <div class="sec-head">Баланс и валюта</div>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:2">
+          <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Текущий баланс</div>
+          <input id="ac-b" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="0" value="${ac?ac.balance:''}" oninput="_accPreviewBal()">
+        </div>
+        <div style="flex:1">
+          <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Валюта</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            ${ACC_CURS.map(c=>`<button id="ac-cur-${c}" class="chip${c===_accCur?' on':''}" onclick="setAccCur('${c}')" style="flex:1;min-width:0">${c}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      ${ac?`<div class="t2" style="color:var(--muted);margin-top:8px;line-height:1.4">Если ввёл новую сумму — она просто заменит текущую. История операций не пересчитывается.</div>`:''}
+    </div>
+
+    <div class="sec-head">Кому принадлежит</div>
+    <div class="card">
+      <div id="ao-chips" style="display:flex;gap:6px;flex-wrap:wrap">${familyChips(_accOwner,'setAccOwner')}</div>
+    </div>
+
+    <div class="card" style="background:var(--bg);border:1px dashed var(--line);margin-top:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start">
+      ${icon('info',18,'var(--muted)')}
+      <div class="t2" style="color:var(--muted);line-height:1.45">Чтобы деньги начали приносить процент — открой <b style="color:var(--text)">вклад / инвестицию</b> в разделе «Вклады». Это спишет сумму отсюда и положит на инструмент с доходностью. Сам счёт процентов не начисляет.</div>
+    </div>
+
+    <button class="btn full" style="margin-top:16px" onclick="saveAcc()">${ac?'Сохранить изменения':'Создать счёт'}</button>
+    ${ac?`<button class="chip full" style="margin-top:8px;border-color:var(--red);color:var(--red);width:100%;display:flex;align-items:center;justify-content:center;gap:6px" onclick="delAcc(${ac.id})">${icon('trash',16,'var(--red)')}<span>Удалить счёт</span></button>`:''}`;
   document.getElementById('ov').style.display='flex';
 }
-function setAccOwner(o){ _accOwner=o; const el=document.getElementById('ao-chips'); if(el) el.innerHTML=familyChips(o,'setAccOwner'); }
+function setAccOwner(o){ _accOwner=o;
+  const el=document.getElementById('ao-chips'); if(el) el.innerHTML=familyChips(o,'setAccOwner');
+  const pv=document.getElementById('ac-pv-type'); const meta=_accTypeMeta(_accType);
+  if(pv) pv.textContent=`${meta.label} · ${ownerLabel?ownerLabel(o):o}`;
+}
+function setAccType(t){ _accType=t;
+  const meta=_accTypeMeta(t);
+  document.querySelectorAll('.ac-typebtn').forEach(b=>{
+    const on=b.getAttribute('data-type')===t;
+    b.style.background=on?'var(--ink)':'var(--bg)';
+    b.style.color=on?'#fff':'var(--text)';
+    const svg=b.querySelector('svg'); if(svg) svg.setAttribute('stroke',on?'#fff':'currentColor');
+  });
+  const hint=document.getElementById('ac-typehint'); if(hint) hint.textContent=meta.hint;
+  const pv=document.getElementById('ac-pv-type'); if(pv) pv.textContent=`${meta.label} · ${ownerLabel?ownerLabel(_accOwner):_accOwner}`;
+}
+function setAccCur(c){ _accCur=c;
+  ACC_CURS.forEach(x=>{ const b=document.getElementById('ac-cur-'+x); if(b) b.className='chip'+(x===c?' on':''); });
+  const pv=document.getElementById('ac-pv-cur'); if(pv) pv.textContent=c;
+}
+function _accPreviewName(){ const v=(document.getElementById('ac-n').value||'').trim()||'Новый счёт';
+  const el=document.getElementById('ac-pv-name'); if(el) el.textContent=v; }
+function _accPreviewBal(){ const v=parseFloat(document.getElementById('ac-b').value)||0;
+  const el=document.getElementById('ac-pv-bal'); if(el) el.textContent=fmt(v); }
 async function saveAcc(){
   const name=document.getElementById('ac-n').value.trim(); if(!name){toast('Название');return;}
-  const body={name, balance:parseFloat(document.getElementById('ac-b').value)||0,
-    currency:document.getElementById('ac-c').value, owner:_accOwner};
+  const body={name, type:_accType, balance:parseFloat(document.getElementById('ac-b').value)||0,
+    currency:_accCur, owner:_accOwner};
   try{ if(_accEdit) await api('/api/accounts/'+_accEdit+'/edit',{method:'POST',body:JSON.stringify(body)}); else await api('/api/accounts',{method:'POST',body:JSON.stringify(body)});
     toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
@@ -1122,46 +1206,147 @@ function openDep(id){
   _depEdit=id; _depOwner=d?d.owner:'me'; _depCap=d?d.capitalization:true;
   const today=new Date().toISOString().slice(0,10);
   const accs=(_accs||[]).filter(a=>!a.archived);
-  // источник: при редактировании — фиксированный (deposit уже создан), при создании — выбираемый
-  const srcOpts=accs.map(a=>`<option value="${a.id}" data-cur="${a.currency}">${a.name} · ${fmt(a.balance||0)} ${a.currency}</option>`).join('');
-  const dCur=d?(d.currency||'RUB'):'';
-  const srcRow = d
-    ? `<div class="inp" style="margin-bottom:8px;background:var(--bg);color:var(--muted);display:flex;align-items:center;gap:8px">
-         ${icon('wallet',16)}<span>${(accs.find(a=>a.id===d.source_account_id)||{}).name||'—'} · валюта вклада ${dCur}</span></div>`
-    : `<div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Откуда взять деньги</div>
-       <select id="dp-src" class="inp" style="margin-bottom:8px" onchange="_depSrcChanged()">
-         <option value="">— выбери счёт —</option>${srcOpts}</select>`;
+  _depSrcId = d ? (d.source_account_id||0) : 0;
+  _depCur = d ? (d.currency||'RUB') : ((accs[0]&&accs[0].currency)||'RUB');
+  const depCol=d?color(d.bank||'Вклад'):'#18c171';
+  const srcOpts=accs.map(a=>`<option value="${a.id}" data-cur="${a.currency}"${a.id===_depSrcId?' selected':''}>${a.name} · ${fmt(a.balance||0)} ${a.currency}</option>`).join('');
+
+  const srcCard = d
+    ? `<div class="card" style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+         <div class="sq" style="width:36px;height:36px;background:${tint('#3b82f6')};color:#3b82f6;border-radius:10px;display:flex;align-items:center;justify-content:center">${icon('wallet',18)}</div>
+         <div style="flex:1;min-width:0">
+           <div class="t1" style="font-size:13px;font-weight:700">${(accs.find(a=>a.id===d.source_account_id)||{}).name||'—'}</div>
+           <div class="t2" style="color:var(--muted);font-size:11px">валюта вклада ${_depCur} · источник зафиксирован</div></div></div>`
+    : `<div class="card">
+         <select id="dp-src" class="inp" onchange="_depSrcChanged()">
+           <option value="">— выбери счёт —</option>${srcOpts}</select>
+         <div class="t2" style="color:var(--muted);margin-top:8px;line-height:1.4">С этого счёта спишется сумма. Валюта вклада автоматически = валюта счёта.</div>
+       </div>`;
+
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${d?'Вклад: '+d.bank:'Новый вклад / инвестиция'}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <input id="dp-b" class="inp" placeholder="Куда (Сбер, Binance Earn USDT, Тинькофф ETF)" style="margin-bottom:8px" value="${d?(d.bank||'').replace(/"/g,'&quot;'):''}">
-    ${srcRow}
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <div style="flex:1.4"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Сумма ${d?'<span style="opacity:.6">'+dCur+'</span>':'<span id="dp-cur-hint" style="opacity:.6"></span>'}</div>
-        <input id="dp-p" class="inp" type="number" inputmode="decimal" placeholder="0" value="${d?d.principal:''}"></div>
-      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Ставка %/год</div>
-        <input id="dp-r" class="inp" type="number" inputmode="decimal" placeholder="0" value="${d?d.rate:''}"></div></div>
-    <input id="dp-t" class="inp" type="number" inputmode="decimal" placeholder="Пополнение в месяц (план, необяз.)" style="margin-bottom:8px" value="${d&&d.monthly_topup?d.monthly_topup:''}">
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Открыт</div><input id="dp-s" class="inp" type="date" value="${d&&d.term_start?d.term_start:today}"></div>
-      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Окончание</div><input id="dp-e" class="inp" type="date" value="${d&&d.term_end?d.term_end:''}"></div></div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <span id="do-chips" style="display:contents">${familyChips(_depOwner,'setDepOwner')}</span>
-      <span style="width:4px"></span>
-      <button id="dc-on" class="chip${_depCap?' on':''}" onclick="setDepCap(1)">С капит.</button>
-      <button id="dc-off" class="chip${_depCap?'':' on'}" onclick="setDepCap(0)">Без</button>
-      <button class="btn" style="margin-left:auto" onclick="saveDep()">Сохранить</button></div>
-    ${!d?`<div class="t2" style="color:var(--muted);margin-top:10px;line-height:1.4">При сохранении сумма спишется со счёта-источника. Net worth не изменится — это просто перекладывание из «лежит» в «работает».</div>`:''}
-    ${d?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delDep(${d.id})">Удалить вклад</button>
-       <div class="t2" style="color:var(--muted);margin-top:6px;line-height:1.4">При удалении balance счёта-источника не возвращается — отрегулируй вручную, если деньги физически вернулись.</div>`:''}`;
+
+    <div id="dp-preview" style="background:linear-gradient(135deg,${tint(depCol)},var(--bg));border-radius:18px;padding:18px 16px;display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <div class="sq" style="width:48px;height:48px;background:${depCol};color:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center">${icon('pig',24,'#fff')}</div>
+      <div style="flex:1;min-width:0">
+        <div id="dp-pv-name" style="font-size:15px;font-weight:700;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d?d.bank:'Новый вклад'}</div>
+        <div id="dp-pv-sub" style="font-size:11px;color:var(--muted);margin-top:2px">${_depCap?'с капитализацией':'простой процент'} · ${ownerLabel?ownerLabel(_depOwner):_depOwner}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="display:flex;align-items:baseline;gap:4px;justify-content:flex-end">
+          <span id="dp-pv-amt" style="font-size:18px;font-weight:800;letter-spacing:-.5px">${d?fmt(d.principal||0):'0'}</span>
+          <span id="dp-pv-cur" style="font-size:11px;color:var(--muted)">${_depCur}</span>
+        </div>
+        <div style="font-size:11px;color:#18c171;font-weight:700;margin-top:2px;display:flex;align-items:center;justify-content:flex-end;gap:2px">
+          ${icon('percent',12,'#18c171')}<span id="dp-pv-rate">${d?d.rate:'0'}</span><span>%/год</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-head">Что это за инструмент</div>
+    <div class="card">
+      <input id="dp-b" class="inp" placeholder="Сбер вклад · 18%" value="${d?(d.bank||'').replace(/"/g,'&quot;'):''}" oninput="_depPreviewName()">
+      <div class="t2" style="color:var(--muted);margin-top:8px;line-height:1.4">Любое название продукта: «Сбер вклад», «Binance Earn USDT», «Тинькофф ETF», «Замещайки Газпрома». По нему отличишь в списке.</div>
+    </div>
+
+    ${!d?`<div class="sec-head">Откуда возьмёшь деньги</div>`:`<div class="sec-head">Источник</div>`}
+    ${srcCard}
+
+    <div class="sec-head">Сколько и под сколько</div>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:1.4">
+          <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Сумма <span id="dp-cur-hint" style="opacity:.6">${_depCur}</span></div>
+          <input id="dp-p" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="0" value="${d?d.principal:''}" oninput="_depPreviewAmt()">
+        </div>
+        <div style="flex:1">
+          <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Ставка %/год</div>
+          <input id="dp-r" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="0" value="${d?d.rate:''}" oninput="_depPreviewRate()">
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Плановое пополнение в месяц (необязательно)</div>
+        <input id="dp-t" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="0" value="${d&&d.monthly_topup?d.monthly_topup:''}">
+        <div class="t2" style="color:var(--muted);margin-top:6px;line-height:1.4">Это план «на будущее» для прогноза. Фактические пополнения добавляются через кнопку «Пополнить».</div>
+      </div>
+    </div>
+
+    <div class="sec-head">Как начисляются проценты</div>
+    <div class="card" style="padding:10px 12px">
+      <div style="display:flex;gap:6px">
+        <button id="dc-on" class="chip${_depCap?' on':''}" onclick="setDepCap(1)" style="flex:1">С капитализацией</button>
+        <button id="dc-off" class="chip${_depCap?'':' on'}" onclick="setDepCap(0)" style="flex:1">Простой процент</button>
+      </div>
+      <div id="dp-cap-hint" style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:10px;display:flex;gap:10px;align-items:flex-start">
+        ${icon('info',16,'var(--muted)')}
+        <div class="t2" style="color:var(--muted);line-height:1.5">${_depCapHintText(_depCap)}</div>
+      </div>
+    </div>
+
+    <div class="sec-head">Срок</div>
+    <div class="card">
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">
+          <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Открыт</div>
+          <input id="dp-s" class="inp" type="date" value="${d&&d.term_start?d.term_start:today}">
+        </div>
+        <div style="flex:1">
+          <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Окончание</div>
+          <input id="dp-e" class="inp" type="date" value="${d&&d.term_end?d.term_end:''}">
+        </div>
+      </div>
+      <div class="t2" style="color:var(--muted);margin-top:8px;line-height:1.4">Окончание можно оставить пустым для бессрочных вкладов (стейкинг, накопительные счета).</div>
+    </div>
+
+    <div class="sec-head">Кому принадлежит</div>
+    <div class="card">
+      <div id="do-chips" style="display:flex;gap:6px;flex-wrap:wrap">${familyChips(_depOwner,'setDepOwner')}</div>
+    </div>
+
+    ${!d?`<div class="card" style="background:var(--bg);border:1px dashed var(--line);margin-top:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start">
+      ${icon('info',18,'var(--muted)')}
+      <div class="t2" style="color:var(--muted);line-height:1.45">При сохранении сумма <b style="color:var(--text)">спишется со счёта-источника</b>. Общий капитал (net worth) не изменится — это просто перекладывание из «лежит» в «работает».</div>
+    </div>`:''}
+
+    <button class="btn full" style="margin-top:16px" onclick="saveDep()">${d?'Сохранить изменения':'Открыть вклад'}</button>
+    ${d?`<button class="chip full" style="margin-top:8px;border-color:var(--red);color:var(--red);width:100%;display:flex;align-items:center;justify-content:center;gap:6px" onclick="delDep(${d.id})">${icon('trash',16,'var(--red)')}<span>Закрыть и удалить</span></button>
+       <div class="t2" style="color:var(--muted);margin-top:6px;line-height:1.4;text-align:center">Balance счёта-источника не вернётся — отрегулируй вручную, если деньги физически вернулись.</div>`:''}`;
   document.getElementById('ov').style.display='flex';
+}
+function _depCapHintText(on){
+  return on
+    ? 'Проценты прибавляются к телу вклада каждый месяц, и со следующего месяца % считаются уже на (тело + накопленные %). Сложный процент. Так работают большинство стейкингов и накопительных счетов — растёт быстрее.'
+    : 'Проценты фиксируются и не добавляются к телу. % всегда считаются только от стартовой суммы (и фактических пополнений). Линейный рост. Так часто работают банковские вклады с ежемесячной выплатой процентов на карту.';
 }
 function _depSrcChanged(){
   const sel=document.getElementById('dp-src'); if(!sel) return;
   const opt=sel.options[sel.selectedIndex]; const cur=opt?opt.getAttribute('data-cur')||'':'';
-  const hint=document.getElementById('dp-cur-hint'); if(hint) hint.textContent=cur?cur:'';
+  if(cur){ _depCur=cur; }
+  _depSrcId = sel.value ? parseInt(sel.value,10) : 0;
+  const hint=document.getElementById('dp-cur-hint'); if(hint) hint.textContent=cur||'';
+  const pvc=document.getElementById('dp-pv-cur'); if(pvc) pvc.textContent=cur||'';
 }
-function setDepOwner(o){ _depOwner=o; const el=document.getElementById('do-chips'); if(el) el.innerHTML=familyChips(o,'setDepOwner'); }
-function setDepCap(v){ _depCap=!!v; document.getElementById('dc-on').className='chip'+(_depCap?' on':''); document.getElementById('dc-off').className='chip'+(_depCap?'':' on'); }
+function _depPreviewName(){ const v=(document.getElementById('dp-b').value||'').trim()||'Новый вклад';
+  const el=document.getElementById('dp-pv-name'); if(el) el.textContent=v; }
+function _depPreviewAmt(){ const v=parseFloat(document.getElementById('dp-p').value)||0;
+  const el=document.getElementById('dp-pv-amt'); if(el) el.textContent=fmt(v); }
+function _depPreviewRate(){ const v=parseFloat(document.getElementById('dp-r').value)||0;
+  const el=document.getElementById('dp-pv-rate'); if(el) el.textContent=v; }
+function setDepOwner(o){ _depOwner=o;
+  const el=document.getElementById('do-chips'); if(el) el.innerHTML=familyChips(o,'setDepOwner');
+  const sub=document.getElementById('dp-pv-sub');
+  if(sub) sub.textContent=`${_depCap?'с капитализацией':'простой процент'} · ${ownerLabel?ownerLabel(o):o}`;
+}
+function setDepCap(v){ _depCap=!!v;
+  const a=document.getElementById('dc-on'), b=document.getElementById('dc-off');
+  if(a) a.className='chip'+(_depCap?' on':'')+(a.classList.contains('full')?' full':'');
+  if(b) b.className='chip'+(_depCap?'':' on')+(b.classList.contains('full')?' full':'');
+  if(a) a.style.flex='1'; if(b) b.style.flex='1';
+  const hint=document.getElementById('dp-cap-hint');
+  if(hint){ const txt=hint.querySelector('.t2'); if(txt) txt.textContent=_depCapHintText(_depCap); }
+  const sub=document.getElementById('dp-pv-sub');
+  if(sub) sub.textContent=`${_depCap?'с капитализацией':'простой процент'} · ${ownerLabel?ownerLabel(_depOwner):_depOwner}`;
+}
 async function saveDep(){
   const b=document.getElementById('dp-b').value.trim(); if(!b){toast('Название');return;}
   const principal=parseFloat(document.getElementById('dp-p').value)||0;
