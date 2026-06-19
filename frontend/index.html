@@ -980,11 +980,22 @@ async function loadCapital(){
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
       <h2>Вклады</h2>
       ${(dep.deposits||[]).map(x=>`<div class="goal">
-        <div class="gh"><div class="gn">${x.bank}${x.owner&&x.owner!=='me'?' <span class="muted" style="font-size:12px;font-weight:600">· '+ownerLabel(x.owner)+'</span>':''}</div><div class="gv">${fmt(x.value_now)} ${CUR}</div></div>
-        <div class="meta" style="margin-top:8px"><span>${fmt(x.principal)} ₽ под ${x.rate}%${x.monthly_topup?' · +'+fmt(x.monthly_topup)+'/мес':''}</span><span style="color:var(--green)">+${fmt(x.interest_now)} ₽ %</span></div>
+        <div class="gh">
+          <div class="gn">${x.bank}${x.owner&&x.owner!=='me'?' <span class="muted" style="font-size:12px;font-weight:600">· '+ownerLabel(x.owner)+'</span>':''}</div>
+          <div class="gv">${fmt(x.value_now)} ${CUR}</div>
+        </div>
+        <div class="meta" style="margin-top:8px">
+          <span>${fmt(x.contributed)} ₽ ${x.capitalization?'с капит.':'без капит.'} · ${x.rate}%</span>
+          <span style="color:var(--green)">+${fmt(x.interest_now)} ₽ %</span>
+        </div>
+        ${x.has_real_topups?`<div class="meta"><span>В этом месяце доложил</span><span style="font-weight:700;color:${x.topup_this_month>0?'var(--green)':'var(--muted)'}">${x.topup_this_month>0?'+':''}${fmt(x.topup_this_month)} ₽</span></div>`:(x.monthly_topup?`<div class="meta"><span>План пополнений</span><span>+${fmt(x.monthly_topup)} ₽/мес</span></div>`:'')}
         ${x.value_end?`<div class="meta"><span>к ${new Date(x.term_end).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})}</span><span>≈ ${fmt(x.value_end)} ₽ (+${fmt(x.interest_total)})</span></div>`:''}
-        <div style="display:flex;gap:8px;margin-top:12px"><button class="chip" onclick="openDep(${x.id})">Изменить</button>
-          <button class="iconbtn" onclick="delDep(${x.id})">${icon('trash',18)}</button></div></div>`).join('')}
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="chip" onclick="openDepTopup(${x.id})" style="background:var(--ink);color:#fff;border-color:var(--ink)">+ Пополнить</button>
+          <button class="chip" onclick="openDep(${x.id})">Изменить</button>
+          <button class="iconbtn" onclick="delDep(${x.id})">${icon('trash',18)}</button>
+        </div>
+      </div>`).join('')}
       <button class="btn full" style="margin-top:4px" onclick="openDep(null)">Добавить вклад</button>
       `;
   }catch(e){ e.message==='AUTH'?authErr('capital'):document.getElementById('v-capital').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
@@ -1044,6 +1055,30 @@ async function saveDep(){
   try{ if(_depEdit) await api('/api/deposits/'+_depEdit,{method:'POST',body:JSON.stringify(body)}); else await api('/api/deposits',{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
 async function delDep(id){ try{ await api('/api/deposits/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
+function openDepTopup(id){
+  const d=_deps.find(x=>x.id===id); if(!d) return;
+  const today=new Date().toISOString().slice(0,10);
+  const hist=(d.topups||[]).slice(0,8).map(t=>`<div class="drow"><span style="flex:1">${fmtDateRu?fmtDateRu(t.date):t.date}</span><span style="font-weight:700;color:var(--green)">+${fmt(t.amount)} ₽</span><button class="iconbtn" onclick="delDepTopup(${t.id},${id})">${icon('trash',16)}</button></div>`).join('');
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Пополнение «${d.bank}»</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="tp-a" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Сумма ₽" style="flex:1.4" autofocus>
+      <input id="tp-d" class="inp" type="date" value="${today}" style="flex:1"></div>
+    <button class="btn full" onclick="saveDepTopup(${id})">Записать пополнение</button>
+    ${hist?`<div style="margin-top:14px"><div class="t2" style="color:var(--muted);margin-bottom:4px">Последние пополнения</div>${hist}</div>`:''}`;
+  document.getElementById('ov').style.display='flex';
+}
+async function saveDepTopup(id){
+  const amt=parseFloat(document.getElementById('tp-a').value)||0;
+  if(amt<=0){ toast('Сумма'); return; }
+  const d=document.getElementById('tp-d').value||null;
+  try{ await api('/api/deposits/'+id+'/topup',{method:'POST',body:JSON.stringify({amount:amt,date:d})});
+    toast('Пополнение записано'); closeOv(); loadCapital();
+  }catch(e){ toast('Ошибка'); }
+}
+async function delDepTopup(topupId, depId){
+  try{ await api('/api/deposits/topup/'+topupId,{method:'DELETE'}); toast('Удалено'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');}
+}
 async function saveNwTarget(){ const v=parseFloat(document.getElementById('nwt').value)||0;
   try{ await api('/api/capital/target',{method:'POST',body:JSON.stringify({target:v})}); toast('Сохранено'); loadCapital(); }catch(e){toast('Ошибка');} }
 function setDir(d){ _debtDir=d; document.getElementById('dir-owed').className='chip'+(d==='owed_to_me'?' on':''); document.getElementById('dir-iowe').className='chip'+(d==='i_owe'?' on':''); }

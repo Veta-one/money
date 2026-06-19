@@ -161,6 +161,19 @@ class Deposit(Base):
     owner: Mapped[str] = mapped_column(String(16), default="me")
 
 
+class DepositTopup(Base):
+    """Фактическое пополнение вклада: дата + сумма. Если есть хотя бы одна
+    запись — расчёт value_now/interest идёт ПО ФАКТУ, а monthly_topup в
+    Deposit становится «планом» (на будущее)."""
+    __tablename__ = "deposit_topups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    deposit_id: Mapped[int] = mapped_column(ForeignKey("deposits.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Goal(Base):
     __tablename__ = "goals"
     id: Mapped[int] = mapped_column(primary_key=True)

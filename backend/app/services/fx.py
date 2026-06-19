@@ -108,9 +108,12 @@ def usd_history(db, days: int = 365) -> list[dict]:
 
 
 def compute_net_worth(db) -> float:
-    """Капитал = счета (в рублях) + вам должны − вы должны (по открытым долгам)."""
+    """Капитал = счета (в рублях) + вклады (value_now) + вам должны − вы должны."""
     total = sum(to_rub(a.balance, a.currency, db)
                 for a in db.query(models.Account).filter(models.Account.archived.is_(False)).all())
+    # вклады — отдельная сущность, баланс счёта типа deposit обычно 0
+    from .deposits import deposits_total_value
+    total += deposits_total_value(db)
     for d in db.query(models.Debt).filter(models.Debt.status == "open").all():
         remaining = max((d.amount or 0) - (d.paid or 0), 0)   # в капитал идёт ОСТАТОК долга
         v = to_rub(remaining, d.currency, db)

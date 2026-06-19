@@ -773,7 +773,39 @@ async def delete_deposit(dep_id: int, user: dict = Depends(current_user),
                          db: Session = Depends(get_session)):
     d = db.get(models.Deposit, dep_id)
     if d:
+        # вместе с вкладом сносим его пополнения
+        db.query(models.DepositTopup).filter_by(deposit_id=dep_id).delete()
         db.delete(d)
+        db.commit()
+    return {"ok": True}
+
+
+class TopupIn(BaseModel):
+    amount: float
+    date: str | None = None
+    note: str | None = None
+
+
+@app.post("/api/deposits/{dep_id}/topup")
+async def add_topup(dep_id: int, body: TopupIn, user: dict = Depends(current_user),
+                    db: Session = Depends(get_session)):
+    if not db.get(models.Deposit, dep_id):
+        raise HTTPException(404, "no deposit")
+    t = models.DepositTopup(
+        deposit_id=dep_id, amount=abs(float(body.amount)),
+        date=date.fromisoformat(body.date) if body.date else date.today(),
+        note=(body.note or "")[:256] or None)
+    db.add(t)
+    db.commit()
+    return {"id": t.id}
+
+
+@app.delete("/api/deposits/topup/{topup_id}")
+async def delete_topup(topup_id: int, user: dict = Depends(current_user),
+                       db: Session = Depends(get_session)):
+    t = db.get(models.DepositTopup, topup_id)
+    if t:
+        db.delete(t)
         db.commit()
     return {"ok": True}
 
