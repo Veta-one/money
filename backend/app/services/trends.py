@@ -36,14 +36,20 @@ def monthly_spending(db, months: int = 6) -> list[dict]:
              "label": _MONTHS[k[1] - 1], "spent": round(buckets[k], 2)} for k in keys]
 
 
-def take_networth_snapshot(db) -> float:
+def take_networth_snapshot(db, force: bool = False) -> float:
+    """Снимок капитала на сегодня = стабильная точка «начало дня».
+    Создаётся один раз (cron в 00:01) и НЕ перезаписывается операциями/правками
+    в течение дня — иначе теряется база для delta-карточки.
+    force=True переписывает (используется для одноразовых ретро-коррекций)."""
     total = compute_net_worth(db)
     today = date.today()
     row = db.query(models.NetWorthSnapshot).filter_by(date=today).first()
     if row:
-        row.total_rub = total
-    else:
-        db.add(models.NetWorthSnapshot(date=today, total_rub=total))
+        if force:
+            row.total_rub = total
+            db.commit()
+        return row.total_rub
+    db.add(models.NetWorthSnapshot(date=today, total_rub=total))
     db.commit()
     return total
 

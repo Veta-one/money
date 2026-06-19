@@ -78,7 +78,7 @@ async def lifespan(_app: FastAPI):
                           id="monthly", replace_existing=True)
         scheduler.add_job(make_and_send_backup, "cron", hour=3, minute=30,
                           id="backup", replace_existing=True)
-        scheduler.add_job(snapshot_job, "cron", hour=3, minute=0,
+        scheduler.add_job(snapshot_job, "cron", hour=0, minute=1,
                           id="snapshot", replace_existing=True)
         scheduler.add_job(nudge_job, "cron", hour=10, minute=30,
                           id="nudge", replace_existing=True)
@@ -226,8 +226,9 @@ async def accounts(user: dict = Depends(current_user), db: Session = Depends(get
 
 
 @app.get("/api/capital")
-async def capital(user: dict = Depends(current_user), db: Session = Depends(get_session)):
-    return capital_overview(db)
+async def capital(period: str = "day", user: dict = Depends(current_user),
+                   db: Session = Depends(get_session)):
+    return capital_overview(db, period=period)
 
 
 @app.get("/api/fx/history")
@@ -374,7 +375,6 @@ async def set_balance(acc_id: int, body: BalanceIn,
         raise HTTPException(404, "no account")
     acc.balance = body.balance
     db.commit()
-    take_networth_snapshot(db)   # держим сегодняшний снимок в синхроне
     return {"ok": True}
 
 
@@ -422,8 +422,6 @@ async def edit_account(acc_id: int, body: AccEdit, user: dict = Depends(current_
     if body.balance is not None:
         a.balance = body.balance
     db.commit()
-    if body.balance is not None:
-        take_networth_snapshot(db)
     return {"ok": True}
 
 

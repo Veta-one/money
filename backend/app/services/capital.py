@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from math import ceil
 
 from dateutil.relativedelta import relativedelta
@@ -27,27 +27,46 @@ def _sum_tx(db: Session, tx_type: str, since: datetime) -> float:
                          models.Transaction.datetime >= since).scalar() or 0.0)
 
 
-def capital_overview(db: Session) -> dict:
+def _base_snapshot(db: Session, period: str):
+    """Snapshot, от которого считается дельта. period: day|week|month|year."""
+    today = date.today()
+    if period == "day":
+        cutoff = today
+    elif period == "week":
+        cutoff = today - timedelta(days=7)
+    elif period == "year":
+        cutoff = today.replace(month=1, day=1)
+    else:  # month — по умолчанию
+        cutoff = today.replace(day=1)
+    q = db.query(models.NetWorthSnapshot)
+    # для "day" хочется именно сегодняшний снимок (start-of-day), для остальных —
+    # последний на/до cutoff (т.к. снимка ровно на 1-е число может не быть).
+    if period == "day":
+        base = q.filter(models.NetWorthSnapshot.date == today).first()
+    else:
+        base = (q.filter(models.NetWorthSnapshot.date <= cutoff)
+                .order_by(models.NetWorthSnapshot.date.desc()).first())
+    if base is None:
+        base = q.order_by(models.NetWorthSnapshot.date.asc()).first()
+    return base
+
+
+def capital_overview(db: Session, period: str = "day") -> dict:
+    if period not in ("day", "week", "month", "year"):
+        period = "day"
     now = datetime.now()
+    today = now.date()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     net_now = compute_net_worth(db)
     usd_now = get_usd_rub(db)
     series = networth_series(db, 60)
 
-    # базовый снимок: на/до начала месяца, иначе самый ранний
-    base = (db.query(models.NetWorthSnapshot)
-            .filter(models.NetWorthSnapshot.date <= month_start.date())
-            .order_by(models.NetWorthSnapshot.date.desc()).first())
-    from_month_start = base is not None
-    if base is None:
-        base = (db.query(models.NetWorthSnapshot)
-                .order_by(models.NetWorthSnapshot.date.asc()).first())
-
+    base = _base_snapshot(db, period)
     delta = delta_days = savings = fx = other = None
-    if base is not None and base.date < date.today():
+    if base is not None:
         since = datetime.combine(base.date, datetime.min.time())
         delta = round(net_now - base.total_rub, 2)
-        delta_days = (date.today() - base.date).days
+        delta_days = (today - base.date).days
         savings = round(_sum_tx(db, "income", since) - _sum_tx(db, "expense", since), 2)
         rate_base = (db.query(models.FxRate)
                      .filter(models.FxRate.currency == "USD", models.FxRate.date <= base.date)
@@ -58,6 +77,7 @@ def capital_overview(db: Session) -> dict:
                           if (a.currency or "").upper() in _USD_LIKE)
             fx = round(usd_bal * (usd_now - rate_base.rate_rub), 2)
         other = round(delta - savings - (fx or 0.0), 2)
+    from_month_start = base is not None and base.date <= month_start.date()
 
     # распределение капитала (валюта/тип) + подушка безопасности (мес расходов)
     accounts = db.query(models.Account).filter(models.Account.archived.is_(False)).all()
@@ -84,7 +104,8 @@ def capital_overview(db: Session) -> dict:
     return {
         "net_worth": net_now, "usd_rate": round(usd_now, 2),
         "series": series, "delta": delta, "delta_days": delta_days,
-        "from_month_start": from_month_start,
+        "from_month_start": from_month_start, "period": period,
+        "period_from": base.date.isoformat() if base else None,
         "savings": savings, "fx": fx, "other": other,
         "allocation_currency": [{"name": k, "sum": round(v)} for k, v in
                                 sorted(by_cur.items(), key=lambda x: -x[1]) if v > 0],

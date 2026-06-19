@@ -274,9 +274,6 @@ async def import_statement(content: bytes) -> dict:
             bal_msg = (f"\nБаланс «{acc.name}»: {old_bal:,.2f} → <b>{acc.balance:,.2f}</b> ₽ "
                        f"({sign}{abs(delta_balance):,.2f})").replace(",", " ")
         db.commit()
-        if imported > 0:
-            from .trends import take_networth_snapshot
-            take_networth_snapshot(db)   # снимок дня = свежий баланс
         return {"status": "ok",
                 "text": f"📄 Выписка импортирована\nДобавлено: <b>{imported}</b> · пропущено (дубли/склейка): {skipped} из {len(rows)}{bal_msg}"}
     finally:
