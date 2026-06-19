@@ -54,14 +54,73 @@ def _monthly_savings(db: Session) -> float:
     return round(max(inc - exp, 0.0), 2)
 
 
+def ru_pension_age(birth_year: int, gender: str) -> int:
+    """Пенсионный возраст РФ (после реформы 2018, переходный период до 2028).
+
+    gender: 'm'|'f'. Для нетипичных годов рождения возвращается ближайшее
+    значение из переходной шкалы. Для современных пользователей (1980+) —
+    мужчины 65, женщины 60.
+    """
+    g = (gender or "").lower()
+    if g == "f":
+        if birth_year >= 1969:
+            return 60
+        if birth_year == 1968:
+            return 60
+        if birth_year == 1967:
+            return 59
+        if birth_year == 1966:
+            return 58
+        if birth_year == 1965:
+            return 57
+        if birth_year == 1964:
+            return 56
+        return 55
+    # мужчины и неуказанный пол
+    if birth_year >= 1964:
+        return 65
+    if birth_year == 1963:
+        return 65
+    if birth_year == 1962:
+        return 64
+    if birth_year == 1961:
+        return 63
+    if birth_year == 1960:
+        return 62
+    if birth_year == 1959:
+        return 61
+    return 60
+
+
 def _params(db: Session) -> dict:
     """Параметры пользователя из настроек (с дефолтами под РФ)."""
+    # авто-расчёт лет до пенсии по дате рождения + полу
+    years_default = 25
+    birth_date = (get_setting(db, "birth_date") or "").strip()
+    gender = (get_setting(db, "gender") or "").strip().lower()
+    pension_age = None
+    if birth_date:
+        try:
+            bd = date.fromisoformat(birth_date)
+            pension_age = ru_pension_age(bd.year, gender or "m")
+            today = date.today()
+            age_now = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+            years_default = max(1, pension_age - age_now)
+        except Exception:  # noqa: BLE001
+            pass
+    # явное переопределение «лет до пенсии» имеет приоритет (если задано)
+    explicit = get_setting(db, "fire_years_to_retire")
+    years_to_retire = int(float(explicit)) if explicit else years_default
     return {
         "inflation": float(get_setting(db, "fire_inflation") or 8.0) / 100.0,
         "nominal": float(get_setting(db, "fire_nominal_return") or 12.0) / 100.0,
         "custom_expenses": float(get_setting(db, "fire_fi_expenses") or 0),
         "target_alloc_rub": float(get_setting(db, "target_alloc_rub") or 70.0),
-        "years_to_retire": int(float(get_setting(db, "fire_years_to_retire") or 25)),
+        "years_to_retire": years_to_retire,
+        "birth_date": birth_date or None,
+        "gender": gender or None,
+        "pension_age": pension_age,
+        "years_to_retire_auto": birth_date and pension_age is not None and not explicit,
     }
 
 
@@ -127,6 +186,10 @@ def fire_metrics(db: Session) -> dict:
         "coast_fi_today": round(coast_today),
         "coast_fi_reached": net_worth >= coast_today,
         "years_to_retire": p["years_to_retire"],
+        "years_to_retire_auto": bool(p.get("years_to_retire_auto")),
+        "pension_age": p.get("pension_age"),
+        "birth_date": p.get("birth_date"),
+        "gender": p.get("gender"),
         "runway_months": runway,
         "savings_rate_pct": round(monthly_savings / (monthly_savings + monthly_exp) * 100, 1)
                             if (monthly_savings + monthly_exp) > 0 else 0.0,

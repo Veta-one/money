@@ -715,16 +715,26 @@ function forecastChart(fc){
 }
 async function openFireSettings(){
   const get=async k=>{try{return (await api('/api/kv/'+k)).value;}catch(e){return null;}};
-  const [infl, ret, exp, tar, y2r]=await Promise.all([
+  const [infl, ret, exp, tar, y2r, bd, gn]=await Promise.all([
     get('fire_inflation').then(v=>v||'8'),
     get('fire_nominal_return').then(v=>v||'12'),
     get('fire_fi_expenses').then(v=>v||''),
     get('target_alloc_rub').then(v=>v||'70'),
-    get('fire_years_to_retire').then(v=>v||'25'),
+    get('fire_years_to_retire').then(v=>v||''),
+    get('birth_date').then(v=>v||''),
+    get('gender').then(v=>v||'m'),
   ]);
+  // авто-расчёт лет до пенсии для предпросмотра
+  const pensionPreview=(()=>{ if(!bd) return ''; try{const b=new Date(bd+'T00:00:00'),now=new Date();const age=now.getFullYear()-b.getFullYear()-((now.getMonth()<b.getMonth()||(now.getMonth()===b.getMonth()&&now.getDate()<b.getDate()))?1:0);const pa=ruPensionAge(b.getFullYear(),gn);return `Тебе ${age} лет → пенсия в ${pa} (год ${b.getFullYear()+pa}) → ${pa-age} лет до неё`;}catch(e){return '';} })();
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Параметры прогноза (РФ)</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
     <div class="t2" style="color:var(--muted);margin:0 2px 14px">Все цифры — для модели. Реальные могут отличаться. Пересмотри раз в год.</div>
+    <div class="card" style="margin-bottom:10px"><div class="k">Дата рождения</div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input id="fs-bd" class="inp" type="date" value="${bd}" style="flex:1.4" oninput="onFireBdChange()">
+        <button id="fs-gm" class="chip${gn==='m'?' on':''}" onclick="setFireGender('m')">М</button>
+        <button id="fs-gf" class="chip${gn==='f'?' on':''}" onclick="setFireGender('f')">Ж</button></div>
+      <div id="fs-pension-preview" class="t2" style="color:var(--muted);margin-top:8px">${pensionPreview||'Используется для авто-расчёта лет до Coast FI.'}</div></div>
     <div class="card" style="margin-bottom:10px"><div class="k">Ожидаемая инфляция, %/год</div>
       <input id="fs-i" class="inp" type="number" inputmode="decimal" step="0.5" value="${infl}" style="margin-top:6px"></div>
     <div class="card" style="margin-bottom:10px"><div class="k">Ожидаемая номинальная доходность, %/год</div>
@@ -735,21 +745,57 @@ async function openFireSettings(){
     <div class="card" style="margin-bottom:10px"><div class="k">Целевая аллокация: рубли, %</div>
       <input id="fs-t" class="inp" type="number" inputmode="numeric" min="0" max="100" value="${tar}" style="margin-top:6px">
       <div class="t2" style="color:var(--muted);margin-top:6px">USD-активы = 100% − это</div></div>
-    <div class="card" style="margin-bottom:14px"><div class="k">Лет до «пенсии» (для Coast FI)</div>
-      <input id="fs-y" class="inp" type="number" inputmode="numeric" min="1" max="60" value="${y2r}" style="margin-top:6px"></div>
+    <details style="margin-bottom:14px"><summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:6px 2px">Переопределить лет до пенсии вручную</summary>
+      <div class="card" style="margin-top:8px"><input id="fs-y" class="inp" type="number" inputmode="numeric" min="1" max="60" placeholder="пусто = авто" value="${y2r}"></div></details>
     <button class="btn full" onclick="saveFireSettings()">Сохранить</button>`;
   document.getElementById('ov').style.display='flex';
 }
+function ruPensionAge(birthYear,gender){
+  // упрощённо: после реформы 2018, переходный период 2019-2028
+  const g=(gender||'m').toLowerCase();
+  if(g==='f'){
+    if(birthYear>=1968) return 60;
+    if(birthYear===1967) return 59;
+    if(birthYear===1966) return 58;
+    if(birthYear===1965) return 57;
+    if(birthYear===1964) return 56;
+    return 55;
+  }
+  if(birthYear>=1963) return 65;
+  if(birthYear===1962) return 64;
+  if(birthYear===1961) return 63;
+  if(birthYear===1960) return 62;
+  if(birthYear===1959) return 61;
+  return 60;
+}
+function onFireBdChange(){
+  const bd=document.getElementById('fs-bd').value;
+  const gn=document.getElementById('fs-gm').classList.contains('on')?'m':'f';
+  const el=document.getElementById('fs-pension-preview'); if(!el) return;
+  if(!bd){ el.textContent='Используется для авто-расчёта лет до Coast FI.'; return; }
+  try{ const b=new Date(bd+'T00:00:00'),now=new Date();
+    const age=now.getFullYear()-b.getFullYear()-((now.getMonth()<b.getMonth()||(now.getMonth()===b.getMonth()&&now.getDate()<b.getDate()))?1:0);
+    const pa=ruPensionAge(b.getFullYear(),gn);
+    el.textContent=`Тебе ${age} лет → пенсия в ${pa} (год ${b.getFullYear()+pa}) → ${pa-age} лет до неё`;
+  }catch(e){}
+}
+function setFireGender(g){
+  document.getElementById('fs-gm').className='chip'+(g==='m'?' on':'');
+  document.getElementById('fs-gf').className='chip'+(g==='f'?' on':'');
+  onFireBdChange();
+}
 async function saveFireSettings(){
+  const gn=document.getElementById('fs-gm').classList.contains('on')?'m':'f';
   const pairs=[
     ['fire_inflation','fs-i'], ['fire_nominal_return','fs-n'],
     ['fire_fi_expenses','fs-e'], ['target_alloc_rub','fs-t'],
-    ['fire_years_to_retire','fs-y']];
+    ['fire_years_to_retire','fs-y'], ['birth_date','fs-bd']];
   try{
     for(const [k,id] of pairs){
       const v=document.getElementById(id).value;
       await api('/api/kv/'+k,{method:'POST',body:JSON.stringify({value:v})});
     }
+    await api('/api/kv/gender',{method:'POST',body:JSON.stringify({value:gn})});
     toast('Сохранено'); closeOv(); loadCapital();
   }catch(e){ toast('Ошибка'); }
 }
