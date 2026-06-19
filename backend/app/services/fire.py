@@ -49,19 +49,25 @@ def _annual_expenses(db: Session) -> float:
 
 
 def _monthly_savings(db: Session) -> float:
-    """Сколько откладываем в среднем: max(план−факт_расходов, факт_доход−факт_расходов).
+    """Сколько откладываем в среднем: max(план−расход, факт_доход−расход).
+
+    Расход — `expected_monthly_expense` (среднее за полные календарные месяцы),
+    та же база, что и «можешь откладывать» на Целях, чтобы цифры совпадали
+    между экранами. Раньше тут было 6-месячное окно с делением на 6, которое
+    захватывало пустые/неполные стартовые месяцы и занижало расход → завышало
+    накопления (плановый 233k − заниженный 119k = 114k вместо реальных 72k).
 
     План — сумма активных Recurring-источников (expected_income_monthly).
     Берём план если он больше факта, чтобы учитывать поступления, которые
-    минуют Transaction (Туринвойс → крипта, пособия → вклад жены). Это
-    декларация пользователя «такой доход у нас есть».
+    минуют Transaction (Туринвойс → крипта, пособия → вклад жены).
     """
     from .income import expected_income_monthly
+    from .planning import expected_monthly_expense
     plan = expected_income_monthly(db)
-    fact_inc = _rolling_monthly_avg(db, "income", 6)
-    fact_exp = _rolling_monthly_avg(db, "expense", 6)
-    by_plan = plan - fact_exp
-    by_fact = fact_inc - fact_exp
+    exp = expected_monthly_expense(db)               # 3 полных мес — как на Целях
+    fact_inc = _rolling_monthly_avg(db, "income", 3)  # симметричное окно
+    by_plan = plan - exp
+    by_fact = fact_inc - exp
     return round(max(by_plan, by_fact, 0.0), 2)
 
 
