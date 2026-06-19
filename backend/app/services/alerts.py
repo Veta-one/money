@@ -118,14 +118,86 @@ def upcoming_payments(db: Session) -> list[str]:
     return out
 
 
+def staleness_nudges(db: Session) -> list[str]:
+    """Напоминания о застое: давно не грузил выписку / чеки / не обновлял балансы и курсы.
+    Каждый kind напоминаем не чаще раза в неделю (ключ-понедельник в Settings)."""
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    out: list[str] = []
+
+    def fresh(kind: str) -> bool:
+        last = get_setting(db, f"nudged_stale_{kind}")
+        try:
+            return bool(last) and date.fromisoformat(last) >= monday
+        except ValueError:
+            return False
+
+    def mark(kind: str) -> None:
+        set_setting(db, f"nudged_stale_{kind}", today.isoformat())
+
+    # 1) Выписки из банка
+    if not fresh("statement"):
+        last_st = db.query(func.max(models.Transaction.created_at)).filter(
+            models.Transaction.source == "statement").scalar()
+        if last_st:
+            days = (today - last_st.date()).days
+            if days >= 14:
+                out.append(f"Давно не загружал выписки — последняя {days} дн. назад. "
+                           "Закинь свежий CSV/Excel, чтобы картинка не отставала.")
+                mark("statement")
+
+    # 2) Чеки из ФНС
+    if not fresh("receipts"):
+        last_rcp = db.query(func.max(models.Transaction.created_at)).filter(
+            models.Transaction.source == "receipt").scalar()
+        if last_rcp:
+            days = (today - last_rcp.date()).days
+            if days >= 14:
+                out.append(f"Чеки из ФНС не подтягиваются {days} дн. — проверь связь "
+                           "или подгрузи фото QR.")
+                mark("receipts")
+
+    # 3) Балансы (по снимкам капитала)
+    if not fresh("balances"):
+        last_nw = db.query(func.max(models.NetWorthSnapshot.date)).scalar()
+        if last_nw:
+            days = (today - last_nw).days
+            if days >= 21:
+                out.append(f"Балансы счетов не обновлялись {days} дн. — загляни в «Капитал», "
+                           "поправь суммы.")
+                mark("balances")
+
+    # 4) Курс USD устарел
+    if not fresh("fx"):
+        last_fx = db.query(func.max(models.FxRate.date)).filter(
+            models.FxRate.currency == "USD").scalar()
+        if last_fx:
+            days = (today - last_fx).days
+            if days >= 7:
+                out.append(f"Курс USD не обновлялся {days} дн. — пересчёт капитала может "
+                           "врать.")
+                mark("fx")
+
+    # 5) Учёт «затих»
+    if not fresh("activity"):
+        last_tx = db.query(func.max(models.Transaction.created_at)).scalar()
+        if last_tx:
+            days = (today - last_tx.date()).days
+            if days >= 5:
+                out.append(f"Уже {days} дн. без новых операций. Не забыл вести учёт?")
+                mark("activity")
+
+    return out
+
+
 async def nudge_job() -> None:
-    """Планировщик: ежедневно слать напоминания о продлении срока + предстоящих платежах."""
+    """Планировщик: ежедневно слать напоминания о продлении срока + предстоящих платежах + застое."""
     from ..bot import bot
     if not bot:
         return
     db = SessionLocal()
     try:
-        msgs = renewal_nudges(db) + upcoming_payments(db)
+        msgs = renewal_nudges(db) + upcoming_payments(db) + staleness_nudges(db)
     finally:
         db.close()
     for msg in msgs:
