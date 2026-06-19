@@ -147,6 +147,13 @@
   .heat-cell{width:11px;height:11px;border-radius:3px;background:var(--line)}
   .heat-leg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:10px;justify-content:flex-end}
   .heat-leg-sq{width:10px;height:10px;border-radius:3px}
+  .heat-cell.tipped{outline:2px solid var(--ink);outline-offset:1px}
+  /* Тултипы (десктоп-курсор) и интерактивные элементы графиков */
+  #_tip{position:fixed;background:rgba(20,21,26,.96);color:#fff;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.4;pointer-events:none;z-index:90;box-shadow:0 8px 28px rgba(0,0,0,.25);opacity:0;transition:opacity .12s;max-width:260px}
+  html.dark #_tip{background:rgba(58,61,69,.96)}
+  #_tip.show{opacity:1}
+  [data-drill]{cursor:pointer}
+  [data-tip]{cursor:default}
 </style>
 </head>
 <body>
@@ -330,6 +337,68 @@ const SKEL={
     <div class="skel" style="height:120px;border-radius:18px"></div>`,
 };
 function showSkel(kind){ const el=document.getElementById('v-'+kind); if(el) el.innerHTML=SKEL[kind]||''; }
+
+// ===== TOOLTIP + CLICK-TO-DRILL =====
+// Один глобальный тултип, плавающий за курсором; делегированные хэндлеры
+// на mousemove/click читают data-tip и data-drill="kind:value" из ближайшего предка.
+let _tipEl;
+function tipShow(x,y,html){
+  if(!_tipEl){ _tipEl=document.createElement('div'); _tipEl.id='_tip'; document.body.appendChild(_tipEl); }
+  _tipEl.innerHTML=html; _tipEl.classList.add('show');
+  const w=_tipEl.offsetWidth,h=_tipEl.offsetHeight;
+  let nx=x+14,ny=y-h-10;
+  if(nx+w>innerWidth-8) nx=x-w-14;
+  if(ny<8) ny=y+18;
+  if(nx<8) nx=8;
+  _tipEl.style.left=nx+'px'; _tipEl.style.top=ny+'px';
+}
+function tipHide(){ if(_tipEl) _tipEl.classList.remove('show'); }
+// Линейный график: вертикальная пунктирная линия + точка в ближайшей точке.
+// Геометрия — в data-line='[[svg_x,svg_y,"date",value],...]', тип в data-line-fmt.
+function lineHover(svg,evt){
+  const raw=svg.getAttribute('data-line'); if(!raw) return;
+  let pts; try{ pts=JSON.parse(raw); }catch(e){ return; }
+  if(!pts.length) return;
+  const rect=svg.getBoundingClientRect(), vbW=(svg.viewBox.baseVal&&svg.viewBox.baseVal.width)||330;
+  const px=(evt.clientX-rect.left)/rect.width*vbW;
+  let best=0,bd=Infinity;
+  for(let i=0;i<pts.length;i++){ const d=Math.abs(pts[i][0]-px); if(d<bd){bd=d;best=i;} }
+  const [sx,sy,date,val]=pts[best];
+  const cx=svg.querySelector('.cx'); if(cx){ cx.setAttribute('x1',sx); cx.setAttribute('x2',sx); cx.setAttribute('opacity','.55'); }
+  const dot=svg.querySelector('.cx-dot'); if(dot){ dot.setAttribute('cx',sx); dot.setAttribute('cy',sy); dot.setAttribute('opacity','1'); }
+  const fmtType=svg.getAttribute('data-line-fmt')||'rub';
+  const valStr=fmtType==='rate'?`${val.toFixed(2)} ₽`:`${fmt(val)} ₽`;
+  const dt=new Date(date);
+  const dateStr=dt.toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'2-digit'});
+  tipShow(evt.clientX,evt.clientY,`<div style="color:#a9adb6;font-size:11px">${dateStr}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${valStr}</div>`);
+}
+function lineHoverClear(svg){
+  const cx=svg.querySelector('.cx'); if(cx) cx.setAttribute('opacity','0');
+  const dot=svg.querySelector('.cx-dot'); if(dot) dot.setAttribute('opacity','0');
+}
+document.addEventListener('mousemove',e=>{
+  const lineSvg=e.target.closest('svg[data-line]');
+  if(lineSvg){ lineHover(lineSvg,e); return; }
+  // если выходим из линейного графика — снять crosshair у всех
+  document.querySelectorAll('svg[data-line]').forEach(s=>{ if(!s.contains(e.target)) lineHoverClear(s); });
+  const tEl=e.target.closest('[data-tip]');
+  if(tEl){ tipShow(e.clientX,e.clientY,tEl.getAttribute('data-tip')); return; }
+  tipHide();
+});
+document.addEventListener('mouseleave',()=>{ tipHide(); document.querySelectorAll('svg[data-line]').forEach(lineHoverClear); },true);
+document.addEventListener('click',e=>{
+  const d=e.target.closest('[data-drill]'); if(!d) return;
+  const [kind,...rest]=d.getAttribute('data-drill').split(':'); const val=rest.join(':');
+  if(kind==='day') openOpsForDay(val);
+  else if(kind==='month') openOpsForMonth(val);
+  else if(kind==='cat') openCatOps(parseInt(val,10));
+  else if(kind==='merch') openMerchOps(val);
+});
+// ===== Drill-helpers (используются и из делегированного click, и из карточек) =====
+function _opsReset(){ _ops={period:'this',type:'',cat:'',q:'',merchant:'',minA:'',maxA:'',review:0,offset:0,items:[],more:false,count:0,se:0,si:0,date:'',monthKey:''}; _opsBulk=false; _opsSel.clear(); _opsFiltOpen=false; }
+function openOpsForDay(d){ _opsReset(); _ops.date=d; tap('light'); tab('ops'); }
+function openOpsForMonth(ym){ _opsReset(); _ops.monthKey=ym; tap('light'); tab('ops'); }
+function opsClearDrill(){ _ops.date=''; _ops.monthKey=''; loadOps(); }
 // Heatmap: грид 7×N недель + цветовая шкала по интенсивности.
 function hmap(data, opts){
   const pts=(data&&data.points)||[]; if(!pts.length) return '';
@@ -349,8 +418,12 @@ function hmap(data, opts){
   const cells=[];
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
     const key=d.toISOString().slice(0,10), v=map[key]||0, l=level(v);
-    const title=`${new Date(key).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}: ${fmt(v)} ₽`;
-    cells.push(`<div class="heat-cell" title="${title}" style="${l>0?`background:${accent};opacity:${op(l)}`:''}"></div>`);
+    const dateStr=new Date(key).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'2-digit'});
+    const tip=v>0
+      ? `<div style="color:#a9adb6;font-size:11px">${dateStr}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${fmt(v)} ₽</div><div style="color:#a9adb6;font-size:10px;margin-top:3px">тап → операции дня</div>`
+      : `<div style="color:#a9adb6;font-size:11px">${dateStr}</div><div style="margin-top:2px">трат не было</div>`;
+    const drill=v>0?` data-drill="day:${key}"`:'';
+    cells.push(`<div class="heat-cell" data-tip='${tip.replace(/'/g,"&#39;")}'${drill} style="${l>0?`background:${accent};opacity:${op(l)}`:''}"></div>`);
   }
   const total=pts.reduce((s,p)=>s+p.spent,0);
   const monthsAgo=Math.round((days/30)*10)/10;
@@ -400,9 +473,15 @@ function barChart(data, w=330, h=144){
   let s='';
   data.forEach((d,i)=>{
     const bh=Math.max(3, d.spent/max*(base-top)), x=i*(bw+gap), y=base-bh;
-    s+=`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="6" fill="var(--ink)"/>`;
-    if(d.spent>0) s+=`<text x="${x+bw/2}" y="${y-6}" text-anchor="middle" font-size="10.5" fill="#15161a" font-weight="700">${fmtK(d.spent)}</text>`;
-    s+=`<text x="${x+bw/2}" y="${h-5}" text-anchor="middle" font-size="11" fill="#8b909a">${d.label}</text>`;
+    const prev=i>0?data[i-1].spent:0;
+    const dPct=prev>0?Math.round((d.spent-prev)/prev*100):null;
+    const ymKey=d.ym||'';
+    const dColor=dPct>0?'#ff4d54':'#18c171';
+    const tipHtml=`<div style="color:#a9adb6;font-size:11px">${d.label}${d.year?' '+d.year:''}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${fmt(d.spent)} ₽</div>${dPct!==null?`<div style="color:${dColor};font-size:11px;margin-top:2px">${dPct>=0?'+':''}${dPct}% к прошлому</div>`:''}${ymKey?`<div style="color:#a9adb6;font-size:10px;margin-top:3px">тап → операции месяца</div>`:''}`;
+    const drillAttr=ymKey?` data-drill="month:${ymKey}"`:'';
+    s+=`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="6" fill="var(--ink)" data-tip='${tipHtml.replace(/'/g,"&#39;")}'${drillAttr}/>`;
+    if(d.spent>0) s+=`<text x="${x+bw/2}" y="${y-6}" text-anchor="middle" font-size="10.5" fill="var(--text)" font-weight="700" pointer-events="none">${fmtK(d.spent)}</text>`;
+    s+=`<text x="${x+bw/2}" y="${h-5}" text-anchor="middle" font-size="11" fill="#8b909a" pointer-events="none">${d.label}</text>`;
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
 }
@@ -411,7 +490,7 @@ function hbar(items, opts){
   const total=data.reduce((s,i)=>s+i.value,0)||1;
   const title=(opts&&opts.title)||'Всего';
   const showLegend=!(opts&&opts.compact);
-  const segs=data.map(it=>{const pct=it.value/total*100;return `<div style="flex:${Math.max(0.6,pct).toFixed(2)};background:${it.color};min-width:3px"></div>`;}).join('');
+  const segs=data.map(it=>{const pct=it.value/total*100; const tip=`<div style="color:#a9adb6;font-size:11px">${(it.name||'').replace(/'/g,"&#39;")}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${fmt(it.value)} ₽</div><div style="color:#a9adb6;font-size:11px;margin-top:2px">${Math.round(pct)}% от всего</div>`; return `<div data-tip='${tip.replace(/'/g,"&#39;")}' style="flex:${Math.max(0.6,pct).toFixed(2)};background:${it.color};min-width:3px"></div>`;}).join('');
   const legend=showLegend?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
     ${data.map(it=>{const pct=Math.round(it.value/total*100);return `<div style="display:flex;align-items:center;gap:8px">
       <span style="width:10px;height:10px;border-radius:3px;background:${it.color};flex:none"></span>
@@ -434,11 +513,18 @@ function cashflowChart(data, w=330, h=160){
     const x=i*(grp+gap);
     const ih=Math.max(2,d.income/max*(base-top)), eh=Math.max(2,d.expense/max*(base-top));
     const ix=x+bw/2, ex=x+bw+3+bw/2;
-    s+=`<rect x="${x}" y="${base-ih}" width="${bw}" height="${ih}" rx="4" fill="var(--green)"/>`;
-    s+=`<rect x="${x+bw+3}" y="${base-eh}" width="${bw}" height="${eh}" rx="4" fill="var(--ink)"/>`;
-    if(d.income>0) s+=`<text x="${ix}" y="${base-ih-4}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#18c171">${fmtK(d.income)}</text>`;
-    if(d.expense>0) s+=`<text x="${ex}" y="${base-eh-4}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#15161a">${fmtK(d.expense)}</text>`;
-    s+=`<text x="${x+grp/2}" y="${h-4}" text-anchor="middle" font-size="10" fill="#8b909a">${new Date(d.ym+'-01').toLocaleDateString('ru-RU',{month:'short'})}</text>`;
+    const mName=new Date(d.ym+'-01').toLocaleDateString('ru-RU',{month:'long',year:'2-digit'});
+    const net=Math.round((d.income||0)-(d.expense||0));
+    const netCol=net>=0?'#18c171':'#ff4d54';
+    const tipHtml=`<div style="color:#a9adb6;font-size:11px">${mName}</div><div style="margin-top:3px;font-size:12px"><span style="color:#18c171">+${fmt(d.income)}</span> <span style="color:#a9adb6">/</span> <span>−${fmt(d.expense)}</span></div><div style="margin-top:2px;font-size:13px;font-weight:800;color:${netCol}">= ${net>=0?'+':'−'}${fmt(Math.abs(net))} ₽</div><div style="color:#a9adb6;font-size:10px;margin-top:3px">тап → операции месяца</div>`;
+    const tipAttr=`data-tip='${tipHtml.replace(/'/g,"&#39;")}' data-drill="month:${d.ym}"`;
+    // прозрачный hit-area на весь столбец
+    s+=`<rect x="${x-2}" y="${top}" width="${grp+4}" height="${base-top}" fill="transparent" ${tipAttr}/>`;
+    s+=`<rect x="${x}" y="${base-ih}" width="${bw}" height="${ih}" rx="4" fill="var(--green)" pointer-events="none"/>`;
+    s+=`<rect x="${x+bw+3}" y="${base-eh}" width="${bw}" height="${eh}" rx="4" fill="var(--ink)" pointer-events="none"/>`;
+    if(d.income>0) s+=`<text x="${ix}" y="${base-ih-4}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#18c171" pointer-events="none">${fmtK(d.income)}</text>`;
+    if(d.expense>0) s+=`<text x="${ex}" y="${base-eh-4}" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--text)" pointer-events="none">${fmtK(d.expense)}</text>`;
+    s+=`<text x="${x+grp/2}" y="${h-4}" text-anchor="middle" font-size="10" fill="#8b909a" pointer-events="none">${new Date(d.ym+'-01').toLocaleDateString('ru-RU',{month:'short'})}</text>`;
   });
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
 }
@@ -446,12 +532,15 @@ function lineChart(data, w=330, h=120){
   if(data.length<2) return '';
   const vals=data.map(d=>d.total), min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
   const pad=12, base=h-18, top=12, X=i=>pad+i*(w-2*pad)/(data.length-1), Y=v=>top+(1-(v-min)/rng)*(base-top);
-  const pts=data.map((d,i)=>`${X(i).toFixed(1)},${Y(d.total).toFixed(1)}`).join(' ');
-  let s=`<polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const ptsStr=data.map((d,i)=>`${X(i).toFixed(1)},${Y(d.total).toFixed(1)}`).join(' ');
+  const hover=JSON.stringify(data.map((d,i)=>[+X(i).toFixed(1),+Y(d.total).toFixed(1),d.date,d.total]));
+  let s=`<polyline points="${ptsStr}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
   s+=`<circle cx="${X(data.length-1)}" cy="${Y(data[data.length-1].total)}" r="3.5" fill="var(--ink)"/>`;
+  s+=`<line class="cx" x1="0" y1="${top}" x2="0" y2="${base}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`;
+  s+=`<circle class="cx-dot" r="4" fill="var(--ink)" opacity="0"/>`;
   s+=`<text x="${pad}" y="${h-3}" font-size="10" fill="#8b909a">${new Date(data[0].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
   s+=`<text x="${w-pad}" y="${h-3}" text-anchor="end" font-size="10" fill="#8b909a">${new Date(data[data.length-1].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
-  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${hover.replace(/'/g,"&#39;")}' data-line-fmt="rub">${s}</svg>`;
 }
 function rateChartCard(fxh, label){
   const pts=(fxh&&fxh.points)||[]; if(pts.length<2) return '';
@@ -471,10 +560,12 @@ function rateChartCard(fxh, label){
     <div style="font-size:11px;color:var(--muted);margin:2px 0 4px">
       <span style="color:${dColor};font-weight:700">${dPct>=0?'↑ +':'↓ −'}${Math.abs(dPct).toFixed(1)}%</span>
       <span> за год · мин ${min.toFixed(2)} · макс ${max.toFixed(2)}</span></div>
-    <svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">
+    <svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${JSON.stringify(pts.map((p,i)=>[+X(i).toFixed(1),+Y(p.rate).toFixed(1),p.date,p.rate])).replace(/'/g,"&#39;")}' data-line-fmt="rate">
       <polygon points="${area}" fill="var(--ink)" opacity="0.08"/>
       <polyline points="${line}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
       <circle cx="${X(pts.length-1)}" cy="${Y(last)}" r="3" fill="var(--ink)"/>
+      <line class="cx" x1="0" y1="${top}" x2="0" y2="${base}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
+      <circle class="cx-dot" r="4" fill="var(--ink)" opacity="0"/>
       <text x="${pad}" y="${h-3}" font-size="10" fill="#8b909a">${d0}</text>
       <text x="${w-pad}" y="${h-3}" text-anchor="end" font-size="10" fill="#8b909a">${d1}</text>
     </svg></div>`;
@@ -740,7 +831,9 @@ let _ops={period:'this', type:'', cat:'', q:'', merchant:'', minA:'', maxA:'', r
 function ym(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function opsQS(){
   const p=new URLSearchParams(), now=new Date();
-  if(_ops.period==='this') p.set('month',ym(now));
+  if(_ops.date){ p.set('date_from',_ops.date); p.set('date_to',_ops.date); }
+  else if(_ops.monthKey) p.set('month',_ops.monthKey);
+  else if(_ops.period==='this') p.set('month',ym(now));
   else if(_ops.period==='last'){ const d=new Date(now.getFullYear(),now.getMonth()-1,1); p.set('month',ym(d)); }
   if(_ops.type) p.set('type',_ops.type);
   if(_ops.cat) p.set('category_id',_ops.cat);
@@ -804,6 +897,11 @@ function renderOps(){
   const catName=o.cat?((_cats.find(c=>String(c.id)===String(o.cat))||{}).name||'Категория'):'Все категории';
   const nActive=(o.period!=='this'?1:0)+(o.type?1:0)+(o.cat?1:0)+(o.q?1:0)+(o.merchant?1:0)+(o.minA||o.maxA?1:0)+(o.review?1:0);
   const merchTag=o.merchant?`<div class="chip on" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px" onclick="opsSet('merchant','')">${o.merchant} ✕</div>`:'';
+  const drillTag = o.date
+    ? `<div class="chip on" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px" onclick="opsClearDrill()">за ${new Date(o.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'long'})} ✕</div>`
+    : o.monthKey
+    ? `<div class="chip on" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px" onclick="opsClearDrill()">за ${new Date(o.monthKey+'-01').toLocaleDateString('ru-RU',{month:'long',year:'2-digit'})} ✕</div>`
+    : '';
   const panel=_opsFiltOpen?`
     <div class="filt">${pc('this','Этот месяц')}${pc('last','Прошлый')}${pc('all','Всё время')}</div>
     <div class="filt">${tc('','Все')}${tc('expense','Расходы')}${tc('income','Доходы')}${tc('transfer','Переводы')}<button class="chip${o.review?' on':''}" onclick="opsSet('review',${o.review?0:1})">На разбор</button></div>
@@ -818,7 +916,7 @@ function renderOps(){
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <button class="chip${_opsFiltOpen?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleFilt()">${icon('filter',16)} Фильтр${nActive?' · '+nActive:''}</button>
       <button class="chip${_opsBulk?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleBulk()">${icon('list',16)} ${_opsBulk?'Готово':'Выделить'}</button></div>
-    ${merchTag}${panel}
+    ${drillTag}${merchTag}${panel}
     <div class="grid2" style="margin-top:0">
       <div class="card"><div class="k">Расходы</div><div class="v">${fmt(o.se)}<span class="cur">${CUR}</span></div></div>
       <div class="card"><div class="k">Доходы</div><div class="v" style="color:var(--green)">${fmt(o.si)}<span class="cur">${CUR}</span></div></div></div>
@@ -995,7 +1093,7 @@ async function loadAnalytics(){
             <span class="cc-p">${Math.round(c.sum/tot*100)}%</span></div>
           <div class="cc-n">${c.name}</div></div>`}).join('')+`</div>`:`<div class="empty">Расходов за период нет.</div>`}
       <h2>Куда уходит больше всего</h2>
-      ${tm.length?tm.map(m=>{const me=(m.merchant||'').replace(/'/g,'&#39;');return `<div class="row" style="cursor:pointer" onclick="openMerchOps('${me}')"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
+      ${tm.length?tm.map(m=>{const me=(m.merchant||'').replace(/'/g,'&#39;');const tipH=`<div style="color:#a9adb6;font-size:11px">${m.merchant}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${fmt(m.sum)} ₽</div><div style="color:#a9adb6;font-size:10px;margin-top:3px">тап → все операции продавца</div>`;return `<div class="row" data-tip='${tipH.replace(/'/g,"&#39;")}' style="cursor:pointer" onclick="openMerchOps('${me}')"><div class="sq" style="background:${tint(color(m.merchant))};color:${color(m.merchant)}">${icon(catIcon(m.merchant),20)}</div>
         <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`}).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
       <h2>Подписки и регулярные</h2>
       <div class="card"><div class="k">В месяц на регулярные</div><div class="v">${fmt(subs.total)}<span class="cur">${CUR}</span></div></div>

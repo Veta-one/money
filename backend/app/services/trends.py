@@ -32,7 +32,8 @@ def monthly_spending(db, months: int = 6) -> list[dict]:
         k = (dt.year, dt.month)
         if k in buckets:
             buckets[k] += amt or 0.0
-    return [{"label": _MONTHS[k[1] - 1], "spent": round(buckets[k], 2)} for k in keys]
+    return [{"ym": f"{k[0]:04d}-{k[1]:02d}", "year": k[0],
+             "label": _MONTHS[k[1] - 1], "spent": round(buckets[k], 2)} for k in keys]
 
 
 def take_networth_snapshot(db) -> float:
