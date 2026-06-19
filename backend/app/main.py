@@ -26,6 +26,8 @@ from .security import current_user
 from .services.ai_chat import ask as ai_ask
 from .services.alerts import fns_refresh_job, nudge_job
 from .services.analytics import analytics_overview
+from .services.fire import (allocation_target, fire_metrics, net_worth_forecast,
+                             rolling_savings_rate)
 from .services.backup import make_and_send_backup
 from .services.budget import budget_overview
 from .services.capital import capital_overview
@@ -249,6 +251,21 @@ async def heatmap(days: int = 365,
     pts = daily_spending(db, days)
     mx = max((p["spent"] for p in pts), default=0.0)
     return {"days": days, "points": pts, "max": round(mx, 2)}
+
+
+@app.get("/api/fire")
+async def fire(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """FIRE-калькулятор: 3 сценария, Years to FI, Coast FI, Runway, целевая аллокация."""
+    return {**fire_metrics(db),
+            "allocation": allocation_target(db),
+            "rolling_savings_rate": rolling_savings_rate(db)}
+
+
+@app.get("/api/forecast")
+async def forecast(years: int = 20, user: dict = Depends(current_user),
+                    db: Session = Depends(get_session)):
+    """Прогноз net worth на N лет (в сегодняшних рублях)."""
+    return net_worth_forecast(db, years)
 
 
 class AskIn(BaseModel):

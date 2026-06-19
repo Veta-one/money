@@ -616,9 +616,146 @@ async function loadDashboard(){
   }catch(e){ e.message==='AUTH'?authErr('dashboard'):document.getElementById('v-dashboard').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 
+// ===== FIRE-toolkit (РФ-параметры) =====
+function _fmtBig(n){
+  n=Math.round(n||0); const a=Math.abs(n);
+  if(a>=1_000_000) return (n/1_000_000).toFixed(a>=10_000_000?0:1).replace('.',',')+' млн';
+  if(a>=1000) return Math.round(n/1000)+' тыс';
+  return fmt(n);
+}
+function renderFireCard(fr){
+  const sc=fr.scenarios||[];
+  const base=sc[1]||{}; const safe=sc[0]||{}; const aggr=sc[2]||{};
+  const yrsLabel=v=>v==null?'—':v===0?'достигнут':v>=10?Math.round(v)+' лет':v.toFixed(1).replace('.0','').replace('.',',')+' лет';
+  const scenarioRow=(s,emphasis)=>`<div style="padding:10px 0;${emphasis?'':'border-top:1px solid var(--line);'}display:flex;align-items:center;gap:10px">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:${emphasis?'800':'600'}">${s.label} <span style="color:var(--muted);font-weight:500">· ${s.multiple}×</span></div>
+      <div class="t2" style="margin-top:2px">SWR ${s.swr_pct}% · цель ${_fmtBig(s.fi_number)} ₽</div></div>
+    <div style="text-align:right">
+      <div style="font-size:14px;font-weight:800;color:${s.progress_pct>=100?'var(--green)':'var(--text)'}">${s.progress_pct}%</div>
+      <div class="t2" style="margin-top:2px">${yrsLabel(s.years_to_fi)}</div></div></div>`;
+  const runwayCol=fr.runway_months==null?'var(--muted)':fr.runway_months>=12?'var(--green)':fr.runway_months>=6?'#ff8a3d':'var(--red)';
+  return `<h2 style="margin-top:18px">Финансовая независимость</h2>
+    <div class="card" style="padding:16px 16px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div>
+          <div class="t2" style="color:var(--muted)">Годовые расходы (rolling 12 мес)</div>
+          <div style="font-size:18px;font-weight:800;letter-spacing:-.3px">${fmt(fr.annual_expenses)} ₽</div></div>
+        <button class="iconbtn" onclick="openFireSettings()" title="Параметры">${icon('gear',18)}</button></div>
+      <div style="display:flex;gap:4px;font-size:11px;color:var(--muted);margin-top:4px">
+        реал. доходность <b style="color:${fr.real_return_pct>=0?'var(--green)':'var(--red)'}">${fr.real_return_pct>=0?'+':''}${fr.real_return_pct}%</b> ·
+        откладываю <b>${_fmtBig(fr.monthly_savings)} ₽/мес</b></div>
+      <div style="margin-top:14px">${scenarioRow(safe,false)}${scenarioRow(base,true)}${scenarioRow(aggr,false)}</div>
+      <div class="grid2" style="margin-top:12px">
+        <div style="background:var(--bg);border-radius:14px;padding:11px 13px">
+          <div class="t2" style="color:var(--muted)">Runway без дохода</div>
+          <div style="font-size:18px;font-weight:800;color:${runwayCol}">${fr.runway_months==null?'—':fr.runway_months>=24?Math.round(fr.runway_months/12)+' лет':fr.runway_months+' мес'}</div></div>
+        <div style="background:var(--bg);border-radius:14px;padding:11px 13px">
+          <div class="t2" style="color:var(--muted)">Coast FI ${fr.coast_fi_reached?'✓':'(к '+(new Date().getFullYear()+fr.years_to_retire)+')'}</div>
+          <div style="font-size:18px;font-weight:800;color:${fr.coast_fi_reached?'var(--green)':'var(--text)'}">${_fmtBig(fr.coast_fi_today)} ₽</div></div></div>
+      <div class="t2" style="margin-top:10px;color:var(--muted);font-size:11px">Прогноз — не план. Реал. доходность ≠ ожидаемая. Пересматривай раз в год.</div>
+    </div>`;
+}
+function renderAllocDrift(al){
+  if(!al||!al.target_rub) return '';
+  const col=al.verdict==='bad'?'var(--red)':al.verdict==='warn'?'#ff8a3d':'var(--green)';
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+    <div style="display:flex;justify-content:space-between;font-size:12px">
+      <span class="muted">цель: <b style="color:var(--text)">${al.target_rub}% / ${al.target_usd}%</b></span>
+      <span class="muted">факт: <b style="color:var(--text)">${al.actual_rub}% / ${al.actual_usd}%</b></span></div>
+    <div class="t2" style="margin-top:6px;color:${col};font-weight:600">${al.drift_pct>=0?'+':''}${al.drift_pct}% по USD · ${al.advice}</div></div>`;
+}
+function forecastChart(fc){
+  const pts=(fc.points||[]).filter(p=>p.year_offset!==undefined); if(pts.length<2) return '';
+  const w=330, h=180, padL=8, padR=8, padT=22, padB=24;
+  const vals=pts.map(p=>p.value);
+  const ti=fc.fi_targets||{}; const targets=[ti.aggr, ti.base, ti.safe].filter(v=>v>0);
+  const maxV=Math.max(...vals, ...targets);
+  const minV=Math.min(...vals, 0);
+  const rng=(maxV-minV)||1;
+  const X=i=>padL+i*(w-padL-padR)/(pts.length-1);
+  const Y=v=>padT+(1-(v-minV)/rng)*(h-padT-padB);
+  // линия капитала
+  const linePts=pts.map((p,i)=>`${X(i).toFixed(1)},${Y(p.value).toFixed(1)}`).join(' ');
+  const areaPts=`${linePts} ${X(pts.length-1).toFixed(1)},${(h-padB).toFixed(1)} ${padL},${(h-padB).toFixed(1)}`;
+  // FI-цели горизонтальными пунктирами
+  const targetLines=[
+    {y:ti.base, col:'#18c171', label:'Базовый FI'},
+    {y:ti.aggr, col:'#3b82f6', label:'Оптимистичный'},
+    {y:ti.safe, col:'#ff4d54', label:'Осторожный'},
+  ].filter(t=>t.y>0 && t.y<=maxV*1.1).map(t=>`
+    <line x1="${padL}" y1="${Y(t.y).toFixed(1)}" x2="${w-padR}" y2="${Y(t.y).toFixed(1)}" stroke="${t.col}" stroke-width="1" stroke-dasharray="4 4" opacity=".55"/>
+    <text x="${w-padR-2}" y="${Y(t.y)-3}" font-size="9.5" fill="${t.col}" text-anchor="end" font-weight="700">${t.label} · ${_fmtBig(t.y)}</text>`).join('');
+  // точки пересечения
+  const crossings=Object.entries(fc.fi_crossings||{}).filter(([k,v])=>v).map(([k,v])=>{
+    const col=k==='base'?'#18c171':k==='aggr'?'#3b82f6':'#ff4d54';
+    const px=X(Math.round(v.month/12));
+    return `<circle cx="${px.toFixed(1)}" cy="${Y(v.target).toFixed(1)}" r="4" fill="${col}" stroke="#fff" stroke-width="1.5"/>`;
+  }).join('');
+  // ось X (годы)
+  const xLabels=[];
+  for(let i=0;i<pts.length;i++){
+    if(i===0 || pts[i].year_offset%5===0 || i===pts.length-1){
+      xLabels.push(`<text x="${X(i).toFixed(1)}" y="${h-6}" font-size="10" fill="#8b909a" text-anchor="middle">${pts[i].year_offset===0?'сейчас':'+'+pts[i].year_offset+'г'}</text>`);
+    }
+  }
+  // hover-данные
+  const hover=JSON.stringify(pts.map((p,i)=>[+X(i).toFixed(1),+Y(p.value).toFixed(1),p.date,p.value]));
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${hover.replace(/'/g,"&#39;")}' data-line-fmt="rub">
+    <polygon points="${areaPts}" fill="var(--ink)" opacity=".07"/>
+    ${targetLines}
+    <polyline points="${linePts}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${crossings}
+    <line class="cx" x1="0" y1="${padT}" x2="0" y2="${h-padB}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
+    <circle class="cx-dot" r="4" fill="var(--ink)" opacity="0"/>
+    ${xLabels.join('')}
+  </svg>
+  <div style="display:flex;gap:14px;justify-content:center;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+    <span>откладываю ${_fmtBig(fc.monthly_savings)} ₽/мес</span>·<span>реальная доходность ${fc.real_return_pct>=0?'+':''}${fc.real_return_pct}%</span></div>`;
+}
+async function openFireSettings(){
+  const get=async k=>{try{return (await api('/api/kv/'+k)).value;}catch(e){return null;}};
+  const [infl, ret, exp, tar, y2r]=await Promise.all([
+    get('fire_inflation').then(v=>v||'8'),
+    get('fire_nominal_return').then(v=>v||'12'),
+    get('fire_fi_expenses').then(v=>v||''),
+    get('target_alloc_rub').then(v=>v||'70'),
+    get('fire_years_to_retire').then(v=>v||'25'),
+  ]);
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Параметры прогноза (РФ)</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="t2" style="color:var(--muted);margin:0 2px 14px">Все цифры — для модели. Реальные могут отличаться. Пересмотри раз в год.</div>
+    <div class="card" style="margin-bottom:10px"><div class="k">Ожидаемая инфляция, %/год</div>
+      <input id="fs-i" class="inp" type="number" inputmode="decimal" step="0.5" value="${infl}" style="margin-top:6px"></div>
+    <div class="card" style="margin-bottom:10px"><div class="k">Ожидаемая номинальная доходность, %/год</div>
+      <input id="fs-n" class="inp" type="number" inputmode="decimal" step="0.5" value="${ret}" style="margin-top:6px">
+      <div class="t2" style="color:var(--muted);margin-top:6px">микс депозит ~16% + MOEX ~10% + USD-активы ~10% ≈ 12%</div></div>
+    <div class="card" style="margin-bottom:10px"><div class="k">Желаемые годовые расходы при FI, ₽ (пусто = текущие)</div>
+      <input id="fs-e" class="inp" type="number" inputmode="decimal" placeholder="по умолчанию: rolling 12 мес" value="${exp}" style="margin-top:6px"></div>
+    <div class="card" style="margin-bottom:10px"><div class="k">Целевая аллокация: рубли, %</div>
+      <input id="fs-t" class="inp" type="number" inputmode="numeric" min="0" max="100" value="${tar}" style="margin-top:6px">
+      <div class="t2" style="color:var(--muted);margin-top:6px">USD-активы = 100% − это</div></div>
+    <div class="card" style="margin-bottom:14px"><div class="k">Лет до «пенсии» (для Coast FI)</div>
+      <input id="fs-y" class="inp" type="number" inputmode="numeric" min="1" max="60" value="${y2r}" style="margin-top:6px"></div>
+    <button class="btn full" onclick="saveFireSettings()">Сохранить</button>`;
+  document.getElementById('ov').style.display='flex';
+}
+async function saveFireSettings(){
+  const pairs=[
+    ['fire_inflation','fs-i'], ['fire_nominal_return','fs-n'],
+    ['fire_fi_expenses','fs-e'], ['target_alloc_rub','fs-t'],
+    ['fire_years_to_retire','fs-y']];
+  try{
+    for(const [k,id] of pairs){
+      const v=document.getElementById(id).value;
+      await api('/api/kv/'+k,{method:'POST',body:JSON.stringify({value:v})});
+    }
+    toast('Сохранено'); closeOv(); loadCapital();
+  }catch(e){ toast('Ошибка'); }
+}
 async function loadCapital(){
   try{
-    const [a,dbt,c,dep,fxh]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital'),api('/api/deposits'),api('/api/fx/history?days=365').catch(()=>({points:[]}))]);
+    const [a,dbt,c,dep,fxh,fr,fc]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital'),api('/api/deposits'),api('/api/fx/history?days=365').catch(()=>({points:[]})), api('/api/fire').catch(()=>null), api('/api/forecast?years=20').catch(()=>null)]);
     const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _deps=dep.deposits||[]; _debtDir='owed_to_me';
     const per=c.from_month_start?'за месяц':'за '+c.delta_days+' дн.';
     document.getElementById('v-capital').innerHTML=`
@@ -635,8 +772,10 @@ async function loadCapital(){
           ${c.fx!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Курс $</span><span style="font-weight:700;color:${c.fx>=0?'var(--green)':'var(--red)'}">${c.fx>=0?'+':'−'}${fmt(Math.abs(c.fx))} ${CUR}</span></div>`:''}
           ${c.other!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Прочее (крипта, правки)</span><span style="font-weight:700">${c.other>=0?'+':'−'}${fmt(Math.abs(c.other))} ${CUR}</span></div>`:''}
         </div></div>`:''}
+      ${fr?renderFireCard(fr):''}
+      ${fc&&(fc.points||[]).length>=2?`<h2>Прогноз капитала · ${fc.years} лет</h2><div class="chartcard">${forecastChart(fc)}</div>`:''}
       ${(c.allocation_currency||[]).length?`<h2>Распределение по валюте</h2>
-      <div class="card">${hbar((c.allocation_currency||[]).map(x=>({value:x.sum, color:x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name), name:x.name==='RUB'?'Рубли':x.name==='USD'?'Доллар (USDT/крипта)':x.name})), {title:'Всего активов'})}</div>`:''}
+      <div class="card">${hbar((c.allocation_currency||[]).map(x=>({value:x.sum, color:x.name==='RUB'?'#2f8bff':x.name==='USD'?'#18c171':color(x.name), name:x.name==='RUB'?'Рубли':x.name==='USD'?'Доллар (USDT/крипта)':x.name})), {title:'Всего активов'})}${fr&&fr.allocation?renderAllocDrift(fr.allocation):''}</div>`:''}
       ${c.emergency&&c.emergency.months!=null?`<h2>Подушка безопасности</h2>
       <div class="card"><div class="v">${c.emergency.months} <span class="cur">мес. расходов</span></div>
         <div class="track" style="margin-top:10px"><i style="width:${Math.min(100,Math.round(c.emergency.months/c.emergency.target*100))}%;background:${c.emergency.months>=c.emergency.target?'var(--green)':'var(--ink)'}"></i></div>
@@ -1126,7 +1265,7 @@ async function saveTx(){
 // ---- аналитика ----
 async function loadAnalytics(){
   try{
-    const [d,b,ch,hm]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup'), api('/api/heatmap?days=180').catch(()=>({points:[]}))]);
+    const [d,b,ch,hm,fr]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup'), api('/api/heatmap?days=180').catch(()=>({points:[]})), api('/api/fire').catch(()=>null)]);
     _bud=b.items||[];
     const t=d.totals||{}, cf=d.cashflow||[], cmp=d.compare||[], bc=d.by_category||[], tm=d.top_merchants||[], subs=d.subscriptions||{items:[]};
     const pc=(v,l)=>`<button class="chip${_anPeriod===v?' on':''}" onclick="setAnPeriod('${v}')">${l}</button>`;
@@ -1148,11 +1287,15 @@ async function loadAnalytics(){
         <div class="t2" style="margin-top:4px;color:var(--muted)">${fmt(c.prev)} → ${fmt(c.cur)} ${CUR}${c.delta_pct!=null?' · '+(up?'+':'')+c.delta_pct+'%':' · новое'}</div>
         ${yoyHtml}</div>`}).join(''):`<div class="empty">Нет данных для сравнения.</div>`;
     const bcMax=Math.max(1,...bc.map(c=>c.sum));
+    const rs=fr&&fr.rolling_savings_rate||null;
+    const rollHtml=rs?`<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+        <span>3-мес <b style="color:var(--text)">${rs.r3m}%</b></span>·<span>6-мес <b style="color:var(--text)">${rs.r6m}%</b></span>·<span>год <b style="color:var(--text)">${rs.r12m}%</b></span></div>`:'';
     const chHtml=`<div class="card">
       <div style="display:flex;text-align:center">
         <div style="flex:1"><div class="v" style="color:${ch.savings_rate>=30?'var(--green)':ch.savings_rate>=10?'var(--ink)':'var(--red)'}">${ch.savings_rate}%</div><div class="t2" style="color:var(--muted)">сбережения</div></div>
         <div style="flex:1"><div class="v">${ch.cushion_months!=null?ch.cushion_months:'—'}</div><div class="t2" style="color:var(--muted)">подушка, мес</div></div>
         <div style="flex:1"><div class="v">${ch.usd_share!=null?ch.usd_share+'/'+ch.rub_share:'—'}</div><div class="t2" style="color:var(--muted)">USD/RUB %</div></div></div>
+      ${rollHtml}
       ${(ch.recommendations||[]).length?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">`+(ch.recommendations||[]).map(r=>{const col=r.l==='bad'?'var(--red)':r.l==='good'?'var(--green)':r.l==='warn'?'#ff8a3d':'var(--muted)';return `<div style="display:flex;gap:8px;padding:4px 0;font-size:13px;line-height:1.35"><span style="color:${col};font-size:15px;line-height:1.2">●</span><span style="flex:1">${r.t}</span></div>`}).join('')+`</div>`:''}</div>`;
     const insIcon={anomaly:'flame',velocity:'chart',biggest:'coin',sub_stale:'tv',sub_hike:'tv',goal_pace:'target',bills:'receipt'};
     const insHtml=(ch.insights||[]).length?`<h2>Что я заметил</h2>`+(ch.insights||[]).map(it=>{const col=it.l==='bad'?'var(--red)':it.l==='good'?'var(--green)':it.l==='warn'?'#ff8a3d':'#2f8bff';return `<div class="row" style="align-items:flex-start;padding:14px"><div class="sq" style="background:${tint(col)};color:${col}">${icon(insIcon[it.kind]||'tag',20)}</div>
