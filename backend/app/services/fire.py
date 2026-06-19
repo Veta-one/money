@@ -127,17 +127,35 @@ def _params(db: Session) -> dict:
 def _years_to_fi(net_worth: float, fi_target: float,
                  monthly_savings: float, real_annual_return: float) -> float | None:
     """Сколько лет до цели при текущей норме сбережений и реальной доходности."""
-    if net_worth >= fi_target:
+    # аналитическая формула FV аннуитета — даёт ответ для любого срока,
+    # пользователь видит динамику (101 → 99 → ...) даже когда цель далека.
+    import math
+    if fi_target <= 0 or net_worth >= fi_target:
         return 0.0
-    if monthly_savings <= 0:
-        return None  # с минусом не доползём никогда
     r_m = max(real_annual_return, 0.0) / 12.0
-    cap = net_worth
-    for m in range(1, 60 * 12 + 1):   # потолок 60 лет
-        cap = cap * (1 + r_m) + monthly_savings
-        if cap >= fi_target:
-            return round(m / 12.0, 1)
-    return None
+    # без сбережений и без процентов — никогда
+    if monthly_savings <= 0 and r_m <= 0:
+        return None
+    # без процентов — линейный рост
+    if r_m <= 0:
+        return round((fi_target - net_worth) / monthly_savings / 12.0, 1)
+    # без сбережений — только проценты
+    if monthly_savings <= 0:
+        try:
+            n_months = math.log(fi_target / net_worth) / math.log(1 + r_m)
+        except (ValueError, ZeroDivisionError):
+            return None
+        return round(max(0.0, n_months) / 12.0, 1)
+    # общий случай: FV = P*(1+r)^n + M*((1+r)^n - 1)/r → solve for n
+    A = monthly_savings / r_m
+    try:
+        x = (fi_target + A) / (net_worth + A)
+        if x <= 1:
+            return 0.0
+        n_months = math.log(x) / math.log(1 + r_m)
+    except (ValueError, ZeroDivisionError):
+        return None
+    return round(n_months / 12.0, 1)
 
 
 def fire_metrics(db: Session) -> dict:
