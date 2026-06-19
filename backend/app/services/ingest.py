@@ -242,7 +242,6 @@ async def import_statement(content: bytes) -> dict:
                 cat_map[mname] = cobj.id if cobj else None
 
         imported = skipped = 0
-        delta_balance = 0.0    # сумма «income−expense» по новым операциям
         for r in rows:
             dk = f"stmt_{r['doc']}" if r["doc"] else f"stmt_{r['datetime'].isoformat()}_{r['amount']}"
             if db.query(models.Transaction).filter_by(dedup_key=dk).first():
@@ -261,21 +260,14 @@ async def import_statement(content: bytes) -> dict:
                 category_id=cat_map.get(r["merchant"]) if r["type"] == "expense" else None,
                 merchant=r["merchant"][:256], source="statement", status="confirmed", dedup_key=dk))
             imported += 1
-            # учитываем влияние на balance счёта (только income/expense; transfer пропускаем)
-            if r["type"] == "income":
-                delta_balance += float(r["amount"])
-            elif r["type"] == "expense":
-                delta_balance -= float(r["amount"])
-        bal_msg = ""
-        if acc and imported > 0 and abs(delta_balance) > 0.001:
-            old_bal = acc.balance or 0.0
-            acc.balance = round(old_bal + delta_balance, 2)
-            sign = "+" if delta_balance >= 0 else "−"
-            bal_msg = (f"\nБаланс «{acc.name}»: {old_bal:,.2f} → <b>{acc.balance:,.2f}</b> ₽ "
-                       f"({sign}{abs(delta_balance):,.2f})").replace(",", " ")
         db.commit()
+        # ВАЖНО: balance счёта не корректируем — выписка может содержать
+        # исторические операции, чья сумма уже отражена в текущем балансе.
+        # Пользователь обновляет balance вручную в форме счёта.
         return {"status": "ok",
-                "text": f"📄 Выписка импортирована\nДобавлено: <b>{imported}</b> · пропущено (дубли/склейка): {skipped} из {len(rows)}{bal_msg}"}
+                "text": (f"📄 Выписка импортирована\n"
+                         f"Добавлено: <b>{imported}</b> · пропущено (дубли/склейка): {skipped} из {len(rows)}\n"
+                         f"<i>Балансы счетов остались без изменений — проверь и обнови в Капитале.</i>")}
     finally:
         db.close()
 
