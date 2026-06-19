@@ -90,8 +90,8 @@
   .chip{background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:12px;
     padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;flex:none}
   .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .chip-sm{background:var(--bg);color:var(--muted);border:none;border-radius:9px;
-    padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;flex:none}
+  .chip-sm{background:var(--bg);color:var(--muted);border:none;border-radius:10px;
+    padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;flex:none}
   .chip-sm.on{background:var(--ink);color:#fff}
   .catpick{display:flex;align-items:center;gap:8px;background:var(--bg);border:none;
     border-radius:14px;padding:12px 13px;font-size:13px;font-weight:600;cursor:pointer;width:100%;text-align:left;line-height:1.2}
@@ -919,12 +919,14 @@ async function loadCapital(){
       ${rateChartCard(fxh)}
       ${(c.series||[]).length>=2?`<h2>Динамика капитала</h2><div class="chartcard">${lineChart(c.series)}</div>`:''}
       ${c.delta!=null?`<div class="card" style="margin-top:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
           <div class="k" style="margin:0">Прирост ${per}</div>
-          <div style="display:flex;gap:3px">${periodChips}</div>
+          <div style="text-align:right">
+            <div style="display:flex;gap:3px">${periodChips}</div>
+            ${c.period_from?`<div style="font-size:10px;color:var(--muted);margin-top:5px">с ${_ruDate(c.period_from)}</div>`:''}
+          </div>
         </div>
         <div class="v" style="color:${c.delta>=0?'var(--green)':'var(--red)'}">${c.delta>=0?'+':'−'}${fmt(Math.abs(c.delta))}<span class="cur">${CUR}</span></div>
-        ${c.period_from?`<div class="t2" style="color:var(--muted);margin-top:2px">с ${_ruDate(c.period_from)}</div>`:''}
         <div style="margin-top:10px">
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Сбережения</span><span style="font-weight:700;color:${c.savings>=0?'var(--green)':'var(--red)'}">${c.savings>=0?'+':'−'}${fmt(Math.abs(c.savings))} ${CUR}</span></div>
           ${c.fx!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Курс $</span><span style="font-weight:700;color:${c.fx>=0?'var(--green)':'var(--red)'}">${c.fx>=0?'+':'−'}${fmt(Math.abs(c.fx))} ${CUR}</span></div>`:''}
