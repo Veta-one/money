@@ -660,10 +660,10 @@ function renderAllocDrift(al){
   if(!al||!al.target_rub) return '';
   const col=al.verdict==='bad'?'var(--red)':al.verdict==='warn'?'#ff8a3d':'var(--green)';
   return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
-    <div style="display:flex;justify-content:space-between;font-size:12px">
-      <span class="muted">цель: <b style="color:var(--text)">${al.target_rub}% / ${al.target_usd}%</b></span>
-      <span class="muted">факт: <b style="color:var(--text)">${al.actual_rub}% / ${al.actual_usd}%</b></span></div>
-    <div class="t2" style="margin-top:6px;color:${col};font-weight:600">${al.drift_pct>=0?'+':''}${al.drift_pct}% по USD · ${al.advice}</div></div>`;
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+      <span>цель: <b style="color:var(--text);font-weight:600">${al.target_rub}% / ${al.target_usd}%</b></span>
+      <span>факт: <b style="color:var(--text);font-weight:600">${al.actual_rub}% / ${al.actual_usd}%</b></span></div>
+    <div style="margin-top:6px;color:${col};font-size:11px;line-height:1.35">${al.drift_pct>=0?'+':''}${al.drift_pct}% по USD · ${al.advice}</div></div>`;
 }
 function forecastChart(fc){
   const pts=(fc.points||[]).filter(p=>p.year_offset!==undefined); if(pts.length<2) return '';
