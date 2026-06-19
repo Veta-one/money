@@ -238,7 +238,7 @@ const CUR='₽';
 function plural(n,one,few,many){ n=Math.abs(n)%100; const k=n%10; if(n>10&&n<20)return many; if(k>1&&k<5)return few; if(k===1)return one; return many; }
 function dBadge(cur,prev,goodDown){ if(prev==null||prev===0)return ''; const diff=cur-prev; if(!diff)return ''; const pct=Math.round(diff/prev*100),up=diff>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'}${Math.abs(pct)}%</span>`; }
 function dBadgeAbs(delta,goodDown){ if(delta==null||!delta)return ''; const up=delta>0,good=goodDown?!up:up; return `<span style="font-size:11px;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${up?'↑':'↓'} ${fmt(Math.abs(delta))} ₽</span>`; }
-let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _capPeriod='day', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true,
+let _cats=[], _cands=[], _pickKind=null, _pickId=null, _debtDir='owed_to_me', _recPer='monthly', _incPer='monthly', _incOwner='me', _incCats=[], _detail=null, _anPeriod='month', _capPeriod='day', _bud=[], _txf=null, _accs=[], _accEdit=null, _accOwner='me', _accCompound=true, _opsFiltOpen=false, _deps=[], _depEdit=null, _depOwner='me', _depCap=true,
 _opsBulk=false, _opsSel=new Set();
 
 // ---- Tabler icons ----
@@ -762,6 +762,25 @@ function renderFireCard(fr, fc){
           </div>
         </div>
       </div>
+      ${(() => {
+        const py=fr.portfolio_yield_pct||0;
+        const plan=fr.nominal_return_pct||0;
+        const work=fr.portfolio_working_share_pct||0;
+        const gap=fr.yield_gap_rub_per_year||0;
+        const yCol = py>=plan*0.7?'var(--green)':py>=plan*0.3?'#ff8a3d':'var(--red)';
+        const wCol = work>=70?'var(--green)':work>=30?'#ff8a3d':'var(--red)';
+        return `<div style="background:var(--bg);border-radius:14px;padding:10px 12px;margin-top:8px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Доходность портфеля</div>
+            <div style="font-size:10px;color:var(--muted)">факт vs план</div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-top:3px">
+            <span style="font-size:20px;font-weight:800;color:${yCol};letter-spacing:-.5px">${py.toFixed(1)}%</span>
+            <span style="font-size:11px;color:var(--muted)">из ${plan.toFixed(0)}% · работает <b style="color:${wCol}">${work.toFixed(0)}%</b> капитала</span>
+          </div>
+          ${gap>0?`<div style="font-size:10.5px;color:var(--red);margin-top:4px;font-weight:600">−${_fmtBig(gap)} ₽/год недополучаешь · укажи ставки в счетах</div>`:`<div style="font-size:10.5px;color:var(--muted);margin-top:4px">${work>0?'портфель работает по плану':'добавь ставку в настройках счетов'}</div>`}
+        </div>`;
+      })()}
       ${fc&&(fc.points||[]).length>=2?(()=>{
         const endYear=new Date().getFullYear()+fc.years;
         const isPension=fr.years_to_retire>0 && Math.abs(fc.years - (fr.years_to_retire+5))<=1;
@@ -788,51 +807,71 @@ function renderAllocDrift(al){
 }
 function forecastChart(fc){
   const pts=(fc.points||[]).filter(p=>p.year_offset!==undefined); if(pts.length<2) return '';
-  const w=330, h=180, padL=8, padR=8, padT=22, padB=24;
+  const w=330, h=190, padL=16, padR=14, padT=22, padB=28;
   const vals=pts.map(p=>p.value);
+  const factPts=(fc.points_fact||[]).filter(p=>p.year_offset!==undefined);
+  const factVals=factPts.map(p=>p.value);
   const ti=fc.fi_targets||{}; const targets=[ti.aggr, ti.base, ti.safe].filter(v=>v>0);
-  const maxV=Math.max(...vals, ...targets);
-  const minV=Math.min(...vals, 0);
+  const maxV=Math.max(...vals, ...factVals, ...targets);
+  const minV=Math.min(...vals, ...factVals, 0);
   const rng=(maxV-minV)||1;
   const X=i=>padL+i*(w-padL-padR)/(pts.length-1);
   const Y=v=>padT+(1-(v-minV)/rng)*(h-padT-padB);
-  // линия капитала
+  // линия капитала (план)
   const linePts=pts.map((p,i)=>`${X(i).toFixed(1)},${Y(p.value).toFixed(1)}`).join(' ');
   const areaPts=`${linePts} ${X(pts.length-1).toFixed(1)},${(h-padB).toFixed(1)} ${padL},${(h-padB).toFixed(1)}`;
-  // FI-цели горизонтальными пунктирами
+  // линия по факту (если есть и отличается от плана)
+  let factLine='';
+  if(factPts.length===pts.length && Math.abs((factVals[factVals.length-1]||0)-(vals[vals.length-1]||0))/Math.max(1,vals[vals.length-1]||1)>0.02){
+    const fp=factPts.map((p,i)=>`${X(i).toFixed(1)},${Y(p.value).toFixed(1)}`).join(' ');
+    factLine=`<polyline points="${fp}" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>`;
+  }
+  // FI-цели горизонтальными пунктирами; подписи СЛЕВА чтобы не перекрывать растущий график
   const targetLines=[
     {y:ti.base, col:'#18c171', label:'Базовый FI'},
     {y:ti.aggr, col:'#3b82f6', label:'Оптимистичный'},
     {y:ti.safe, col:'#ff4d54', label:'Осторожный'},
   ].filter(t=>t.y>0 && t.y<=maxV*1.1).map(t=>`
     <line x1="${padL}" y1="${Y(t.y).toFixed(1)}" x2="${w-padR}" y2="${Y(t.y).toFixed(1)}" stroke="${t.col}" stroke-width="1" stroke-dasharray="4 4" opacity=".55"/>
-    <text x="${w-padR-2}" y="${Y(t.y)-3}" font-size="9.5" fill="${t.col}" text-anchor="end" font-weight="700">${t.label} · ${_fmtBig(t.y)}</text>`).join('');
+    <text x="${padL+2}" y="${Y(t.y)-3}" font-size="9.5" fill="${t.col}" text-anchor="start" font-weight="700">${t.label} · ${_fmtBig(t.y)}</text>`).join('');
   // точки пересечения
   const crossings=Object.entries(fc.fi_crossings||{}).filter(([k,v])=>v).map(([k,v])=>{
     const col=k==='base'?'#18c171':k==='aggr'?'#3b82f6':'#ff4d54';
     const px=X(Math.round(v.month/12));
     return `<circle cx="${px.toFixed(1)}" cy="${Y(v.target).toFixed(1)}" r="4" fill="${col}" stroke="#fff" stroke-width="1.5"/>`;
   }).join('');
-  // ось X (годы)
+  // ось X: «сейчас» с левым якорем, последний год с правым, промежуточные по середине;
+  // через каждые 5 лет, но если последний год не кратен 5 — пропускаем ближайшую соседнюю метку, чтобы не слипалось
+  const lastI=pts.length-1, lastYear=pts[lastI].year_offset;
   const xLabels=[];
   for(let i=0;i<pts.length;i++){
-    if(i===0 || pts[i].year_offset%5===0 || i===pts.length-1){
-      xLabels.push(`<text x="${X(i).toFixed(1)}" y="${h-6}" font-size="10" fill="#8b909a" text-anchor="middle">${pts[i].year_offset===0?'сейчас':'+'+pts[i].year_offset+'г'}</text>`);
-    }
+    const y=pts[i].year_offset;
+    const isEdge = i===0 || i===lastI;
+    const isFive = y%5===0 && y>0;
+    if(!(isEdge || isFive)) continue;
+    // если регулярная метка слишком близко к последней (lastYear не кратен 5) — пропустим
+    if(isFive && !isEdge && lastYear%5!==0 && (lastYear-y)<=2) continue;
+    const anchor = i===0 ? 'start' : (i===lastI ? 'end' : 'middle');
+    const label = i===0 ? 'сейчас' : '+'+y+'г';
+    xLabels.push(`<text x="${X(i).toFixed(1)}" y="${h-8}" font-size="10" fill="#8b909a" text-anchor="${anchor}">${label}</text>`);
   }
   // hover-данные
   const hover=JSON.stringify(pts.map((p,i)=>[+X(i).toFixed(1),+Y(p.value).toFixed(1),p.date,p.value]));
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${hover.replace(/'/g,"&#39;")}' data-line-fmt="rub">
     <polygon points="${areaPts}" fill="var(--ink)" opacity=".07"/>
     ${targetLines}
+    ${factLine}
     <polyline points="${linePts}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
     ${crossings}
     <line class="cx" x1="0" y1="${padT}" x2="0" y2="${h-padB}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
     <circle class="cx-dot" r="4" fill="var(--ink)" opacity="0"/>
     ${xLabels.join('')}
   </svg>
+  ${factLine?`<div style="display:flex;gap:14px;justify-content:center;margin-top:2px;font-size:10.5px;color:var(--muted);flex-wrap:wrap">
+    <span><b style="color:var(--text);font-weight:700">―</b> план ${fc.real_return_pct>=0?'+':''}${fc.real_return_pct}% real</span>
+    <span style="opacity:.85"><b style="color:var(--muted);font-weight:700">‒‒</b> факт ${fc.fact_real_return_pct>=0?'+':''}${fc.fact_real_return_pct}% real</span></div>`:''}
   <div style="display:flex;gap:14px;justify-content:center;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap">
-    <span>откладываю ${_fmtBig(fc.monthly_savings)} ₽/мес</span>·<span>реальная доходность ${fc.real_return_pct>=0?'+':''}${fc.real_return_pct}%</span></div>`;
+    <span>откладываю ${_fmtBig(fc.monthly_savings)} ₽/мес</span>·<span>работает ${fc.portfolio_working_share_pct||0}% капитала</span></div>`;
 }
 async function openFireSettings(){
   const get=async k=>{try{return (await api('/api/kv/'+k)).value;}catch(e){return null;}};
@@ -1023,22 +1062,46 @@ async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',
 function openAcc(id){
   const ac=id?_accs.find(a=>a.id===id):null;
   _accEdit=id; _accOwner=ac?ac.owner:'me';
+  _accCompound = ac ? (ac.interest_compound!==false) : true;
+  const rate = ac && ac.interest_rate ? ac.interest_rate : '';
+  const note = ac && ac.interest_note ? ac.interest_note.replace(/"/g,'&quot;') : '';
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${ac?'Счёт: '+ac.name:'Новый счёт'}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
     <input id="ac-n" class="inp" placeholder="Название" style="margin-bottom:8px" value="${ac?(ac.name||'').replace(/"/g,'&quot;'):''}">
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="ac-b" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
       <select id="ac-c" class="inp" style="flex:1"><option value="RUB"${ac&&ac.currency==='USD'?'':' selected'}>RUB</option><option value="USD"${ac&&ac.currency==='USD'?' selected':''}>USD</option></select></div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
       <span id="ao-chips" style="display:contents">${familyChips(_accOwner,'setAccOwner')}</span>
       <button class="btn" style="margin-left:auto" onclick="saveAcc()">Сохранить</button></div>
+
+    <div class="sec-head" style="margin-top:4px">Доходность счёта</div>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="flex:1"><div class="t2" style="color:var(--muted);margin-bottom:4px">Ставка %/год</div>
+          <input id="ac-r" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="0" value="${rate}"></div>
+        <div style="display:flex;gap:4px;align-items:end;padding-bottom:2px">
+          <button id="ac-cap1" class="chip${_accCompound?' on':''}" onclick="setAccCompound(true)">с капит.</button>
+          <button id="ac-cap0" class="chip${!_accCompound?' on':''}" onclick="setAccCompound(false)">простой</button></div>
+      </div>
+      <input id="ac-note" class="inp" placeholder="Заметка (Binance Earn Flexible, до 2026-12-31)" value="${note}" style="margin-top:8px">
+      <div class="t2" style="color:var(--muted);margin-top:8px;line-height:1.4">Ставка учитывается в фактическом прогнозе капитала. USDT в кошельке без процентов → 0%. Накопит. счёт → 16-21%. Binance Earn USDT → 4-6%.</div>
+    </div>
     ${ac?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delAcc(${ac.id})">Удалить счёт</button>`:''}`;
   document.getElementById('ov').style.display='flex';
 }
 function setAccOwner(o){ _accOwner=o; const el=document.getElementById('ao-chips'); if(el) el.innerHTML=familyChips(o,'setAccOwner'); }
+function setAccCompound(v){ _accCompound=!!v;
+  const a=document.getElementById('ac-cap1'), b=document.getElementById('ac-cap0');
+  if(a) a.className='chip'+(_accCompound?' on':''); if(b) b.className='chip'+(!_accCompound?' on':''); }
 async function saveAcc(){
   const name=document.getElementById('ac-n').value.trim(); if(!name){toast('Название');return;}
-  const body={name, balance:parseFloat(document.getElementById('ac-b').value)||0, currency:document.getElementById('ac-c').value, owner:_accOwner};
+  const rateEl=document.getElementById('ac-r'); const noteEl=document.getElementById('ac-note');
+  const body={name, balance:parseFloat(document.getElementById('ac-b').value)||0,
+    currency:document.getElementById('ac-c').value, owner:_accOwner,
+    interest_rate: rateEl ? (parseFloat(rateEl.value)||0) : 0,
+    interest_compound: !!_accCompound,
+    interest_note: noteEl ? noteEl.value.trim() : ''};
   try{ if(_accEdit) await api('/api/accounts/'+_accEdit+'/edit',{method:'POST',body:JSON.stringify(body)}); else await api('/api/accounts',{method:'POST',body:JSON.stringify(body)});
     toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }

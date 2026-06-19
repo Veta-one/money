@@ -38,6 +38,11 @@ def run_migrations(engine: Engine) -> None:
         _add_column(conn, "categories", "color", "color VARCHAR(16)")
         _add_column(conn, "recurring", "next_date", "next_date DATE")
 
+        # --- Фактическая доходность по счёту ---
+        _add_column(conn, "accounts", "interest_rate", "interest_rate FLOAT DEFAULT 0")
+        _add_column(conn, "accounts", "interest_compound", "interest_compound BOOLEAN DEFAULT 1")
+        _add_column(conn, "accounts", "interest_note", "interest_note VARCHAR(128)")
+
         # индексы под выборки операций/доходов (datetime уже индексирован моделью)
         for name, ddl in (
             ("ix_tx_type", "CREATE INDEX IF NOT EXISTS ix_tx_type ON transactions(type)"),

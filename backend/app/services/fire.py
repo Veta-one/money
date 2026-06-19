@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from .fx import compute_net_worth, to_rub
+from .portfolio import portfolio_yield
 from .settings_store import get_setting
 
 _USD_LIKE = {"USD", "USDT", "USDC", "$"}
@@ -202,6 +203,13 @@ def fire_metrics(db: Session) -> dict:
     monthly_exp = annual_exp / 12.0
     runway = round(net_worth / monthly_exp, 1) if monthly_exp > 0 else None
 
+    # фактическая средневзвешенная доходность портфеля (под какую ставку лежат деньги)
+    py = portfolio_yield(db)
+    fact_nominal = py["actual_pct"] / 100.0
+    fact_real = fact_nominal - p["inflation"]
+    # «недополучаешь в год» = (план − факт) × капитал, в рублях
+    yield_gap_rub = round((real_return - fact_real) * net_worth, 0) if net_worth > 0 else 0
+
     return {
         "net_worth": round(net_worth),
         "annual_expenses": round(annual_exp),
@@ -221,6 +229,12 @@ def fire_metrics(db: Session) -> dict:
         "runway_months": runway,
         "savings_rate_pct": round(monthly_savings / (monthly_savings + monthly_exp) * 100, 1)
                             if (monthly_savings + monthly_exp) > 0 else 0.0,
+        # фактическая доходность портфеля + дельта к плану
+        "portfolio_yield_pct": py["actual_pct"],
+        "portfolio_real_pct": round(fact_real * 100, 1),
+        "portfolio_working_share_pct": py["working_share_pct"],
+        "portfolio_idle_rub": py["idle_rub"],
+        "yield_gap_rub_per_year": yield_gap_rub,
     }
 
 
@@ -240,8 +254,14 @@ def net_worth_forecast(db: Session, years: int | None = None) -> dict:
     r_m = real_return / 12.0
     annual_exp = p["custom_expenses"] if p["custom_expenses"] > 0 else _annual_expenses(db)
     monthly_savings = _monthly_savings(db)
-    cap = compute_net_worth(db)
+    cap0 = compute_net_worth(db)
     today = date.today()
+
+    # фактическая доходность портфеля (по реальным ставкам счетов/вкладов)
+    py = portfolio_yield(db)
+    fact_nominal = py["actual_pct"] / 100.0
+    fact_real = fact_nominal - p["inflation"]
+    r_m_fact = fact_real / 12.0
 
     # FI-цели для отметок на графике
     fi_targets = {
@@ -251,18 +271,24 @@ def net_worth_forecast(db: Session, years: int | None = None) -> dict:
     }
     crossings = {k: None for k in fi_targets}
 
-    points = []
+    points = []         # план: при заявленной номинальной доходности
+    points_fact = []    # факт: при текущей средневзвешенной ставке портфеля
+    cap = cap0
+    cap_fact = cap0
     for m in range(years * 12 + 1):
         d = today + relativedelta(months=m)
         if m == 0 or m % 12 == 0:
             points.append({"month": m, "year_offset": m // 12,
                             "date": d.isoformat(), "value": round(cap)})
-        # фиксируем пересечение FI-целей
+            points_fact.append({"month": m, "year_offset": m // 12,
+                                "date": d.isoformat(), "value": round(cap_fact)})
+        # фиксируем пересечение FI-целей (по плану)
         for k, target in fi_targets.items():
             if crossings[k] is None and target > 0 and cap >= target:
                 crossings[k] = {"month": m, "year_offset": round(m / 12, 1),
                                 "date": d.isoformat(), "target": round(target)}
         cap = cap * (1 + r_m) + monthly_savings
+        cap_fact = cap_fact * (1 + r_m_fact) + monthly_savings
 
     return {
         "years": years,
@@ -272,6 +298,10 @@ def net_worth_forecast(db: Session, years: int | None = None) -> dict:
         "inflation_pct": round(p["inflation"] * 100, 1),
         "annual_expenses": round(annual_exp),
         "points": points,
+        "points_fact": points_fact,
+        "fact_real_return_pct": round(fact_real * 100, 1),
+        "fact_nominal_return_pct": round(py["actual_pct"], 1),
+        "portfolio_working_share_pct": py["working_share_pct"],
         "fi_targets": {k: round(v) for k, v in fi_targets.items()},
         "fi_crossings": crossings,
     }

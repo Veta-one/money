@@ -221,7 +221,10 @@ async def accounts(user: dict = Depends(current_user), db: Session = Depends(get
             .order_by(models.Account.owner, models.Account.name).all())
     out = [{"id": a.id, "name": a.name, "type": a.type, "currency": a.currency,
             "owner": a.owner, "balance": a.balance,
-            "rub": to_rub(a.balance, a.currency, db)} for a in rows]
+            "rub": to_rub(a.balance, a.currency, db),
+            "interest_rate": float(a.interest_rate or 0.0),
+            "interest_compound": bool(a.interest_compound) if a.interest_compound is not None else True,
+            "interest_note": a.interest_note or ""} for a in rows]
     return {"accounts": out, "net_worth": compute_net_worth(db), "usd_rate": round(get_usd_rub(db), 2)}
 
 
@@ -384,6 +387,9 @@ class AccIn(BaseModel):
     currency: str = "RUB"
     owner: str = "me"
     balance: float = 0.0
+    interest_rate: float = 0.0
+    interest_compound: bool = True
+    interest_note: str | None = None
 
 
 class AccEdit(BaseModel):
@@ -391,6 +397,9 @@ class AccEdit(BaseModel):
     currency: str | None = None
     owner: str | None = None
     balance: float | None = None
+    interest_rate: float | None = None
+    interest_compound: bool | None = None
+    interest_note: str | None = None
 
 
 @app.post("/api/accounts")
@@ -401,7 +410,10 @@ async def create_account(body: AccIn, user: dict = Depends(current_user),
         type=body.type if body.type in ("card", "cash", "deposit", "crypto", "external") else "card",
         currency=(body.currency or "RUB").upper(),
         owner=body.owner if body.owner in ("me", "wife") else "me",
-        balance=body.balance or 0.0)
+        balance=body.balance or 0.0,
+        interest_rate=max(0.0, float(body.interest_rate or 0.0)),
+        interest_compound=bool(body.interest_compound) if body.interest_compound is not None else True,
+        interest_note=(body.interest_note or "")[:128] or None)
     db.add(a)
     db.commit()
     return {"id": a.id}
@@ -421,6 +433,12 @@ async def edit_account(acc_id: int, body: AccEdit, user: dict = Depends(current_
         a.owner = body.owner
     if body.balance is not None:
         a.balance = body.balance
+    if body.interest_rate is not None:
+        a.interest_rate = max(0.0, float(body.interest_rate))
+    if body.interest_compound is not None:
+        a.interest_compound = bool(body.interest_compound)
+    if body.interest_note is not None:
+        a.interest_note = (body.interest_note or "")[:128] or None
     db.commit()
     return {"ok": True}
 

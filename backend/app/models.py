@@ -35,6 +35,11 @@ class Account(Base):
     is_external: Mapped[bool] = mapped_column(Boolean, default=False)
     balance: Mapped[float] = mapped_column(Float, default=0.0)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # фактическая доходность счёта в % годовых (Binance Earn 5%, вклад 18%, USDT в кошельке 0%)
+    interest_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    # True = ежемесячная капитализация процентов, False = простой процент
+    interest_compound: Mapped[bool] = mapped_column(Boolean, default=True)
+    interest_note: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
