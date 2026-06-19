@@ -187,6 +187,28 @@ function applyTheme(){
 }
 applyTheme();
 try{ tg?.ready(); tg?.expand(); }catch(e){}
+
+// ===== Семья: настраиваемый список владельцев счетов/доходов =====
+let _family=[{key:'me',name:'Я',core:true},{key:'wife',name:'Жена',core:true}];
+let _familyLoaded=false;
+async function loadFamily(){
+  try{
+    const r=await api('/api/kv/family_members');
+    if(r.value){ const p=JSON.parse(r.value); if(Array.isArray(p)&&p.length) _family=p; }
+  }catch(e){}
+  _familyLoaded=true;
+}
+async function saveFamily(){
+  try{ await api('/api/kv/family_members',{method:'POST',body:JSON.stringify({value:JSON.stringify(_family)})}); }catch(e){}
+}
+function ownerLabel(key){ const m=_family.find(f=>f.key===key); return m?m.name:(key||'я').toLowerCase(); }
+function familyChips(selected,setFnName){
+  return _family.map(f=>`<button class="chip${selected===f.key?' on':''}" onclick="${setFnName}('${f.key}')">${f.name}</button>`).join('');
+}
+function _familyNewKey(){
+  let i=1; while(_family.some(f=>f.key==='m'+i)) i++; return 'm'+i;
+}
+loadFamily(); // fire-and-forget на старте
 try{ tg?.onEvent?.('themeChanged', ()=>{ if(_themePref==='auto'){ applyTheme(); refreshActive(); } }); }catch(e){}
 // TG CloudStorage: тема между устройствами одного аккаунта (на клиентах 6.9+).
 try{ tg?.CloudStorage?.getItem?.('theme',(_,v)=>{ if(v && v!==_themePref){ _themePref=v; localStorage.setItem('money.theme',v); applyTheme(); }}); }catch(e){}
@@ -839,7 +861,7 @@ async function loadCapital(){
       ${accs.map(ac=>{const col=bankColor(ac.name);return `<div class="row">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(ac.name)==='tag'?'wallet':catIcon(ac.name),20)}</div>
         <div class="mid"><div class="t1">${ac.name}</div>
-        <div class="t2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ac.owner==='wife'?'жена':'я'}</div></div>
+        <div class="t2">${ac.currency}${ac.currency!=='RUB'?' · '+fmt(ac.rub)+' ₽':''} · ${ownerLabel(ac.owner)}</div></div>
         <input class="num" type="number" inputmode="decimal" value="${ac.balance}" onchange="saveBal(${ac.id},this.value)" style="width:92px">
         <button class="iconbtn" onclick="openAcc(${ac.id})">${icon('edit',18)}</button></div>`}).join('')}
       <button class="btn full" style="margin-top:4px" onclick="openAcc(null)">Добавить счёт</button>
@@ -865,7 +887,7 @@ async function loadCapital(){
           <button class="btn" onclick="addDebt()">${icon('plus',18,'#fff')}</button></div></div>
       <h2>Вклады</h2>
       ${(dep.deposits||[]).map(x=>`<div class="goal">
-        <div class="gh"><div class="gn">${x.bank}${x.owner==='wife'?' <span class="muted" style="font-size:12px;font-weight:600">· жена</span>':''}</div><div class="gv">${fmt(x.value_now)} ${CUR}</div></div>
+        <div class="gh"><div class="gn">${x.bank}${x.owner&&x.owner!=='me'?' <span class="muted" style="font-size:12px;font-weight:600">· '+ownerLabel(x.owner)+'</span>':''}</div><div class="gv">${fmt(x.value_now)} ${CUR}</div></div>
         <div class="meta" style="margin-top:8px"><span>${fmt(x.principal)} ₽ под ${x.rate}%${x.monthly_topup?' · +'+fmt(x.monthly_topup)+'/мес':''}</span><span style="color:var(--green)">+${fmt(x.interest_now)} ₽ %</span></div>
         ${x.value_end?`<div class="meta"><span>к ${new Date(x.term_end).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})}</span><span>≈ ${fmt(x.value_end)} ₽ (+${fmt(x.interest_total)})</span></div>`:''}
         <div style="display:flex;gap:8px;margin-top:12px"><button class="chip" onclick="openDep(${x.id})">Изменить</button>
@@ -885,13 +907,12 @@ function openAcc(id){
       <input id="ac-b" class="inp" type="number" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
       <select id="ac-c" class="inp" style="flex:1"><option value="RUB"${ac&&ac.currency==='USD'?'':' selected'}>RUB</option><option value="USD"${ac&&ac.currency==='USD'?' selected':''}>USD</option></select></div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button id="ao-me" class="chip${_accOwner==='me'?' on':''}" onclick="setAccOwner('me')">Я</button>
-      <button id="ao-wife" class="chip${_accOwner==='wife'?' on':''}" onclick="setAccOwner('wife')">Жена</button>
+      <span id="ao-chips" style="display:contents">${familyChips(_accOwner,'setAccOwner')}</span>
       <button class="btn" style="margin-left:auto" onclick="saveAcc()">Сохранить</button></div>
     ${ac?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delAcc(${ac.id})">Удалить счёт</button>`:''}`;
   document.getElementById('ov').style.display='flex';
 }
-function setAccOwner(o){ _accOwner=o; document.getElementById('ao-me').className='chip'+(o==='me'?' on':''); document.getElementById('ao-wife').className='chip'+(o==='wife'?' on':''); }
+function setAccOwner(o){ _accOwner=o; const el=document.getElementById('ao-chips'); if(el) el.innerHTML=familyChips(o,'setAccOwner'); }
 async function saveAcc(){
   const name=document.getElementById('ac-n').value.trim(); if(!name){toast('Название');return;}
   const body={name, balance:parseFloat(document.getElementById('ac-b').value)||0, currency:document.getElementById('ac-c').value, owner:_accOwner};
@@ -914,8 +935,7 @@ function openDep(id){
       <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Открыт</div><input id="dp-s" class="inp" type="date" value="${d&&d.term_start?d.term_start:today}"></div>
       <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Окончание</div><input id="dp-e" class="inp" type="date" value="${d&&d.term_end?d.term_end:''}"></div></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button id="do-me" class="chip${_depOwner==='me'?' on':''}" onclick="setDepOwner('me')">Я</button>
-      <button id="do-wife" class="chip${_depOwner==='wife'?' on':''}" onclick="setDepOwner('wife')">Жена</button>
+      <span id="do-chips" style="display:contents">${familyChips(_depOwner,'setDepOwner')}</span>
       <span style="width:4px"></span>
       <button id="dc-on" class="chip${_depCap?' on':''}" onclick="setDepCap(1)">С капит.</button>
       <button id="dc-off" class="chip${_depCap?'':' on'}" onclick="setDepCap(0)">Без</button>
@@ -923,7 +943,7 @@ function openDep(id){
     ${d?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delDep(${d.id})">Удалить вклад</button>`:''}`;
   document.getElementById('ov').style.display='flex';
 }
-function setDepOwner(o){ _depOwner=o; document.getElementById('do-me').className='chip'+(o==='me'?' on':''); document.getElementById('do-wife').className='chip'+(o==='wife'?' on':''); }
+function setDepOwner(o){ _depOwner=o; const el=document.getElementById('do-chips'); if(el) el.innerHTML=familyChips(o,'setDepOwner'); }
 function setDepCap(v){ _depCap=!!v; document.getElementById('dc-on').className='chip'+(_depCap?' on':''); document.getElementById('dc-off').className='chip'+(_depCap?'':' on'); }
 async function saveDep(){
   const b=document.getElementById('dp-b').value.trim(); if(!b){toast('Название');return;}
@@ -1422,7 +1442,7 @@ async function loadIncome(){
       return `<div class="goal">
         <div class="gh" style="align-items:center"><div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
           <span class="sq" style="background:${tint(col)};color:${col}">${icon('cash',20)}</span>
-          <div style="min-width:0"><div class="gn">${s.name}${s.owner==='wife'?' <span class="muted" style="font-size:12px;font-weight:600">· жена</span>':''}</div>
+          <div style="min-width:0"><div class="gn">${s.name}${s.owner&&s.owner!=='me'?' <span class="muted" style="font-size:12px;font-weight:600">· '+ownerLabel(s.owner)+'</span>':''}</div>
             <div class="t2" style="margin-top:2px">${fmt(s.amount)} ${cur}${per}${hint}</div></div></div>
           <div class="gv" style="text-align:right">${fmt(s.fact)} / ${fmt(s.plan)} ₽<div class="t2" style="margin-top:2px">${right}</div></div></div>
         <div class="track" style="margin-top:11px"><i style="width:${s.pct}%;background:${col}"></i></div>
@@ -1453,14 +1473,13 @@ async function loadIncome(){
           <button id="ip-m" class="chip on" onclick="setIncPer('monthly')">Мес</button>
           <button id="ip-y" class="chip" onclick="setIncPer('yearly')">Год</button>
           <span style="width:6px"></span>
-          <button id="io-me" class="chip on" onclick="setIncOwner('me')">Я</button>
-          <button id="io-wife" class="chip" onclick="setIncOwner('wife')">Жена</button>
+          <span id="io-chips" style="display:contents">${familyChips(_incOwner,'setIncOwner')}</span>
           <button class="btn" style="margin-left:auto" onclick="addIncome()">${icon('plus',18,'#fff')}</button></div></div>`;
     _incPer='monthly'; _incOwner='me';
   }catch(e){ e.message==='AUTH'?authErr('income'):document.getElementById('v-income').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 function setIncPer(p){ _incPer=p; document.getElementById('ip-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('ip-y').className='chip'+(p==='yearly'?' on':''); }
-function setIncOwner(o){ _incOwner=o; document.getElementById('io-me').className='chip'+(o==='me'?' on':''); document.getElementById('io-wife').className='chip'+(o==='wife'?' on':''); }
+function setIncOwner(o){ _incOwner=o; const el=document.getElementById('io-chips'); if(el) el.innerHTML=familyChips(o,'setIncOwner'); }
 async function addIncome(){ const n=document.getElementById('is-n').value.trim(), a=parseFloat(document.getElementById('is-a').value), c=document.getElementById('is-c').value;
   if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/income',{method:'POST',body:JSON.stringify({name:n,amount:a,currency:c,period:_incPer,owner:_incOwner})}); toast('Добавлено'); loadIncome(); }catch(e){toast('Ошибка');} }
 async function toggleIncome(id,active){ try{ await api('/api/income/'+id,{method:'POST',body:JSON.stringify({active:!!active})}); loadIncome(); }catch(e){toast('Ошибка');} }
@@ -1482,13 +1501,12 @@ async function openIncEdit(id){
       <button id="iep-m" class="chip${_incEditPer==='monthly'?' on':''}" onclick="setIncEditPer('monthly')">Мес</button>
       <button id="iep-y" class="chip${_incEditPer==='yearly'?' on':''}" onclick="setIncEditPer('yearly')">Год</button>
       <span style="width:4px"></span>
-      <button id="ieo-me" class="chip${_incEditOwner==='me'?' on':''}" onclick="setIncEditOwner('me')">Я</button>
-      <button id="ieo-wife" class="chip${_incEditOwner==='wife'?' on':''}" onclick="setIncEditOwner('wife')">Жена</button>
+      <span id="ieo-chips" style="display:contents">${familyChips(_incEditOwner,'setIncEditOwner')}</span>
       <button class="btn" style="margin-left:auto" onclick="saveIncEdit()">Сохранить</button></div>`;
   document.getElementById('ov').style.display='flex';
 }
 function setIncEditPer(p){ _incEditPer=p; document.getElementById('iep-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('iep-y').className='chip'+(p==='yearly'?' on':''); }
-function setIncEditOwner(o){ _incEditOwner=o; document.getElementById('ieo-me').className='chip'+(o==='me'?' on':''); document.getElementById('ieo-wife').className='chip'+(o==='wife'?' on':''); }
+function setIncEditOwner(o){ _incEditOwner=o; const el=document.getElementById('ieo-chips'); if(el) el.innerHTML=familyChips(o,'setIncEditOwner'); }
 async function saveIncEdit(){
   const body={name:document.getElementById('ie-n').value.trim(),
     amount:parseFloat(document.getElementById('ie-a').value)||0,
@@ -1684,6 +1702,8 @@ async function openSettings(){
       <div style="display:flex;gap:8px"><input id="st-big" class="inp" type="number" inputmode="decimal" value="${alertBig}" style="flex:1">
         <button class="btn" onclick="saveBig()">OK</button></div>
       <div class="t2" style="color:var(--muted);margin-top:8px">Дайджесты: каждый день 21:00, воскресенье 20:00, 1-го числа 10:00. Нудж продлений — 10:30.</div></div>
+    <h2>Семья</h2>
+    <div class="card" id="fam-card">${renderFamilyEditor()}</div>
     <h2>Категории</h2>
     <button class="btn full" onclick="openCatMgr()">Управление категориями</button>
     <h2>Чеки ФНС</h2>
@@ -1694,6 +1714,31 @@ async function openSettings(){
   document.getElementById('ov').style.display='flex';
 }
 async function saveBig(){ try{ await api('/api/kv/alert_big',{method:'POST',body:JSON.stringify({value:document.getElementById('st-big').value})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
+
+// ===== Редактор семьи =====
+function renderFamilyEditor(){
+  const rows=_family.map((m,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <input class="inp" value="${(m.name||'').replace(/"/g,'&quot;')}" oninput="famRename(${i},this.value)" onblur="famSave()" placeholder="Имя" style="flex:1">
+    ${m.core?`<span class="t2" style="color:var(--muted);min-width:28px;text-align:center;font-size:11px">базовый</span>`:`<button class="iconbtn" onclick="famDelete(${i})" title="Удалить">${icon('trash',18)}</button>`}</div>`).join('');
+  return `${rows}
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <input id="fam-new" class="inp" placeholder="Новый член семьи" style="flex:1" onkeydown="if(event.key==='Enter')famAdd()">
+      <button class="btn" onclick="famAdd()">${icon('plus',18,'#fff')}</button></div>
+    <div class="t2" style="color:var(--muted);margin-top:8px">«Я» и «Жена» можно переименовать (например «Veta» и «Светик»). Кто-то ещё? Добавь ниже — появится в чипах при создании счёта/дохода/вклада.</div>`;
+}
+function famRedraw(){ const c=document.getElementById('fam-card'); if(c) c.innerHTML=renderFamilyEditor(); }
+function famRename(i,name){ if(_family[i]) _family[i].name=name||_family[i].name; }
+async function famSave(){ await saveFamily(); }
+async function famAdd(){
+  const inp=document.getElementById('fam-new'); if(!inp) return;
+  const n=inp.value.trim(); if(!n){ toast('Имя'); return; }
+  _family.push({key:_familyNewKey(),name:n}); inp.value='';
+  famRedraw(); await saveFamily(); toast('Добавлен');
+}
+async function famDelete(i){
+  const m=_family[i]; if(!m||m.core) return;
+  _family.splice(i,1); famRedraw(); await saveFamily(); toast('Удалён');
+}
 
 // ===== Поиск по чекам ФНС =====
 let _rcpExpand=new Set();
