@@ -164,6 +164,12 @@ class Deposit(Base):
     capitalization: Mapped[bool] = mapped_column(Boolean, default=False)
     monthly_topup: Mapped[float] = mapped_column(Float, default=0.0)
     owner: Mapped[str] = mapped_column(String(16), default="me")
+    # откуда взяли деньги при открытии (для списания balance)
+    source_account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
+    # валюта самого вклада (рублёвый, валютный, USDT-стейкинг)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB")
+    # для UI/иконки: deposit | staking | other
+    kind: Mapped[str] = mapped_column(String(16), default="deposit")
 
 
 class DepositTopup(Base):
@@ -176,6 +182,8 @@ class DepositTopup(Base):
     date: Mapped[date] = mapped_column(Date, index=True)
     amount: Mapped[float] = mapped_column(Float)
     note: Mapped[str | None] = mapped_column(Text)
+    # откуда взяли (для списания balance счёта-источника при пополнении)
+    source_account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

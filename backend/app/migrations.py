@@ -38,10 +38,16 @@ def run_migrations(engine: Engine) -> None:
         _add_column(conn, "categories", "color", "color VARCHAR(16)")
         _add_column(conn, "recurring", "next_date", "next_date DATE")
 
-        # --- Фактическая доходность по счёту ---
+        # --- Фактическая доходность по счёту (DEAD: оставлено в схеме после отката UI) ---
         _add_column(conn, "accounts", "interest_rate", "interest_rate FLOAT DEFAULT 0")
         _add_column(conn, "accounts", "interest_compound", "interest_compound BOOLEAN DEFAULT 1")
         _add_column(conn, "accounts", "interest_note", "interest_note VARCHAR(128)")
+
+        # --- Источник денег для вклада: при создании Deposit/Topup списать с balance ---
+        _add_column(conn, "deposits", "source_account_id", "source_account_id INTEGER")
+        _add_column(conn, "deposits", "currency", "currency VARCHAR(8) DEFAULT 'RUB'")
+        _add_column(conn, "deposits", "kind", "kind VARCHAR(16) DEFAULT 'deposit'")
+        _add_column(conn, "deposit_topups", "source_account_id", "source_account_id INTEGER")
 
         # индексы под выборки операций/доходов (datetime уже индексирован моделью)
         for name, ddl in (

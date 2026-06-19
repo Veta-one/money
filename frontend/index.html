@@ -1095,46 +1095,24 @@ async function saveBal(id,v){ try{ await api('/api/accounts/'+id,{method:'POST',
 function openAcc(id){
   const ac=id?_accs.find(a=>a.id===id):null;
   _accEdit=id; _accOwner=ac?ac.owner:'me';
-  _accCompound = ac ? (ac.interest_compound!==false) : true;
-  const rate = ac && ac.interest_rate ? ac.interest_rate : '';
-  const note = ac && ac.interest_note ? ac.interest_note.replace(/"/g,'&quot;') : '';
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${ac?'Счёт: '+ac.name:'Новый счёт'}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
     <input id="ac-n" class="inp" placeholder="Название" style="margin-bottom:8px" value="${ac?(ac.name||'').replace(/"/g,'&quot;'):''}">
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="ac-b" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
       <select id="ac-c" class="inp" style="flex:1"><option value="RUB"${ac&&ac.currency==='USD'?'':' selected'}>RUB</option><option value="USD"${ac&&ac.currency==='USD'?' selected':''}>USD</option></select></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+    <div style="display:flex;gap:8px;align-items:center">
       <span id="ao-chips" style="display:contents">${familyChips(_accOwner,'setAccOwner')}</span>
       <button class="btn" style="margin-left:auto" onclick="saveAcc()">Сохранить</button></div>
-
-    <div class="sec-head" style="margin-top:4px">Доходность счёта</div>
-    <div class="card">
-      <div style="display:flex;gap:8px;align-items:center">
-        <div style="flex:1"><div class="t2" style="color:var(--muted);margin-bottom:4px">Ставка %/год</div>
-          <input id="ac-r" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="0" value="${rate}"></div>
-        <div style="display:flex;gap:4px;align-items:end;padding-bottom:2px">
-          <button id="ac-cap1" class="chip${_accCompound?' on':''}" onclick="setAccCompound(true)">с капит.</button>
-          <button id="ac-cap0" class="chip${!_accCompound?' on':''}" onclick="setAccCompound(false)">простой</button></div>
-      </div>
-      <input id="ac-note" class="inp" placeholder="Заметка (Binance Earn Flexible, до 2026-12-31)" value="${note}" style="margin-top:8px">
-      <div class="t2" style="color:var(--muted);margin-top:8px;line-height:1.4">Ставка учитывается в фактическом прогнозе капитала. USDT в кошельке без процентов → 0%. Накопит. счёт → 16-21%. Binance Earn USDT → 4-6%.</div>
-    </div>
+    <div class="t2" style="color:var(--muted);margin-top:14px;line-height:1.4">Чтобы деньги работали под процент — открой вклад/инвестицию во вкладке «Вклады». Это спишет деньги отсюда и положит на инструмент с доходностью.</div>
     ${ac?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delAcc(${ac.id})">Удалить счёт</button>`:''}`;
   document.getElementById('ov').style.display='flex';
 }
 function setAccOwner(o){ _accOwner=o; const el=document.getElementById('ao-chips'); if(el) el.innerHTML=familyChips(o,'setAccOwner'); }
-function setAccCompound(v){ _accCompound=!!v;
-  const a=document.getElementById('ac-cap1'), b=document.getElementById('ac-cap0');
-  if(a) a.className='chip'+(_accCompound?' on':''); if(b) b.className='chip'+(!_accCompound?' on':''); }
 async function saveAcc(){
   const name=document.getElementById('ac-n').value.trim(); if(!name){toast('Название');return;}
-  const rateEl=document.getElementById('ac-r'); const noteEl=document.getElementById('ac-note');
   const body={name, balance:parseFloat(document.getElementById('ac-b').value)||0,
-    currency:document.getElementById('ac-c').value, owner:_accOwner,
-    interest_rate: rateEl ? (parseFloat(rateEl.value)||0) : 0,
-    interest_compound: !!_accCompound,
-    interest_note: noteEl ? noteEl.value.trim() : ''};
+    currency:document.getElementById('ac-c').value, owner:_accOwner};
   try{ if(_accEdit) await api('/api/accounts/'+_accEdit+'/edit',{method:'POST',body:JSON.stringify(body)}); else await api('/api/accounts',{method:'POST',body:JSON.stringify(body)});
     toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
@@ -1143,13 +1121,26 @@ function openDep(id){
   const d=id?_deps.find(x=>x.id===id):null;
   _depEdit=id; _depOwner=d?d.owner:'me'; _depCap=d?d.capitalization:true;
   const today=new Date().toISOString().slice(0,10);
-  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${d?'Вклад: '+d.bank:'Новый вклад'}</div>
+  const accs=(_accs||[]).filter(a=>!a.archived);
+  // источник: при редактировании — фиксированный (deposit уже создан), при создании — выбираемый
+  const srcOpts=accs.map(a=>`<option value="${a.id}" data-cur="${a.currency}">${a.name} · ${fmt(a.balance||0)} ${a.currency}</option>`).join('');
+  const dCur=d?(d.currency||'RUB'):'';
+  const srcRow = d
+    ? `<div class="inp" style="margin-bottom:8px;background:var(--bg);color:var(--muted);display:flex;align-items:center;gap:8px">
+         ${icon('wallet',16)}<span>${(accs.find(a=>a.id===d.source_account_id)||{}).name||'—'} · валюта вклада ${dCur}</span></div>`
+    : `<div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Откуда взять деньги</div>
+       <select id="dp-src" class="inp" style="margin-bottom:8px" onchange="_depSrcChanged()">
+         <option value="">— выбери счёт —</option>${srcOpts}</select>`;
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${d?'Вклад: '+d.bank:'Новый вклад / инвестиция'}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <input id="dp-b" class="inp" placeholder="Банк / название" style="margin-bottom:8px" value="${d?(d.bank||'').replace(/"/g,'&quot;'):''}">
+    <input id="dp-b" class="inp" placeholder="Куда (Сбер, Binance Earn USDT, Тинькофф ETF)" style="margin-bottom:8px" value="${d?(d.bank||'').replace(/"/g,'&quot;'):''}">
+    ${srcRow}
     <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input id="dp-p" class="inp" type="number" inputmode="decimal" placeholder="Сумма (тело)" style="flex:1.4" value="${d?d.principal:''}">
-      <input id="dp-r" class="inp" type="number" inputmode="decimal" placeholder="Ставка %" style="flex:1" value="${d?d.rate:''}"></div>
-    <input id="dp-t" class="inp" type="number" inputmode="decimal" placeholder="Пополнение в месяц (необяз.)" style="margin-bottom:8px" value="${d&&d.monthly_topup?d.monthly_topup:''}">
+      <div style="flex:1.4"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Сумма ${d?'<span style="opacity:.6">'+dCur+'</span>':'<span id="dp-cur-hint" style="opacity:.6"></span>'}</div>
+        <input id="dp-p" class="inp" type="number" inputmode="decimal" placeholder="0" value="${d?d.principal:''}"></div>
+      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Ставка %/год</div>
+        <input id="dp-r" class="inp" type="number" inputmode="decimal" placeholder="0" value="${d?d.rate:''}"></div></div>
+    <input id="dp-t" class="inp" type="number" inputmode="decimal" placeholder="Пополнение в месяц (план, необяз.)" style="margin-bottom:8px" value="${d&&d.monthly_topup?d.monthly_topup:''}">
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Открыт</div><input id="dp-s" class="inp" type="date" value="${d&&d.term_start?d.term_start:today}"></div>
       <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Окончание</div><input id="dp-e" class="inp" type="date" value="${d&&d.term_end?d.term_end:''}"></div></div>
@@ -1159,25 +1150,53 @@ function openDep(id){
       <button id="dc-on" class="chip${_depCap?' on':''}" onclick="setDepCap(1)">С капит.</button>
       <button id="dc-off" class="chip${_depCap?'':' on'}" onclick="setDepCap(0)">Без</button>
       <button class="btn" style="margin-left:auto" onclick="saveDep()">Сохранить</button></div>
-    ${d?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delDep(${d.id})">Удалить вклад</button>`:''}`;
+    ${!d?`<div class="t2" style="color:var(--muted);margin-top:10px;line-height:1.4">При сохранении сумма спишется со счёта-источника. Net worth не изменится — это просто перекладывание из «лежит» в «работает».</div>`:''}
+    ${d?`<button class="chip" style="margin-top:12px;border-color:var(--red);color:var(--red)" onclick="delDep(${d.id})">Удалить вклад</button>
+       <div class="t2" style="color:var(--muted);margin-top:6px;line-height:1.4">При удалении balance счёта-источника не возвращается — отрегулируй вручную, если деньги физически вернулись.</div>`:''}`;
   document.getElementById('ov').style.display='flex';
+}
+function _depSrcChanged(){
+  const sel=document.getElementById('dp-src'); if(!sel) return;
+  const opt=sel.options[sel.selectedIndex]; const cur=opt?opt.getAttribute('data-cur')||'':'';
+  const hint=document.getElementById('dp-cur-hint'); if(hint) hint.textContent=cur?cur:'';
 }
 function setDepOwner(o){ _depOwner=o; const el=document.getElementById('do-chips'); if(el) el.innerHTML=familyChips(o,'setDepOwner'); }
 function setDepCap(v){ _depCap=!!v; document.getElementById('dc-on').className='chip'+(_depCap?' on':''); document.getElementById('dc-off').className='chip'+(_depCap?'':' on'); }
 async function saveDep(){
   const b=document.getElementById('dp-b').value.trim(); if(!b){toast('Название');return;}
-  const body={bank:b, principal:parseFloat(document.getElementById('dp-p').value)||0, rate:parseFloat(document.getElementById('dp-r').value)||0, monthly_topup:parseFloat(document.getElementById('dp-t').value)||0, capitalization:_depCap, owner:_depOwner, term_start:document.getElementById('dp-s').value||null, term_end:document.getElementById('dp-e').value||null};
+  const principal=parseFloat(document.getElementById('dp-p').value)||0;
+  const body={bank:b, principal, rate:parseFloat(document.getElementById('dp-r').value)||0, monthly_topup:parseFloat(document.getElementById('dp-t').value)||0, capitalization:_depCap, owner:_depOwner, term_start:document.getElementById('dp-s').value||null, term_end:document.getElementById('dp-e').value||null};
+  if(!_depEdit){
+    const srcSel=document.getElementById('dp-src'); const srcId=srcSel?parseInt(srcSel.value,10):0;
+    if(principal>0 && !srcId){ toast('Выбери счёт-источник'); return; }
+    if(srcId){
+      body.source_account_id=srcId;
+      const cur=srcSel.options[srcSel.selectedIndex].getAttribute('data-cur')||'RUB';
+      body.currency=cur;
+      const src=(_accs||[]).find(a=>a.id===srcId);
+      if(src && principal>(src.balance||0)+0.001){
+        if(!confirm(`На счёте «${src.name}» только ${fmt(src.balance)} ${cur}. Списать всё равно?`)) return;
+      }
+    }
+  }
   try{ if(_depEdit) await api('/api/deposits/'+_depEdit,{method:'POST',body:JSON.stringify(body)}); else await api('/api/deposits',{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
 async function delDep(id){ try{ await api('/api/deposits/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
 function openDepTopup(id){
   const d=_deps.find(x=>x.id===id); if(!d) return;
   const today=new Date().toISOString().slice(0,10);
-  const hist=(d.topups||[]).slice(0,8).map(t=>`<div class="drow"><span style="flex:1">${fmtDateRu?fmtDateRu(t.date):t.date}</span><span style="font-weight:700;color:var(--green)">+${fmt(t.amount)} ₽</span><button class="iconbtn" onclick="delDepTopup(${t.id},${id})">${icon('trash',16)}</button></div>`).join('');
+  const cur=(d.currency||'RUB');
+  const accs=(_accs||[]).filter(a=>!a.archived);
+  // дефолт источника: тот же что у вклада, иначе первый счёт совпадающей валюты
+  const defaultSrc = d.source_account_id || (accs.find(a=>a.currency===cur)||{}).id || 0;
+  const srcOpts=accs.map(a=>`<option value="${a.id}"${a.id===defaultSrc?' selected':''}>${a.name} · ${fmt(a.balance||0)} ${a.currency}</option>`).join('');
+  const hist=(d.topups||[]).slice(0,8).map(t=>`<div class="drow"><span style="flex:1">${fmtDateRu?fmtDateRu(t.date):t.date}</span><span style="font-weight:700;color:var(--green)">+${fmt(t.amount)} ${cur}</span><button class="iconbtn" onclick="delDepTopup(${t.id},${id})">${icon('trash',16)}</button></div>`).join('');
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Пополнение «${d.bank}»</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="t2" style="color:var(--muted);margin:0 0 4px 2px">Откуда взять</div>
+    <select id="tp-src" class="inp" style="margin-bottom:8px">${srcOpts||'<option value="">— нет счетов —</option>'}</select>
     <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input id="tp-a" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Сумма ₽" style="flex:1.4" autofocus>
+      <input id="tp-a" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Сумма ${cur}" style="flex:1.4" autofocus>
       <input id="tp-d" class="inp" type="date" value="${today}" style="flex:1"></div>
     <button class="btn full" onclick="saveDepTopup(${id})">Записать пополнение</button>
     ${hist?`<div style="margin-top:14px"><div class="t2" style="color:var(--muted);margin-bottom:4px">Последние пополнения</div>${hist}</div>`:''}`;
@@ -1186,8 +1205,14 @@ function openDepTopup(id){
 async function saveDepTopup(id){
   const amt=parseFloat(document.getElementById('tp-a').value)||0;
   if(amt<=0){ toast('Сумма'); return; }
-  const d=document.getElementById('tp-d').value||null;
-  try{ await api('/api/deposits/'+id+'/topup',{method:'POST',body:JSON.stringify({amount:amt,date:d})});
+  const dStr=document.getElementById('tp-d').value||null;
+  const srcSel=document.getElementById('tp-src'); const srcId=srcSel?parseInt(srcSel.value,10):0;
+  if(!srcId){ toast('Выбери счёт-источник'); return; }
+  const src=(_accs||[]).find(a=>a.id===srcId);
+  if(src && amt>(src.balance||0)+0.001){
+    if(!confirm(`На счёте «${src.name}» только ${fmt(src.balance)} ${src.currency}. Списать всё равно?`)) return;
+  }
+  try{ await api('/api/deposits/'+id+'/topup',{method:'POST',body:JSON.stringify({amount:amt,date:dStr,source_account_id:srcId})});
     toast('Пополнение записано'); closeOv(); loadCapital();
   }catch(e){ toast('Ошибка'); }
 }

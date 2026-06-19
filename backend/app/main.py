@@ -735,6 +735,10 @@ class DepIn(BaseModel):
     owner: str = "me"
     term_start: str | None = None
     term_end: str | None = None
+    # откуда взяли (списываем balance) — обязательно если principal>0
+    source_account_id: int | None = None
+    currency: str | None = None        # автоподхват из source если не задано
+    kind: str | None = None            # 'deposit'|'staking'|'other' — для иконки
 
 
 class DepPatch(BaseModel):
@@ -746,6 +750,20 @@ class DepPatch(BaseModel):
     owner: str | None = None
     term_start: str | None = None
     term_end: str | None = None
+    currency: str | None = None
+    kind: str | None = None
+
+
+def _guess_deposit_kind(name: str, source_cur: str) -> str:
+    """Эвристика для иконки: крипта если USDT/USDC/USD-источник и/или название
+    содержит крипто-маркер; иначе обычный вклад."""
+    n = (name or "").lower()
+    cur = (source_cur or "").upper()
+    crypto_markers = ("binance", "bybit", "okx", "kraken", "telegram", "usdt", "usdc",
+                       "стейкинг", "staking", "крипт", "ton ", "eth", "wallet")
+    if cur in ("USDT", "USDC") or any(m in n for m in crypto_markers):
+        return "staking"
+    return "deposit"
 
 
 @app.get("/api/deposits")
@@ -756,13 +774,24 @@ async def deposits(user: dict = Depends(current_user), db: Session = Depends(get
 @app.post("/api/deposits")
 async def create_deposit(body: DepIn, user: dict = Depends(current_user),
                          db: Session = Depends(get_session)):
+    principal = max(0.0, float(body.principal or 0.0))
+    # источник: списываем principal с его balance, валюту берём из него если не задано явно
+    src = db.get(models.Account, body.source_account_id) if body.source_account_id else None
+    if principal > 0 and not src:
+        raise HTTPException(400, "Укажите счёт-источник: с него спишется сумма")
+    currency = (body.currency or (src.currency if src else "RUB") or "RUB").upper()
+    kind = (body.kind or _guess_deposit_kind(body.bank, src.currency if src else "")) or "deposit"
     d = models.Deposit(
-        bank=body.bank[:128], principal=body.principal or 0.0, rate=body.rate or 0.0,
+        bank=body.bank[:128], principal=principal, rate=body.rate or 0.0,
         monthly_topup=body.monthly_topup or 0.0, capitalization=bool(body.capitalization),
         owner=body.owner if body.owner in ("me", "wife") else "me",
         term_start=date.fromisoformat(body.term_start) if body.term_start else date.today(),
         term_end=date.fromisoformat(body.term_end) if body.term_end else None,
+        source_account_id=src.id if src else None,
+        currency=currency, kind=kind if kind in ("deposit", "staking", "other") else "deposit",
     )
+    if src and principal > 0:
+        src.balance = round((src.balance or 0) - principal, 2)
     db.add(d)
     db.commit()
     return {"id": d.id}
@@ -774,10 +803,12 @@ async def patch_deposit(dep_id: int, body: DepPatch, user: dict = Depends(curren
     d = db.get(models.Deposit, dep_id)
     if not d:
         raise HTTPException(404, "no deposit")
-    for f in ("bank", "principal", "rate", "monthly_topup", "capitalization", "owner"):
+    for f in ("bank", "principal", "rate", "monthly_topup", "capitalization", "owner", "kind"):
         v = getattr(body, f)
         if v is not None:
             setattr(d, f, v)
+    if body.currency is not None:
+        d.currency = (body.currency or "RUB").upper()
     if body.term_start is not None:
         d.term_start = date.fromisoformat(body.term_start) if body.term_start else None
     if body.term_end is not None:
@@ -791,7 +822,8 @@ async def delete_deposit(dep_id: int, user: dict = Depends(current_user),
                          db: Session = Depends(get_session)):
     d = db.get(models.Deposit, dep_id)
     if d:
-        # вместе с вкладом сносим его пополнения
+        # вместе с вкладом сносим его пополнения. Balance счёта-источника НЕ возвращаем —
+        # пользователь сам отрегулирует если нужно (деньги физически могли уйти куда-то ещё).
         db.query(models.DepositTopup).filter_by(deposit_id=dep_id).delete()
         db.delete(d)
         db.commit()
@@ -802,17 +834,28 @@ class TopupIn(BaseModel):
     amount: float
     date: str | None = None
     note: str | None = None
+    source_account_id: int | None = None
 
 
 @app.post("/api/deposits/{dep_id}/topup")
 async def add_topup(dep_id: int, body: TopupIn, user: dict = Depends(current_user),
                     db: Session = Depends(get_session)):
-    if not db.get(models.Deposit, dep_id):
+    dep = db.get(models.Deposit, dep_id)
+    if not dep:
         raise HTTPException(404, "no deposit")
+    amount = abs(float(body.amount))
+    # источник: если не задан явно — берём source_account вклада
+    src_id = body.source_account_id or dep.source_account_id
+    src = db.get(models.Account, src_id) if src_id else None
+    if amount > 0 and not src:
+        raise HTTPException(400, "Укажите счёт-источник для пополнения")
     t = models.DepositTopup(
-        deposit_id=dep_id, amount=abs(float(body.amount)),
+        deposit_id=dep_id, amount=amount,
         date=date.fromisoformat(body.date) if body.date else date.today(),
-        note=(body.note or "")[:256] or None)
+        note=(body.note or "")[:256] or None,
+        source_account_id=src.id if src else None)
+    if src and amount > 0:
+        src.balance = round((src.balance or 0) - amount, 2)
     db.add(t)
     db.commit()
     return {"id": t.id}

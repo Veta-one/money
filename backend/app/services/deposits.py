@@ -113,17 +113,20 @@ def deposit_view(d: models.Deposit, db: Session | None = None) -> dict:
             if t.date >= ms:
                 topup_this_month += t.amount or 0
     out = {
-        "id": d.id, "bank": d.bank or "Вклад", "principal": round(d.principal or 0),
-        "rate": d.rate or 0, "monthly_topup": round(d.monthly_topup or 0),
+        "id": d.id, "bank": d.bank or "Вклад", "principal": round(d.principal or 0, 2),
+        "rate": d.rate or 0, "monthly_topup": round(d.monthly_topup or 0, 2),
         "capitalization": bool(d.capitalization), "owner": d.owner,
         "term_start": start.isoformat() if start else None,
         "term_end": end.isoformat() if end else None,
-        "months_elapsed": el, "value_now": round(value_now),
-        "interest_now": round(interest_now),
-        "contributed": round(contributed_now),
+        "months_elapsed": el, "value_now": round(value_now, 2),
+        "interest_now": round(interest_now, 2),
+        "contributed": round(contributed_now, 2),
         "has_real_topups": has_real,
-        "topup_this_month": round(topup_this_month),
+        "topup_this_month": round(topup_this_month, 2),
         "topups": topups_list,
+        "source_account_id": getattr(d, "source_account_id", None),
+        "currency": (getattr(d, "currency", None) or "RUB").upper(),
+        "kind": getattr(d, "kind", None) or "deposit",
     }
     if tot:
         events_end, _ = _topup_events(d, end, db, total_months=tot)
@@ -152,6 +155,12 @@ def deposits_overview(db: Session) -> dict:
 
 def deposits_total_value(db: Session) -> float:
     """Сумма всех вкладов в рублях (для compute_net_worth).
-    Считаем по той же модели: с капит/без капит + реальные/плановые пополнения."""
-    return float(sum(deposit_view(d, db)["value_now"]
-                      for d in db.query(models.Deposit).all()))
+    Конвертирует валютные вклады в RUB по текущему курсу."""
+    from .fx import to_rub
+    total = 0.0
+    for d in db.query(models.Deposit).all():
+        v = deposit_view(d, db)
+        val = float(v.get("value_now") or 0.0)
+        cur = (getattr(d, "currency", None) or "RUB").upper()
+        total += to_rub(val, cur, db)
+    return total

@@ -1,10 +1,10 @@
 """
 Фактическая средневзвешенная доходность портфеля.
 
-Считаем по тому, что реально лежит на счетах и под какую ставку:
-- Account.interest_rate (%) → доходность по самому счёту (Binance Earn, накопит. карта)
-- Deposit.rate (%)         → доходность по вкладу (через сервис вкладов)
-- Долги в капитал не вносят доходности (как и не приносят процентов в нашей модели)
+Только Deposit-инструменты несут процент. Сами по себе счета (карта, крипто-кошелёк,
+наличные) доходности не дают — чтобы деньги работали, нужно явно открыть вклад/стейкинг
+через раздел «Вклады»: с этого момента сумма списывается со счёта-источника и
+становится частью «работающего» капитала.
 
 Доходность взвешивается по доле в рублёвом капитале на «сейчас».
 """
@@ -20,8 +20,8 @@ def portfolio_yield(db: Session) -> dict:
     """{actual_pct, working_share_pct, idle_rub, breakdown[]} — что реально приносит проценты.
 
     actual_pct        — средневзвешенная ставка по всему капиталу (%)
-    working_share_pct — какая доля капитала работает (rate > 0)
-    idle_rub          — сколько лежит мёртвым грузом (rate = 0) в рублях
+    working_share_pct — какая доля капитала работает (через Deposits с rate > 0)
+    idle_rub          — балансы счетов (не вложено ни во что доходное), в рублях
     breakdown         — построчно: source, balance_rub, rate_pct, contribution_pct
     """
     rows: list[dict] = []
@@ -30,29 +30,24 @@ def portfolio_yield(db: Session) -> dict:
     idle = 0.0
     weighted_rate_sum = 0.0
 
-    # 1) счета — обычные
+    # 1) сами счета — это «idle» по определению: они доходности не приносят
     for a in db.query(models.Account).filter(models.Account.archived.is_(False)).all():
         bal_rub = to_rub(a.balance or 0.0, a.currency, db)
         if bal_rub <= 0:
             continue
-        rate = float(a.interest_rate or 0.0)
         total += bal_rub
-        weighted_rate_sum += bal_rub * rate
-        if rate > 0:
-            working += bal_rub
-        else:
-            idle += bal_rub
+        idle += bal_rub
         rows.append({
             "kind": "account",
             "id": a.id,
             "name": a.name,
             "currency": a.currency,
             "balance_rub": round(bal_rub, 2),
-            "rate_pct": round(rate, 2),
-            "note": a.interest_note or "",
+            "rate_pct": 0.0,
+            "note": "лежит без процентов",
         })
 
-    # 2) вклады — через сервис; value_now хранится в той же валюте, что и principal (обычно RUB)
+    # 2) вклады/инвестиции — единственный источник реальной доходности
     try:
         from .deposits import deposit_view
         for d in db.query(models.Deposit).all():
@@ -62,9 +57,7 @@ def portfolio_yield(db: Session) -> dict:
             val = float(view.get("value_now") or 0.0)
             if val <= 0:
                 continue
-            # счёт у вклада обычно типа deposit с валютой = RUB; на всякий случай — конвертация
-            acc_obj = db.get(models.Account, d.account_id) if d.account_id else None
-            cur = (acc_obj.currency if acc_obj else "RUB")
+            cur = (d.currency or "RUB").upper() if hasattr(d, "currency") else "RUB"
             val_rub = to_rub(val, cur, db)
             rate = float(d.rate or 0.0)
             total += val_rub
@@ -74,7 +67,7 @@ def portfolio_yield(db: Session) -> dict:
             rows.append({
                 "kind": "deposit",
                 "id": d.id,
-                "name": f"Вклад · {d.bank or '—'}",
+                "name": f"{d.bank or 'Вклад'}",
                 "currency": cur,
                 "balance_rub": round(val_rub, 2),
                 "rate_pct": round(rate, 2),
@@ -85,7 +78,6 @@ def portfolio_yield(db: Session) -> dict:
 
     actual_pct = round(weighted_rate_sum / total, 2) if total > 0 else 0.0
     working_share = round(working / total * 100, 1) if total > 0 else 0.0
-    # вклад каждой строки в итоговую ставку
     for r in rows:
         r["contribution_pct"] = round(r["balance_rub"] * r["rate_pct"] / total, 2) if total > 0 else 0.0
 
