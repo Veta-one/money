@@ -42,14 +42,28 @@ def _col(row: dict, *needles: str) -> str:
     return ""
 
 
+def _sniff_delimiter(sample: str) -> str:
+    """Авто-детект разделителя CSV: Райф/1С даёт ';', Google Sheets — ','."""
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+    except csv.Error:
+        # фоллбэк: считаем в первой строке
+        first = sample.splitlines()[0] if sample else ""
+        return ";" if first.count(";") > first.count(",") else ","
+
+
 def parse_statement(content: bytes) -> list[dict]:
-    for enc in ("utf-8-sig", "cp1251"):
+    text = None
+    for enc in ("utf-8-sig", "cp1251", "utf-8"):
         try:
             text = content.decode(enc)
             break
         except UnicodeDecodeError:
-            text = content.decode("utf-8", errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
+            continue
+    if text is None:
+        text = content.decode("utf-8", errors="replace")
+    delimiter = _sniff_delimiter(text[:4096])
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     out: list[dict] = []
     for row in reader:
         income = _num(_col(row, "счет", "поступлен")) or _num(_col(row, "счёт", "поступлен"))
