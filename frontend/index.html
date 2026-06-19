@@ -1707,9 +1707,11 @@ function renderReclassifyBlock(d){
   const chips = kinds.map(([k,l])=>`<button class="chip${_rcKind===k?' on':''}" onclick="setRcKind('${k}')">${l}</button>`).join('');
   let form = '';
   if(_rcKind==='expense'){
-    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория расхода</div></div>${catchipHtml('tx', d.id, d.category)}</div>`;
+    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория расхода</div></div>
+      <button class="catchip" style="${d.category?`border-color:${color(d.category)};color:${color(d.category)}`:''}" onclick="openPick('tx',${d.id},null,'expense')">${d.category?icon(catIcon(d.category),14):''}${d.category||'выбрать'}</button></div>`;
   } else if(_rcKind==='income'){
-    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория дохода</div></div>${catchipHtml('inccat', d.id, d.category)}</div>`;
+    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория дохода</div></div>
+      <button class="catchip" style="${d.category?`border-color:${color(d.category)};color:${color(d.category)}`:''}" onclick="openPick('inccat',${d.id},null,'income')">${d.category?icon(catIcon(d.category),14):''}${d.category||'выбрать'}</button></div>`;
   } else if(_rcKind==='self_transfer'){
     const opts = (d.accounts_other||[]).map(a=>`<option value="${a.id}"${a.id===d.counterparty_account_id?' selected':''}>${a.name}${a.owner!=='me'?' ('+ownerLabel(a.owner)+')':''}</option>`).join('');
     form = `<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
@@ -1772,7 +1774,7 @@ async function saveTxNote(id){
   try{ await api('/api/tx/'+id+'/note',{method:'POST',body:JSON.stringify({note:document.getElementById('tx-note').value})});
     toast('Сохранено'); }catch(e){ toast('Ошибка'); }
 }
-function openPick(kind,id,parentId){ _pickKind=kind; _pickId=id;
+function openPick(kind,id,parentId,rcKind){ _pickKind=kind; _pickId=id; if(rcKind!==undefined) _pickRcKind=rcKind;
   const cats=kind==='inccat'?_incCats:_cats;
   const hasKids=c=>cats.some(x=>String(x.parent_id)===String(c.id));
   const chip=(c,label,oc)=>`<button class="catpick" style="background:${tint(color(c.name))};color:${color(c.name)}" onclick="${oc}">${icon(catIcon(c.name),16)}<span>${label}</span></button>`;

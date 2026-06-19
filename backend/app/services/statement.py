@@ -76,7 +76,9 @@ def parse_statement(content: bytes) -> list[dict]:
         when = _dt(_col(row, "дата операц"))
         ttype = "income" if income > 0 else "expense"
         amount = income if income > 0 else expense
-        if any(h in merchant.lower() for h in _TRANSFER_HINTS):
+        # Heuristic «перевод» применяем ТОЛЬКО к расходам — приход «перевод» это
+        # обычно деньги от кого-то (доход), не transfer между нашими счетами.
+        if ttype == "expense" and any(h in merchant.lower() for h in _TRANSFER_HINTS):
             ttype = "transfer"
         out.append({"doc": doc, "datetime": when, "amount": round(amount, 2),
                     "type": ttype, "merchant": merchant, "currency": currency})
