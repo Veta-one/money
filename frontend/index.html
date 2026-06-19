@@ -1958,7 +1958,7 @@ async function openSettings(){
     const me=ownerLabel('me'); const fams=_family.length;
     let incCount='—', recCount='—', accCount='—';
     try{
-      const inc=await api('/api/income'); incCount=(inc.recurring||[]).length;
+      const inc=await api('/api/income'); incCount=(inc.sources||[]).length;
       const acc=await api('/api/accounts'); accCount=(acc.accounts||[]).length;
       const rec=await api('/api/recurring'); recCount=(rec.recurring||[]).filter(r=>r.type==='expense').length;
     }catch(e){}
@@ -2067,18 +2067,20 @@ async function saveProfile(){
 async function renderSetIncome(){
   const sheet=document.getElementById('sheet');
   let data; try{ data=await api('/api/income'); }catch(e){ sheet.innerHTML=setHeader('Доходы','',true)+'<div class="err">Ошибка</div>'; return; }
-  const rows=(data.recurring||[]).filter(r=>r.type==='income');
-  const total=rows.reduce((s,r)=>s+(r.amount||0),0);
+  const rows=data.sources||[];
+  const total=rows.reduce((s,r)=>s+(r.plan||0),0);
   sheet.innerHTML=setHeader('Доходы','Источники — зарплата, премии, кешбэк', true)+`
     <div class="card" style="display:flex;justify-content:space-between;align-items:baseline"><div class="t2" style="color:var(--muted)">Всего по плану</div><div style="font-size:16px;font-weight:800">${fmt(total)} ₽/мес</div></div>
     <div style="margin-top:10px">${rows.length?rows.map(r=>{
       const col=color(r.name);
-      return `<div class="row" onclick="openIncRec(${r.id})" style="cursor:pointer">
+      const cur=r.currency==='RUB'?'₽':r.currency;
+      const per=r.period==='yearly'?'/год':r.period==='weekly'?'/нед':'/мес';
+      return `<div class="row" onclick="openIncEdit(${r.id})" style="cursor:pointer">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon('cash',18)}</div>
-        <div class="mid"><div class="t1">${r.name}</div><div class="t2">${ownerLabel(r.owner||'me')} · ${r.period==='monthly'?'/мес':r.period==='weekly'?'/нед':'/год'}</div></div>
-        <div class="amt inc">+${fmt(r.amount)} ${CUR}</div></div>`;
+        <div class="mid"><div class="t1">${r.name}${r.owner&&r.owner!=='me'?' <span class="muted" style="font-size:12px;font-weight:600">· '+ownerLabel(r.owner)+'</span>':''}</div><div class="t2">${fmt(r.amount)} ${cur}${per}${r.active?'':' · выключен'}</div></div>
+        <div class="amt inc">+${fmt(r.plan)} ${CUR}</div></div>`;
     }).join(''):'<div class="empty">Источников пока нет</div>'}</div>
-    <button class="btn full" style="margin-top:6px" onclick="openIncRec(null)">Добавить источник</button>
+    <button class="btn full" style="margin-top:6px" onclick="closeOv();tab('income')">Добавить источник</button>
     <div class="sethint">Источники нужны для прогноза доходов, нормы сбережений и Safe-to-Spend. Без них прогноз будет неточным.</div>`;
 }
 function openIncRec(id){
@@ -2179,16 +2181,20 @@ async function saveGoalsAll(){
 async function renderSetBudgets(){
   const sheet=document.getElementById('sheet');
   let data; try{ data=await api('/api/budgets'); }catch(e){ sheet.innerHTML=setHeader('Бюджеты','',true)+'<div class="err">Ошибка</div>'; return; }
-  const rows=data.items||data.budgets||[];
+  const rows=data.items||[];
+  const totBudget=data.total_budget||0, totSpent=data.total_spent||0;
   sheet.innerHTML=setHeader('Бюджеты','Лимиты по категориям', true)+
-    `<div style="margin-top:6px">${rows.length?rows.map(b=>{
+    `<div class="card" style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="t2" style="color:var(--muted)">Всего лимит / факт</div>
+      <div style="font-size:16px;font-weight:800">${fmt(totSpent)} / ${fmt(totBudget)} ₽</div></div>
+    <div style="margin-top:10px">${rows.length?rows.map(b=>{
       const col=color(b.name);
-      return `<div class="row"><div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(b.name),18)}</div>
-        <div class="mid"><div class="t1">${b.name}</div><div class="t2">потрачено ${fmt(b.spent||0)} ₽</div></div>
-        <div class="amt">${fmt(b.amount||0)} ₽</div></div>`;
+      return `<div class="row" style="cursor:pointer" onclick="closeOv();tab('analytics')"><div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(b.name),18)}</div>
+        <div class="mid"><div class="t1">${b.name}${b.manual?'':' <span class="muted" style="font-size:11px;font-weight:600">· прогноз</span>'}</div><div class="t2">потрачено ${fmt(b.spent||0)} ₽${b.over?' · <span style="color:var(--red);font-weight:700">перебор</span>':''}</div></div>
+        <div class="amt">${fmt(b.budget||0)} ₽</div></div>`;
     }).join(''):'<div class="empty">Лимитов нет — задай на вкладке Аналитика</div>'}</div>
     <button class="btn full" style="margin-top:6px" onclick="closeOv();tab('analytics')">Перейти к лимитам</button>
-    <div class="sethint">Месячные лимиты по категориям видны как прогресс-бары в Аналитике. Если категория не лимитирована — берётся прогноз по среднему за 3 мес.</div>`;
+    <div class="sethint">Месячные лимиты по категориям видны как прогресс-бары в Аналитике. Где не задано вручную — берётся прогноз по среднему за 3 мес.</div>`;
 }
 async function saveBig(){ try{ await api('/api/kv/alert_big',{method:'POST',body:JSON.stringify({value:document.getElementById('st-big').value})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
 async function exportCsv(){ toast('Скоро добавим'); }
