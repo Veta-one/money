@@ -413,14 +413,41 @@ function lineHover(svg,evt){
   const cx=svg.querySelector('.cx'); if(cx){ cx.setAttribute('x1',sx); cx.setAttribute('x2',sx); cx.setAttribute('opacity','.55'); }
   const dot=svg.querySelector('.cx-dot'); if(dot){ dot.setAttribute('cx',sx); dot.setAttribute('cy',sy); dot.setAttribute('opacity','1'); }
   const fmtType=svg.getAttribute('data-line-fmt')||'rub';
-  const valStr=fmtType==='rate'?`${val.toFixed(2)} ₽`:`${fmt(val)} ₽`;
+  const fmtVal=v=>fmtType==='rate'?`${v.toFixed(2)} ₽`:`${fmt(v)} ₽`;
+  const valStr=fmtVal(val);
   const dt=new Date(date);
   const dateStr=dt.toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'2-digit'});
-  tipShow(evt.clientX,evt.clientY,`<div style="color:#a9adb6;font-size:11px">${dateStr}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${valStr}</div>`);
+
+  // опциональная вторая линия (факт) — те же индексы
+  let factHtml='';
+  const rawF=svg.getAttribute('data-line-fact');
+  if(rawF){
+    try{
+      const ptsF=JSON.parse(rawF);
+      if(ptsF[best]){
+        const [fx,fy,,fv]=ptsF[best];
+        const dotF=svg.querySelector('.cx-dot-fact');
+        if(dotF){ dotF.setAttribute('cx',fx); dotF.setAttribute('cy',fy); dotF.setAttribute('opacity','1'); }
+        const delta=val-fv;
+        const deltaCol=delta>0?'#ff8a3d':delta<0?'#18c171':'#a9adb6';
+        const sign=delta>0?'−':delta<0?'+':'';
+        factHtml=`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:4px;font-size:11.5px">
+          <span style="color:#a9adb6;font-weight:600">факт</span>
+          <span style="color:#cdd1d8;font-weight:700">${fmtVal(fv)}</span></div>
+          ${Math.abs(delta)>1?`<div style="margin-top:3px;font-size:10.5px;color:${deltaCol};text-align:right">${sign}${fmt(Math.abs(delta))} ₽ к плану</div>`:''}`;
+      }
+    }catch(e){}
+  }
+  const planLabel=rawF?`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:2px;font-size:11.5px">
+    <span style="color:#a9adb6;font-weight:600">план</span>
+    <span style="font-weight:800">${valStr}</span></div>`
+    :`<div style="font-size:14px;font-weight:800;margin-top:2px">${valStr}</div>`;
+  tipShow(evt.clientX,evt.clientY,`<div style="color:#a9adb6;font-size:11px">${dateStr}</div>${planLabel}${factHtml}`);
 }
 function lineHoverClear(svg){
   const cx=svg.querySelector('.cx'); if(cx) cx.setAttribute('opacity','0');
   const dot=svg.querySelector('.cx-dot'); if(dot) dot.setAttribute('opacity','0');
+  const dotF=svg.querySelector('.cx-dot-fact'); if(dotF) dotF.setAttribute('opacity','0');
 }
 document.addEventListener('mousemove',e=>{
   const lineSvg=e.target.closest('svg[data-line]');
@@ -855,9 +882,14 @@ function forecastChart(fc){
     const label = i===0 ? 'сейчас' : '+'+y+'г';
     xLabels.push(`<text x="${X(i).toFixed(1)}" y="${h-8}" font-size="10" fill="#8b909a" text-anchor="${anchor}">${label}</text>`);
   }
-  // hover-данные
+  // hover-данные (план)
   const hover=JSON.stringify(pts.map((p,i)=>[+X(i).toFixed(1),+Y(p.value).toFixed(1),p.date,p.value]));
-  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${hover.replace(/'/g,"&#39;")}' data-line-fmt="rub">
+  // hover-данные (факт), если рисуем вторую линию
+  const hoverFact = factLine
+    ? JSON.stringify(factPts.map((p,i)=>[+X(i).toFixed(1),+Y(p.value).toFixed(1),p.date,p.value])).replace(/'/g,"&#39;")
+    : '';
+  const factAttr = factLine ? ` data-line-fact='${hoverFact}'` : '';
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${hover.replace(/'/g,"&#39;")}' data-line-fmt="rub"${factAttr}>
     <polygon points="${areaPts}" fill="var(--ink)" opacity=".07"/>
     ${targetLines}
     ${factLine}
@@ -865,6 +897,7 @@ function forecastChart(fc){
     ${crossings}
     <line class="cx" x1="0" y1="${padT}" x2="0" y2="${h-padB}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
     <circle class="cx-dot" r="4" fill="var(--ink)" opacity="0"/>
+    ${factLine?`<circle class="cx-dot-fact" r="3.5" fill="var(--muted)" stroke="#fff" stroke-width="1" opacity="0"/>`:''}
     ${xLabels.join('')}
   </svg>
   ${factLine?`<div style="display:flex;gap:14px;justify-content:center;margin-top:2px;font-size:10.5px;color:var(--muted);flex-wrap:wrap">
