@@ -801,10 +801,7 @@ async function loadGoals(){
           <input id="nr-a" class="inp" type="number" inputmode="decimal" placeholder="₽" style="flex:1">
           <button id="per-m" class="chip on" onclick="setPer('monthly')">Мес</button>
           <button id="per-y" class="chip" onclick="setPer('yearly')">Год</button></div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">След. платёж (необязательно)</div>
-            <input id="nr-d" class="inp" type="date"></div>
-          <button class="btn" style="align-self:flex-end" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
+        <div id="rec-date-row" style="display:flex;gap:8px;align-items:flex-end">${renderRecDateInputs(_recPer,_recDay,_recMonth)}<button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
   }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('v-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t=parseFloat(document.getElementById('ng-t').value),p=parseFloat(document.getElementById('ng-p').value)||0,acc=document.getElementById('ng-a').value;
@@ -812,34 +809,99 @@ async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t
 async function addGoal(id,cur){ const v=parseFloat(document.getElementById('ad-'+id).value); if(!v){toast('Сумма');return;}
   try{ await api('/api/goals/'+id,{method:'POST',body:JSON.stringify({current_amount:cur+v})}); toast('Внесено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
-function setPer(p){ _recPer=p; document.getElementById('per-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('per-y').className='chip'+(p==='yearly'?' on':''); }
-async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
-  const nd=document.getElementById('nr-d')?.value||null;
+// ===== Регулярные платежи: день/месяц вместо полной даты =====
+let _recDay='', _recMonth='';
+const _RU_MONTHS_SHORT=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+const _RU_MONTHS_FULL=['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+function renderRecDateInputs(per,day,month){
+  // Для «месяц» — только число; для «год» — число + месяц.
+  if(per==='monthly'){
+    return `<div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Число месяца (необяз.)</div>
+      <input id="nr-day" class="inp" type="number" inputmode="numeric" min="1" max="31" placeholder="1-31" value="${day||''}"></div>`;
+  }
+  return `<div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">День (необяз.)</div>
+      <input id="nr-day" class="inp" type="number" inputmode="numeric" min="1" max="31" placeholder="1-31" value="${day||''}" style="width:100%"></div>
+    <div style="flex:1.4"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Месяц</div>
+      <select id="nr-month" class="inp">${_RU_MONTHS_FULL.map((n,i)=>`<option value="${i+1}"${(month||(new Date().getMonth()+1))==(i+1)?' selected':''}>${n}</option>`).join('')}</select></div>`;
+}
+function setPer(p){
+  _recPer=p;
+  document.getElementById('per-m').className='chip'+(p==='monthly'?' on':'');
+  document.getElementById('per-y').className='chip'+(p==='yearly'?' on':'');
+  const row=document.getElementById('rec-date-row');
+  if(row){
+    // сохраняем введённое число чтобы не потерялось при переключении
+    const d=document.getElementById('nr-day')?.value; if(d) _recDay=d;
+    const m=document.getElementById('nr-month')?.value; if(m) _recMonth=m;
+    row.innerHTML=renderRecDateInputs(p,_recDay,_recMonth)+`<button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button>`;
+  }
+}
+// Считаем next_date из day/month: ближайшее будущее наступление.
+function computeNextDate(period,day,month){
+  const d=parseInt(day); if(!d||d<1||d>31) return null;
+  const today=new Date(); today.setHours(0,0,0,0);
+  if(period==='monthly'){
+    let n=new Date(today.getFullYear(),today.getMonth(),d);
+    if(n<today) n=new Date(today.getFullYear(),today.getMonth()+1,d);
+    return _ymdLocal(n);
+  }
+  const m=(parseInt(month)||today.getMonth()+1)-1;
+  let n=new Date(today.getFullYear(),m,d);
+  if(n<today) n=new Date(today.getFullYear()+1,m,d);
+  return _ymdLocal(n);
+}
+function _ymdLocal(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+// Российский формат 21.09.2026 — для редактора, чтобы пользователь понимал какую дату ставит.
+function fmtDateRu(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`; }
+
+async function addRec(){
+  const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
+  const day=document.getElementById('nr-day')?.value||'', month=document.getElementById('nr-month')?.value||'';
   if(!n||!a){toast('Имя и сумма');return;}
-  try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer,next_date:nd})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
+  const next_date=computeNextDate(_recPer,day,month);
+  try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer,next_date})}); toast('Добавлено'); _recDay=''; _recMonth=''; loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
+let _reEdit=null;  // {id, period, day, month} текущего редактируемого регулярного
 function openRecEdit(x){
-  // x: либо весь объект {id,amount,name,next_date}, либо устаревший вызов (id, amount, name)
-  if(typeof x!=='object'){ x={id:arguments[0], amount:arguments[1], name:arguments[2], next_date:null}; }
+  // x: либо весь объект {id,amount,name,next_date,period}, либо устаревший вызов (id, amount, name)
+  if(typeof x!=='object'){ x={id:arguments[0], amount:arguments[1], name:arguments[2], next_date:null, period:'monthly'}; }
+  // выведем day/month из next_date если есть
+  let day='', month='';
+  if(x.next_date){ const d=new Date(x.next_date+'T00:00:00'); day=d.getDate(); month=d.getMonth()+1; }
+  _reEdit={id:x.id, period:x.period||'monthly', day:String(day), month:String(month||(new Date().getMonth()+1))};
+  renderRecEditSheet(x);
+  document.getElementById('ov').style.display='flex';
+}
+function renderRecEditSheet(x){
+  const e=_reEdit;
+  const preview=(()=>{const nd=computeNextDate(e.period,e.day,e.month); return nd?`Сработает: <b>${fmtDateRu(nd)}</b>`:'Без даты — без напоминания';})();
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Регулярный платёж</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
     <input id="re-n" class="inp" placeholder="Название" value="${(x.name||'').replace(/"/g,'&quot;')}" style="margin-bottom:8px">
-    <input id="re-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽" value="${x.amount}" style="margin-bottom:8px">
-    <div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">След. платёж (необязательно)</div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="re-d" class="inp" type="date" value="${x.next_date||''}" style="flex:1">
-      <button class="chip" onclick="document.getElementById('re-d').value=''">Сброс</button></div>
-    <button class="btn full" onclick="saveRec(${x.id})">Сохранить</button>`;
-  document.getElementById('ov').style.display='flex';
+    <input id="re-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽" value="${x.amount}" style="margin-bottom:10px">
+    <div class="filt" style="margin-bottom:10px">
+      <button class="chip${e.period==='monthly'?' on':''}" onclick="reSetPer('monthly')">Каждый месяц</button>
+      <button class="chip${e.period==='yearly'?' on':''}" onclick="reSetPer('yearly')">Каждый год</button></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:6px">
+      <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">${e.period==='monthly'?'Число месяца':'День'}</div>
+        <input class="inp" type="number" inputmode="numeric" min="1" max="31" placeholder="1-31" value="${e.day||''}" oninput="reSet('day',this.value)"></div>
+      ${e.period==='yearly'?`<div style="flex:1.4"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">Месяц</div>
+        <select class="inp" onchange="reSet('month',this.value)">${_RU_MONTHS_FULL.map((n,i)=>`<option value="${i+1}"${String(i+1)===String(e.month)?' selected':''}>${n}</option>`).join('')}</select></div>`:''}
+      <button class="chip" onclick="reSet('day','');reSet('month','')">Очистить</button></div>
+    <div class="t2" style="margin:0 2px 14px;color:var(--muted)">${preview}</div>
+    <button class="btn full" onclick="saveRec(${e.id})">Сохранить</button>`;
 }
+function reSet(field,val){ if(!_reEdit) return; _reEdit[field]=val; const x={amount:document.getElementById('re-a').value, name:document.getElementById('re-n').value}; renderRecEditSheet(x); document.querySelector('#sheet input.inp')?.focus(); }
+function reSetPer(p){ if(!_reEdit) return; _reEdit.period=p; const x={amount:document.getElementById('re-a').value, name:document.getElementById('re-n').value}; renderRecEditSheet(x); }
 async function saveRec(id){
   const name=document.getElementById('re-n').value.trim();
   const v=parseFloat(document.getElementById('re-a').value);
-  const nd=document.getElementById('re-d')?.value||'';
+  const e=_reEdit||{};
   if(!name||!v){toast('Имя и сумма');return;}
+  const nd=computeNextDate(e.period,e.day,e.month);
   const body={name, amount:v};
   if(nd) body.next_date=nd; else body.clear_next_date=true;
-  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadGoals(); }catch(e){toast('Ошибка');} }
+  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadGoals(); }catch(err){toast('Ошибка');} }
 // Time-until-payment с цветами (чёрный >7d, оранжевый ≤7d, красный ≤3d/завтра/сегодня).
 function recTimeUntil(x){
   if(!x.next_date) return null;
