@@ -139,8 +139,9 @@
   /* глобальный FAB «+» — quick add */
   .fab-add{position:fixed;right:18px;bottom:84px;width:54px;height:54px;border-radius:18px;border:none;
     background:var(--ink);color:#fff;box-shadow:0 12px 26px rgba(0,0,0,.25);cursor:pointer;
-    display:flex;align-items:center;justify-content:center;z-index:45;transition:transform .12s}
+    display:flex;align-items:center;justify-content:center;z-index:45;transition:transform .22s ease, opacity .22s ease}
   .fab-add:active{transform:scale(.92)}
+  .fab-add.away{transform:translateY(110px);opacity:0;pointer-events:none}
   html.dark .fab-add{background:#3a3d45}
   /* heatmap */
   .heat{display:grid;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;gap:3px;padding:4px 0}
@@ -792,6 +793,7 @@ async function loadGoals(){
         <div class="mid"><div class="t1">${c.name}</div><div class="t2">~${fmt(c.amount)} ${CUR} · ${c.months} мес</div></div>
         <button class="iconbtn" onclick="addRecCand(${i})">${icon('plus',18)}</button>
         <button class="iconbtn" onclick="dismissCand(${i})">${icon('x',18)}</button></div>`).join(''):''}
+      ${(()=>{const exp=rec.filter(x=>x.type==='expense'); if(!exp.length) return ''; const total=exp.reduce((s,x)=>s+(x.period==='yearly'?x.amount/12:x.period==='weekly'?x.amount*4.33:x.amount),0); return `<div class="card" style="margin-top:12px"><div class="k">В месяц на регулярные</div><div class="v">${fmt(total)}<span class="cur">${CUR}</span></div><div class="t2" style="margin-top:6px;color:var(--muted)">${exp.length} ${exp.length%10===1&&exp.length!==11?'платёж':exp.length%10>=2&&exp.length%10<=4&&!(exp.length%100>=12&&exp.length%100<=14)?'платежа':'платежей'} · приведено к месяцу (год→÷12, неделя→×4.33)</div></div>`;})()}
       <div class="card" style="margin-top:8px">
         <input id="nr-n" class="inp" placeholder="Название (напр. Интернет)" style="margin-bottom:8px">
         <div style="display:flex;gap:8px;align-items:center">
@@ -1303,6 +1305,22 @@ async function createSrcFromTx(){
 }
 function closeOv(){ document.getElementById('ov').style.display='none'; toggleFab(true); tgBackSync(); }
 function toggleFab(show){ const f=document.getElementById('fab-add'); if(f) f.style.display=show?'flex':'none'; }
+// hide-on-scroll-down, show-on-scroll-up для FAB (привычный мобильный паттерн).
+let _lastScrollY=0, _fabAway=false, _scrollTick=false;
+window.addEventListener('scroll',()=>{
+  if(_scrollTick) return; _scrollTick=true;
+  requestAnimationFrame(()=>{
+    _scrollTick=false;
+    const fab=document.getElementById('fab-add');
+    const ov=document.getElementById('ov');
+    if(!fab || (ov && ov.style.display==='flex')) return;
+    const y=window.scrollY, dy=y-_lastScrollY;
+    if(Math.abs(dy)<6){ _lastScrollY=y; return; }
+    if(dy>0 && y>140 && !_fabAway){ fab.classList.add('away'); _fabAway=true; }
+    else if(dy<0 && _fabAway){ fab.classList.remove('away'); _fabAway=false; }
+    _lastScrollY=y;
+  });
+},{passive:true});
 // автоматически прячем FAB + синхронизируем TG BackButton пока открыт оверлей
 function tgBackSync(){
   const ov=document.getElementById('ov'); const open=ov && ov.style.display==='flex';
