@@ -1693,14 +1693,23 @@ function renderDetail(d){
 }
 let _rcKind=null;
 function renderReclassifyBlock(d){
-  const isIncomeSide = d.amount > 0;   // приход (+) vs списание (−)
-  const kinds = isIncomeSide
-    ? [['purchase','Доход'], ['self_transfer','Перевод от себя'], ['repay_to_me','Вернули мой долг']]
-    : [['purchase','Покупка'], ['self_transfer','Перевод между счетами'], ['give_loan','Я дал в долг'], ['repay_my_debt','Я погасил свой долг']];
+  // У transfer-операций направление неизвестно (amount всегда положительный, type=transfer).
+  // Поэтому для transfer показываем ВСЕ опции — пользователь сам знает что было.
+  // Для expense/income без категории — те же опции (можно переклассифицировать в любую сторону).
+  const kinds = [
+    ['expense','Покупка / расход'],
+    ['income','Доход'],
+    ['self_transfer','Перевод между счетами'],
+    ['give_loan','Я дал в долг'],
+    ['repay_to_me','Вернули мой долг'],
+    ['repay_my_debt','Я погасил долг'],
+  ];
   const chips = kinds.map(([k,l])=>`<button class="chip${_rcKind===k?' on':''}" onclick="setRcKind('${k}')">${l}</button>`).join('');
   let form = '';
-  if(_rcKind==='purchase'){
-    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория</div></div>${catchipHtml(isIncomeSide?'inccat':'tx', d.id, d.category)}</div>`;
+  if(_rcKind==='expense'){
+    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория расхода</div></div>${catchipHtml('tx', d.id, d.category)}</div>`;
+  } else if(_rcKind==='income'){
+    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория дохода</div></div>${catchipHtml('inccat', d.id, d.category)}</div>`;
   } else if(_rcKind==='self_transfer'){
     const opts = (d.accounts_other||[]).map(a=>`<option value="${a.id}"${a.id===d.counterparty_account_id?' selected':''}>${a.name}${a.owner!=='me'?' ('+ownerLabel(a.owner)+')':''}</option>`).join('');
     form = `<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
@@ -1735,11 +1744,11 @@ function setRcKind(k){ _rcKind=(_rcKind===k?null:k); if(_detail) renderDetail(_d
 async function applyRc(id){
   if(!_rcKind) return;
   const body = {kind:_rcKind};
-  if(_rcKind==='purchase'){
-    // используем существующий механизм pickCat — он сам сменит type на expense через нашу логику
-    // но сейчас pickCat у нас только меняет category, не type. Вместо этого openPick сразу.
-    const isInc = _detail.amount > 0;
-    openPick(isInc?'inccat':'tx', id);
+  if(_rcKind==='expense' || _rcKind==='income'){
+    // открываем catpicker — pickCat вызовет reclassify с нужным kind
+    _pickKind = _rcKind==='income' ? 'inccat' : 'tx';
+    _pickRcKind = _rcKind;       // запомним чтобы pickCat понял что менять и тип
+    openPick(_pickKind, id);
     return;
   }
   if(_rcKind==='self_transfer'){
@@ -1780,8 +1789,16 @@ function openPick(kind,id,parentId){ _pickKind=kind; _pickId=id;
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${head}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${back}<div class="catgrid">${cells}</div>`;
 }
+let _pickRcKind=null;
 async function pickCat(cid){
   try{
+    if(_pickRcKind){
+      // выбор категории — это часть reclassify (переключение type + категория одной операцией)
+      await api('/api/tx/'+_pickId+'/reclassify',{method:'POST',
+        body:JSON.stringify({kind:_pickRcKind, category_id:cid})});
+      _pickRcKind=null; _rcKind=null;
+      toast('Сохранено'); closeOv(); refreshActive(); return;
+    }
     const url=_pickKind==='item'?'/api/items/'+_pickId:'/api/tx/'+_pickId;
     await api(url,{method:'POST',body:JSON.stringify({category_id:cid})});
     toast('Сохранено');

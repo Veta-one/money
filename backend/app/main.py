@@ -1055,9 +1055,17 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
     if not t:
         raise HTTPException(404, "no tx")
     kind = body.kind
-    if kind == "purchase":
-        # это была покупка (даже если в выписке выглядит как СБП-перевод)
+    if kind in ("expense", "purchase"):
+        # это была покупка/расход (даже если в выписке выглядит как СБП-перевод)
         t.type = "expense"
+        if body.category_id:
+            t.category_id = body.category_id
+            learn_rule(db, body.category_id, inn=None, pattern=t.merchant)
+        t.counterparty_account_id = None
+        t.status = "confirmed"
+    elif kind == "income":
+        # это был доход (зарплата, кешбэк, возврат от продавца)
+        t.type = "income"
         if body.category_id:
             t.category_id = body.category_id
             learn_rule(db, body.category_id, inn=None, pattern=t.merchant)
