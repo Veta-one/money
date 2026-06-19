@@ -444,7 +444,7 @@ function hmap(data, opts){
   const op=l=>l===0?0:[0,.15,.35,.6,1][l];
   const cells=[];
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
-    const key=d.toISOString().slice(0,10), v=map[key]||0, l=level(v);
+    const key=_ymdLocal(d), v=map[key]||0, l=level(v);
     const dateStr=new Date(key).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'2-digit'});
     const tip=v>0
       ? `<div style="color:#a9adb6;font-size:11px">${dateStr}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${fmt(v)} ₽</div><div style="color:#a9adb6;font-size:10px;margin-top:3px">тап → операции дня</div>`
