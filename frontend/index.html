@@ -127,6 +127,17 @@
   .drow:last-child{border-bottom:none}
   .catchip{background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:5px}
   .catgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  /* Settings navigation rows (iOS-style list) */
+  .setlist{display:flex;flex-direction:column;gap:4px}
+  .setrow{display:flex;align-items:center;gap:12px;background:var(--card);border:none;border-radius:14px;padding:11px 12px;cursor:pointer;width:100%;text-align:left;color:var(--text)}
+  .setrow:active{background:var(--bg)}
+  .setrow .ic{width:34px;height:34px;border-radius:10px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:none;color:var(--ink)}
+  .setrow .mid{flex:1;min-width:0}
+  .setrow .ttl{font-size:14px;font-weight:600;line-height:1.25}
+  .setrow .sub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .setrow .chev{color:#bdbfc7;flex:none}
+  .sethint{font-size:11px;color:var(--muted);line-height:1.4;margin:6px 4px 12px}
+  .sec-head{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:14px 4px 8px}
   /* плавная смена табов */
   [id^="v-"]{animation:fadein .18s ease-out}
   @keyframes fadein{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -279,6 +290,13 @@ const P = {
   chat:'<path d="M8 9h8M8 13h6M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3z"/>',
   sparkle:'<path d="M16 18a2 2 0 0 1 2 2M16 18a2 2 0 0 0 2 -2M16 18h2M3 4l4 0M5 2l0 4M11.5 4l-1.5 4l-3 1.5l3 1.5l1.5 4l1.5 -4l3 -1.5l-3 -1.5z"/>',
   send:'<path d="M10 14l11 -11M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -8l-8 -3.5a.55 .55 0 0 1 0 -1z"/>',
+  user:'<path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/>',
+  users:'<path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0 -3 -3.85"/>',
+  bell:'<path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6M9 17v1a3 3 0 0 0 6 0v-1"/>',
+  info:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 9h.01M11 12h1v4h1"/>',
+  chevright:'<path d="M9 6l6 6l-6 6"/>',
+  flag:'<path d="M5 5l0 16M5 5a5 5 0 0 1 7 0a5 5 0 0 0 7 0v9a5 5 0 0 1 -7 0a5 5 0 0 0 -7 0"/>',
+  download:'<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2M7 11l5 5l5 -5M12 4l0 12"/>',
 };
 function icon(n, sz, col){ return `<svg class="ic" width="${sz||22}" height="${sz||22}" viewBox="0 0 24 24" fill="none" stroke="${col||'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||P.tag}</svg>`; }
 
@@ -1916,29 +1934,265 @@ async function aiAsk(prefill){
   _aiSave(); aiRenderLog();
   if(btn) btn.disabled=false;
 }
+// ===== НАСТРОЙКИ — iOS-style навигация =====
+let _setPath='root';
+let _setCtx={};   // кешируем данные для саб-страниц
+function setNav(p){ _setPath=p; openSettings(); }
+function setHeader(title, sub, back){
+  return `<div class="sheeth">
+    ${back?`<button class="iconbtn" onclick="setNav('root')">${icon('chev',18)}</button>`:''}
+    <div style="flex:1;min-width:0"><div class="t1">${title}</div>${sub?`<div class="t2" style="color:var(--muted);margin-top:2px">${sub}</div>`:''}</div>
+    <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button>
+  </div>`;
+}
+function navRow(ic, ttl, sub, fn){
+  return `<button class="setrow" onclick="${fn}">
+    <div class="ic">${icon(ic,18)}</div>
+    <div class="mid"><div class="ttl">${ttl}</div><div class="sub">${sub||''}</div></div>
+    <div class="chev">${icon('chevright',16)}</div></button>`;
+}
 async function openSettings(){
-  const alertBig=(await api('/api/kv/alert_big').catch(()=>({value:null}))).value||'15000';
-  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Настройки</div>
-      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <h2 style="margin-top:4px">Тема</h2>
-    <div class="filt">${['auto','Авто','light','Светлая','dark','Тёмная'].reduce((a,_,i,r)=>{ if(i%2)return a; const v=r[i],l=r[i+1]; return a+`<button class="chip${_themePref===v?' on':''}" onclick="setTheme('${v}');openSettings()">${l}</button>`; },'')}</div>
-    <h2>Уведомления</h2>
-    <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:6px">Алерт «крупная трата», ₽</div>
-      <div style="display:flex;gap:8px"><input id="st-big" class="inp" type="number" inputmode="decimal" value="${alertBig}" style="flex:1">
-        <button class="btn" onclick="saveBig()">OK</button></div>
-      <div class="t2" style="color:var(--muted);margin-top:8px">Дайджесты: каждый день 21:00, воскресенье 20:00, 1-го числа 10:00. Нудж продлений — 10:30.</div></div>
-    <h2>Семья</h2>
-    <div class="card" id="fam-card">${renderFamilyEditor()}</div>
-    <h2>Категории</h2>
-    <button class="btn full" onclick="openCatMgr()">Управление категориями</button>
-    <h2>Чеки ФНС</h2>
-    <button class="btn full" onclick="openReceipts()">Поиск по чекам ${icon('search',16,'#fff')}</button>
-    <div class="t2" style="margin:6px 4px 0;color:var(--muted)">Найди где покупал любую позицию — «хлеб», «молоко», «шампунь». Все распознанные чеки с разбивкой по товарам.</div>
-    <h2>О приложении</h2>
-    <div class="card"><div class="t2">MONEY · личный финансовый помощник<br>Бот: @money_veta_bot<br>Открыть в браузере: <a href="https://money.vetaone.site" style="color:var(--ink);font-weight:600">money.vetaone.site</a></div></div>`;
+  const sheet=document.getElementById('sheet');
+  if(_setPath==='root'){
+    // подгрузим краткую сводку для подписей
+    const me=ownerLabel('me'); const fams=_family.length;
+    let incCount='—', recCount='—', accCount='—';
+    try{
+      const inc=await api('/api/income'); incCount=(inc.recurring||[]).length;
+      const acc=await api('/api/accounts'); accCount=(acc.accounts||[]).length;
+      const rec=await api('/api/recurring'); recCount=(rec.recurring||[]).filter(r=>r.type==='expense').length;
+    }catch(e){}
+    const big=(await api('/api/kv/alert_big').catch(()=>({value:null}))).value||'15000';
+    sheet.innerHTML=setHeader('Настройки')+`
+      <div class="sethint">Здесь то, что меняется редко: настрой один раз — приложение учтёт.</div>
+      <div class="setlist">
+        ${navRow('user','Профиль', me+' · дата рождения, пол', "setNav('profile')")}
+        ${navRow('users','Семья', fams+' '+plural(fams,'участник','участника','участников'), "setNav('family')")}
+        ${navRow('cash','Доходы', incCount+' '+plural(incCount,'источник','источника','источников'), "setNav('income')")}
+        ${navRow('swap','Регулярные расходы', recCount+' '+plural(recCount,'платёж','платежа','платежей'), "setNav('recurring')")}
+        ${navRow('bank','Счета и активы', accCount+' '+plural(accCount,'счёт','счёта','счетов'), "setNav('accounts')")}
+        ${navRow('target','Финансовые цели', 'Цель капитала, FIRE, подушка', "setNav('goals')")}
+        ${navRow('chart','Бюджеты', 'Лимиты по категориям', "setNav('budgets')")}
+        ${navRow('tag','Категории', 'Структура и цвета', "setNav('cats')")}
+        ${navRow('bell','Уведомления', 'Алерт от '+fmt(parseInt(big))+' ₽', "setNav('notif')")}
+        ${navRow('sparkle','Тема', _themePref==='auto'?'Авто (по системе)':(_themePref==='dark'?'Тёмная':'Светлая'), "setNav('theme')")}
+        ${navRow('box','Данные', 'Чеки ФНС, экспорт, бэкап', "setNav('data')")}
+        ${navRow('info','О приложении', 'Версия и контакты', "setNav('about')")}
+      </div>`;
+  } else if(_setPath==='profile'){
+    await renderSetProfile();
+  } else if(_setPath==='family'){
+    sheet.innerHTML=setHeader('Семья','Имена для доходов, счетов, вкладов', true)+
+      `<div class="card" id="fam-card">${renderFamilyEditor()}</div>
+       <div class="sethint">«Я» и «Жена» можно переименовать. Добавь новых членов — появятся в чипах.</div>`;
+  } else if(_setPath==='income'){
+    await renderSetIncome();
+  } else if(_setPath==='recurring'){
+    await renderSetRecurring();
+  } else if(_setPath==='accounts'){
+    await renderSetAccounts();
+  } else if(_setPath==='goals'){
+    await renderSetGoals();
+  } else if(_setPath==='budgets'){
+    await renderSetBudgets();
+  } else if(_setPath==='cats'){
+    sheet.innerHTML=setHeader('Категории','Имена, родители, иконки, цвета', true)+
+      `<button class="btn full" style="margin-top:4px" onclick="closeOv();openCatMgr()">Открыть менеджер</button>
+       <div class="sethint">У каждой категории свой цвет (golden ratio) и иконка. Дочерние — оттенок родителя.</div>`;
+  } else if(_setPath==='notif'){
+    const big=(await api('/api/kv/alert_big').catch(()=>({value:null}))).value||'15000';
+    sheet.innerHTML=setHeader('Уведомления','Что бот будет присылать', true)+`
+      <div class="card">
+        <div class="t2" style="color:var(--muted);margin-bottom:6px">Алерт «крупная трата», ₽</div>
+        <div style="display:flex;gap:8px"><input id="st-big" class="inp" type="number" inputmode="decimal" value="${big}" style="flex:1">
+          <button class="btn" onclick="saveBig()">OK</button></div>
+      </div>
+      <div class="sethint">Бот пишет про крупные траты сразу, дайджесты — ежедневно 21:00, по воскресеньям 20:00, 1-го числа 10:00. Нуджи продлений и «давно не грузил выписку» — 10:30.</div>`;
+  } else if(_setPath==='theme'){
+    sheet.innerHTML=setHeader('Тема','Светлая, тёмная или авто', true)+`
+      <div class="setlist">
+        ${['auto','Авто (по системе)','light','Светлая','dark','Тёмная'].reduce((a,_,i,r)=>{ if(i%2)return a; const v=r[i],l=r[i+1]; return a+`<button class="setrow" onclick="setTheme('${v}');setNav('theme')"><div class="ic">${icon('sparkle',18)}</div><div class="mid"><div class="ttl">${l}</div></div>${_themePref===v?'<div style="color:var(--green);font-weight:800">✓</div>':''}</button>`; },'')}
+      </div>`;
+  } else if(_setPath==='data'){
+    sheet.innerHTML=setHeader('Данные','Чеки, экспорт, бэкап', true)+`
+      <div class="setlist">
+        ${navRow('search','Поиск по чекам ФНС','Все распознанные чеки и товары','closeOv();openReceipts()')}
+        ${navRow('download','Экспорт операций','CSV со всеми операциями','exportCsv()')}
+        ${navRow('box','Бэкап базы','Скачать .db файл','downloadBackup()')}
+      </div>
+      <div class="sethint">Экспорт удобен для бухгалтерии. Бэкап — на случай миграции на новый сервер.</div>`;
+  } else if(_setPath==='about'){
+    sheet.innerHTML=setHeader('О приложении', '', true)+`
+      <div class="card"><div class="t2">MONEY · личный финансовый помощник</div>
+        <div class="t2" style="margin-top:6px;color:var(--muted)">Бот: <a href="https://t.me/money_veta_bot" style="color:var(--ink);font-weight:600">@money_veta_bot</a></div>
+        <div class="t2" style="margin-top:2px;color:var(--muted)">Веб: <a href="https://money.vetaone.site" style="color:var(--ink);font-weight:600">money.vetaone.site</a></div>
+      </div>`;
+  }
   document.getElementById('ov').style.display='flex';
 }
+async function renderSetProfile(){
+  const me=_family.find(f=>f.key==='me')||{label:'Я'};
+  const get=async k=>{try{return (await api('/api/kv/'+k)).value||''}catch(e){return ''}};
+  const [bd, gn] = await Promise.all([get('birth_date'), get('gender').then(v=>v||'m')]);
+  document.getElementById('sheet').innerHTML=setHeader('Профиль','Имя и данные для расчёта Coast FI', true)+`
+    <div class="card">
+      <div class="t2" style="color:var(--muted);margin-bottom:4px">Имя</div>
+      <input id="prf-nm" class="inp" value="${(me.label||'').replace(/"/g,'&quot;')}" style="margin-bottom:10px">
+      <div class="t2" style="color:var(--muted);margin-bottom:4px">Дата рождения</div>
+      <input id="fs-bd" class="inp" type="date" value="${bd}" onchange="onFireBdChange()" style="margin-bottom:10px">
+      <div class="t2" style="color:var(--muted);margin-bottom:4px">Пол</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button id="fs-gm" class="chip${gn==='m'?' on':''}" onclick="setFireGender('m')">Мужской</button>
+        <button id="fs-gf" class="chip${gn==='f'?' on':''}" onclick="setFireGender('f')">Женский</button>
+      </div>
+      <div id="fs-pension-preview" class="sethint" style="margin:0">Используется для расчёта лет до пенсии и Coast FI.</div>
+      <button class="btn full" style="margin-top:12px" onclick="saveProfile()">Сохранить</button>
+    </div>`;
+  if(typeof onFireBdChange==='function') onFireBdChange();
+}
+async function saveProfile(){
+  try{
+    const newName=document.getElementById('prf-nm').value.trim();
+    if(newName){
+      const me=_family.find(f=>f.key==='me'); if(me) me.label=newName;
+      await saveFamily();
+    }
+    const bd=document.getElementById('fs-bd').value;
+    const gn=document.getElementById('fs-gm').classList.contains('on')?'m':'f';
+    await api('/api/kv/birth_date',{method:'POST',body:JSON.stringify({value:bd})});
+    await api('/api/kv/gender',{method:'POST',body:JSON.stringify({value:gn})});
+    toast('Сохранено');
+  }catch(e){ toast('Ошибка'); }
+}
+async function renderSetIncome(){
+  const sheet=document.getElementById('sheet');
+  let data; try{ data=await api('/api/income'); }catch(e){ sheet.innerHTML=setHeader('Доходы','',true)+'<div class="err">Ошибка</div>'; return; }
+  const rows=(data.recurring||[]).filter(r=>r.type==='income');
+  const total=rows.reduce((s,r)=>s+(r.amount||0),0);
+  sheet.innerHTML=setHeader('Доходы','Источники — зарплата, премии, кешбэк', true)+`
+    <div class="card" style="display:flex;justify-content:space-between;align-items:baseline"><div class="t2" style="color:var(--muted)">Всего по плану</div><div style="font-size:16px;font-weight:800">${fmt(total)} ₽/мес</div></div>
+    <div style="margin-top:10px">${rows.length?rows.map(r=>{
+      const col=color(r.name);
+      return `<div class="row" onclick="openIncRec(${r.id})" style="cursor:pointer">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon('cash',18)}</div>
+        <div class="mid"><div class="t1">${r.name}</div><div class="t2">${ownerLabel(r.owner||'me')} · ${r.period==='monthly'?'/мес':r.period==='weekly'?'/нед':'/год'}</div></div>
+        <div class="amt inc">+${fmt(r.amount)} ${CUR}</div></div>`;
+    }).join(''):'<div class="empty">Источников пока нет</div>'}</div>
+    <button class="btn full" style="margin-top:6px" onclick="openIncRec(null)">Добавить источник</button>
+    <div class="sethint">Источники нужны для прогноза доходов, нормы сбережений и Safe-to-Spend. Без них прогноз будет неточным.</div>`;
+}
+function openIncRec(id){
+  if(id && typeof openIncEdit==='function'){ openIncEdit(id); return; }
+  closeOv(); tab('income');
+}
+async function renderSetRecurring(){
+  const sheet=document.getElementById('sheet');
+  let data; try{ data=await api('/api/recurring'); }catch(e){ sheet.innerHTML=setHeader('Регулярные расходы','',true)+'<div class="err">Ошибка</div>'; return; }
+  const rows=(data.recurring||[]).filter(r=>r.type==='expense');
+  const total=rows.reduce((s,r)=>s+(r.period==='monthly'?(r.amount||0):r.period==='weekly'?(r.amount||0)*4.33:(r.amount||0)/12),0);
+  sheet.innerHTML=setHeader('Регулярные расходы','Подписки, аренда, ЖКХ', true)+`
+    <div class="card" style="display:flex;justify-content:space-between;align-items:baseline"><div class="t2" style="color:var(--muted)">В среднем</div><div style="font-size:16px;font-weight:800">${fmt(Math.round(total))} ₽/мес</div></div>
+    <div style="margin-top:10px">${rows.length?rows.map(r=>{
+      const col=color(r.name);
+      return `<div class="row" style="cursor:pointer" onclick="closeOv();tab('goals')">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon('swap',18)}</div>
+        <div class="mid"><div class="t1">${r.name}</div><div class="t2">${r.period==='monthly'?'/мес':r.period==='weekly'?'/нед':'/год'}</div></div>
+        <div class="amt exp">−${fmt(r.amount)} ${CUR}</div></div>`;
+    }).join(''):'<div class="empty">Платежей пока нет</div>'}</div>
+    <button class="btn full" style="margin-top:6px" onclick="closeOv();tab('goals')">Добавить регулярный платёж</button>
+    <div class="sethint">Регулярные расходы влияют на «обязательные» в Safe-to-Spend и появляются как пуш в день списания.</div>`;
+}
+async function renderSetAccounts(){
+  const sheet=document.getElementById('sheet');
+  let data; try{ data=await api('/api/accounts'); }catch(e){ sheet.innerHTML=setHeader('Счета и активы','',true)+'<div class="err">Ошибка</div>'; return; }
+  const accs=data.accounts||[]; _accs=accs;
+  sheet.innerHTML=setHeader('Счета и активы','Карты, наличные, крипта, вклады', true)+`
+    <div style="margin-top:6px">${accs.map(a=>{
+      const col=color(a.name);
+      return `<div class="row" style="cursor:pointer" onclick="closeOv();tab('capital');setTimeout(()=>openAcc(${a.id}),60)">
+        <div class="sq" style="background:${tint(col)};color:${col}">${icon(a.type==='deposit'?'pig':a.type==='crypto'?'coin':a.type==='cash'?'wallet':'bank',18)}</div>
+        <div class="mid"><div class="t1">${a.name}</div><div class="t2">${ownerLabel(a.owner||'me')} · ${a.currency}</div></div>
+        <div class="amt">${fmt(a.balance||0)} ${a.currency}</div></div>`;
+    }).join('')}</div>
+    <button class="btn full" style="margin-top:6px" onclick="closeOv();tab('capital');setTimeout(()=>openAcc(null),60)">Добавить счёт</button>
+    <div class="sethint">Балансы редактируются вручную. Импорт выписки добавляет операции, но не меняет balance — после импорта проверь и обнови сам.</div>`;
+}
+async function renderSetGoals(){
+  const sheet=document.getElementById('sheet');
+  let fire={}, cap={};
+  try{ fire=await api('/api/fire'); cap=await api('/api/capital'); }catch(e){}
+  const tgt=cap.target||0, em=cap.emergency||{};
+  const inflGet=async k=>{try{return (await api('/api/kv/'+k)).value||''}catch(e){return ''}};
+  const [inf,nom,exp,alc,yrs] = await Promise.all([
+    inflGet('fire_inflation'),inflGet('fire_nominal_return'),inflGet('fire_fi_expenses'),
+    inflGet('target_alloc_rub'),inflGet('fire_years_to_retire')]);
+  const emTgt=await inflGet('emergency_target_months');
+  sheet.innerHTML=setHeader('Финансовые цели','Капитал, FIRE, подушка', true)+`
+    <div class="sec-head">Цель капитала</div>
+    <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:4px">Целевой net worth, ₽</div>
+      <div style="display:flex;gap:8px"><input id="g-tgt" class="inp" type="number" inputmode="decimal" value="${tgt||''}" style="flex:1">
+        <button class="btn" onclick="saveGoalTarget()">OK</button></div></div>
+
+    <div class="sec-head">Параметры FIRE</div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Инфляция %</div>
+          <input id="g-inf" class="inp" type="number" step="0.1" inputmode="decimal" value="${inf}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Доходность ном. %</div>
+          <input id="g-nom" class="inp" type="number" step="0.1" inputmode="decimal" value="${nom}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">FI-расход ₽/год</div>
+          <input id="g-exp" class="inp" type="number" inputmode="decimal" placeholder="из факта" value="${exp}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Лет до пенсии</div>
+          <input id="g-yrs" class="inp" type="number" inputmode="decimal" placeholder="авто" value="${yrs}"></div>
+      </div>
+      <div style="margin-top:8px"><div class="t2" style="color:var(--muted);margin-bottom:4px">Целевая аллокация в RUB, %</div>
+        <input id="g-alc" class="inp" type="number" inputmode="decimal" value="${alc}"></div>
+    </div>
+
+    <div class="sec-head">Подушка безопасности</div>
+    <div class="card"><div class="t2" style="color:var(--muted);margin-bottom:4px">Размер, мес расходов</div>
+      <div style="display:flex;gap:8px"><input id="g-em" class="inp" type="number" inputmode="decimal" value="${emTgt||'6'}" style="flex:1">
+        <button class="btn" onclick="saveGoalsAll()">Сохранить всё</button></div>
+      <div class="t2" style="color:var(--muted);margin-top:8px">Сейчас: <b>${em.months||'—'}</b> мес ликвидных средств</div></div>
+    <div class="sethint">Инфляция 8% и номинал. 12% дают реальную доходность 4% — РФ-сценарий. Сценарии в карточке FIRE считаются как годовые_расходы / SWR (2/3/4%).</div>`;
+}
+async function saveGoalTarget(){
+  try{ const v=parseFloat(document.getElementById('g-tgt').value)||0;
+    await api('/api/capital/target',{method:'POST',body:JSON.stringify({target:v})}); toast('Сохранено');
+  }catch(e){ toast('Ошибка'); }
+}
+async function saveGoalsAll(){
+  try{
+    const tgt=parseFloat(document.getElementById('g-tgt').value)||0;
+    await api('/api/capital/target',{method:'POST',body:JSON.stringify({target:tgt})});
+    const pairs=[
+      ['fire_inflation','g-inf'],['fire_nominal_return','g-nom'],
+      ['fire_fi_expenses','g-exp'],['target_alloc_rub','g-alc'],
+      ['fire_years_to_retire','g-yrs'],['emergency_target_months','g-em']];
+    for(const [k,id] of pairs){
+      const v=document.getElementById(id).value;
+      await api('/api/kv/'+k,{method:'POST',body:JSON.stringify({value:v})});
+    }
+    toast('Сохранено');
+  }catch(e){ toast('Ошибка'); }
+}
+async function renderSetBudgets(){
+  const sheet=document.getElementById('sheet');
+  let data; try{ data=await api('/api/budgets'); }catch(e){ sheet.innerHTML=setHeader('Бюджеты','',true)+'<div class="err">Ошибка</div>'; return; }
+  const rows=data.items||data.budgets||[];
+  sheet.innerHTML=setHeader('Бюджеты','Лимиты по категориям', true)+
+    `<div style="margin-top:6px">${rows.length?rows.map(b=>{
+      const col=color(b.name);
+      return `<div class="row"><div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(b.name),18)}</div>
+        <div class="mid"><div class="t1">${b.name}</div><div class="t2">потрачено ${fmt(b.spent||0)} ₽</div></div>
+        <div class="amt">${fmt(b.amount||0)} ₽</div></div>`;
+    }).join(''):'<div class="empty">Лимитов нет — задай на вкладке Аналитика</div>'}</div>
+    <button class="btn full" style="margin-top:6px" onclick="closeOv();tab('analytics')">Перейти к лимитам</button>
+    <div class="sethint">Месячные лимиты по категориям видны как прогресс-бары в Аналитике. Если категория не лимитирована — берётся прогноз по среднему за 3 мес.</div>`;
+}
 async function saveBig(){ try{ await api('/api/kv/alert_big',{method:'POST',body:JSON.stringify({value:document.getElementById('st-big').value})}); toast('Сохранено'); }catch(e){toast('Ошибка');} }
+async function exportCsv(){ toast('Скоро добавим'); }
+async function downloadBackup(){ toast('Скоро добавим'); }
 
 // ===== Редактор семьи =====
 function renderFamilyEditor(){
