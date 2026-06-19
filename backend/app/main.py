@@ -374,6 +374,7 @@ async def set_balance(acc_id: int, body: BalanceIn,
         raise HTTPException(404, "no account")
     acc.balance = body.balance
     db.commit()
+    take_networth_snapshot(db)   # держим сегодняшний снимок в синхроне
     return {"ok": True}
 
 
@@ -421,6 +422,8 @@ async def edit_account(acc_id: int, body: AccEdit, user: dict = Depends(current_
     if body.balance is not None:
         a.balance = body.balance
     db.commit()
+    if body.balance is not None:
+        take_networth_snapshot(db)
     return {"ok": True}
 
 
