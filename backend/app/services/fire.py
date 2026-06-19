@@ -48,10 +48,20 @@ def _annual_expenses(db: Session) -> float:
 
 
 def _monthly_savings(db: Session) -> float:
-    """Сколько откладываем в среднем (rolling 6 мес)."""
-    inc = _rolling_monthly_avg(db, "income", 6)
-    exp = _rolling_monthly_avg(db, "expense", 6)
-    return round(max(inc - exp, 0.0), 2)
+    """Сколько откладываем в среднем: max(план−факт_расходов, факт_доход−факт_расходов).
+
+    План — сумма активных Recurring-источников (expected_income_monthly).
+    Берём план если он больше факта, чтобы учитывать поступления, которые
+    минуют Transaction (Туринвойс → крипта, пособия → вклад жены). Это
+    декларация пользователя «такой доход у нас есть».
+    """
+    from .income import expected_income_monthly
+    plan = expected_income_monthly(db)
+    fact_inc = _rolling_monthly_avg(db, "income", 6)
+    fact_exp = _rolling_monthly_avg(db, "expense", 6)
+    by_plan = plan - fact_exp
+    by_fact = fact_inc - fact_exp
+    return round(max(by_plan, by_fact, 0.0), 2)
 
 
 def ru_pension_age(birth_year: int, gender: str) -> int:
