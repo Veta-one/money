@@ -18,11 +18,16 @@ from .trends import category_sparkline
 
 
 def needs_review(t) -> bool:
-    """Операция «на разбор»: расход или доход без категории; либо статус needs_review.
-    Источник у дохода — опционален (кешбэк/проценты/разовое его не требуют)."""
+    """Операция «на разбор»:
+    - status=needs_review;
+    - расход/доход без категории;
+    - перевод без второго счёта И без debt-связи (СБП по телефону, переводы
+      жене, в долг — пока не классифицированы)."""
     if t.status == "needs_review":
         return True
     if t.type in ("expense", "income") and not t.category_id:
+        return True
+    if t.type == "transfer" and not t.counterparty_account_id:
         return True
     return False
 
@@ -31,6 +36,8 @@ _REVIEW_FILTER = or_(
     models.Transaction.status == "needs_review",
     and_(models.Transaction.type.in_(("expense", "income")),
          models.Transaction.category_id.is_(None)),
+    and_(models.Transaction.type == "transfer",
+         models.Transaction.counterparty_account_id.is_(None)),
 )
 
 

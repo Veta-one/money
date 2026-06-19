@@ -1020,10 +1020,102 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
         src_list = [{"id": r.id, "name": r.name} for r in db.query(models.Recurring)
                     .filter(models.Recurring.type == "income", models.Recurring.active.is_(True))
                     .order_by(models.Recurring.name).all()]
+    # доп. данные для переклассификации (для transfer / без категории)
+    accs_other = [{"id": a.id, "name": a.name, "owner": a.owner, "currency": a.currency}
+                  for a in db.query(models.Account)
+                  .filter(models.Account.archived.is_(False), models.Account.id != t.account_id).all()]
+    open_debts = [{"id": d.id, "counterparty": d.counterparty, "direction": d.direction,
+                   "remaining": round(max((d.amount or 0) - (d.paid or 0), 0), 2),
+                   "currency": d.currency}
+                  for d in db.query(models.Debt).filter(models.Debt.status == "open").all()]
     return {"id": t.id, "merchant": t.merchant, "amount": t.amount, "currency": t.currency,
             "dt": t.datetime.isoformat(), "type": t.type, "source": t.source, "note": t.note,
             "category_id": t.category_id, "category": cname(t.category_id), "items": items,
-            "recurring_id": t.recurring_id, "sources": src_list}
+            "recurring_id": t.recurring_id, "sources": src_list,
+            "account_id": t.account_id, "counterparty_account_id": t.counterparty_account_id,
+            "review": ((t.status == "needs_review") or
+                       (t.type in ("expense", "income") and not t.category_id) or
+                       (t.type == "transfer" and not t.counterparty_account_id)),
+            "accounts_other": accs_other, "open_debts": open_debts}
+
+
+class ReclassifyIn(BaseModel):
+    kind: str   # purchase | self_transfer | give_loan | repay_to_me | repay_my_debt
+    category_id: int | None = None
+    counterparty_account_id: int | None = None
+    counterparty_name: str | None = None
+    debt_id: int | None = None
+
+
+@app.post("/api/tx/{tx_id}/reclassify")
+async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(current_user),
+                         db: Session = Depends(get_session)):
+    """Переклассификация операции: покупка / перевод между счетами / в долг / возврат долга."""
+    t = db.get(models.Transaction, tx_id)
+    if not t:
+        raise HTTPException(404, "no tx")
+    kind = body.kind
+    if kind == "purchase":
+        # это была покупка (даже если в выписке выглядит как СБП-перевод)
+        t.type = "expense"
+        if body.category_id:
+            t.category_id = body.category_id
+            learn_rule(db, body.category_id, inn=None, pattern=t.merchant)
+        t.counterparty_account_id = None
+        t.status = "confirmed"
+    elif kind == "self_transfer":
+        # перевод между нашими счетами (свой счёт или счёт жены)
+        if not body.counterparty_account_id:
+            raise HTTPException(400, "counterparty_account_id required")
+        acc = db.get(models.Account, body.counterparty_account_id)
+        if not acc:
+            raise HTTPException(404, "no counterparty account")
+        t.type = "transfer"
+        t.counterparty_account_id = body.counterparty_account_id
+        t.category_id = None
+        t.status = "confirmed"
+    elif kind == "give_loan":
+        # я кому-то дал в долг (transfer + создание Debt с direction='owed_to_me')
+        name = (body.counterparty_name or t.merchant or "").strip()[:128]
+        if not name:
+            raise HTTPException(400, "counterparty name required")
+        d = models.Debt(counterparty=name, direction="owed_to_me",
+                        amount=abs(t.amount), currency=t.currency or "RUB",
+                        date=t.datetime.date(), status="open")
+        db.add(d)
+        t.type = "transfer"
+        t.category_id = None
+        t.status = "confirmed"
+    elif kind == "repay_to_me":
+        # мне вернули долг (приход) — закрываем существующий Debt 'owed_to_me'
+        if not body.debt_id:
+            raise HTTPException(400, "debt_id required")
+        d = db.get(models.Debt, body.debt_id)
+        if not d or d.direction != "owed_to_me":
+            raise HTTPException(404, "no debt")
+        d.paid = (d.paid or 0) + abs(t.amount)
+        if d.paid >= (d.amount or 0):
+            d.status = "closed"
+        t.type = "income"
+        t.category_id = None
+        t.status = "confirmed"
+    elif kind == "repay_my_debt":
+        # я погасил свой долг (расход) — закрываем существующий Debt 'i_owe'
+        if not body.debt_id:
+            raise HTTPException(400, "debt_id required")
+        d = db.get(models.Debt, body.debt_id)
+        if not d or d.direction != "i_owe":
+            raise HTTPException(404, "no debt")
+        d.paid = (d.paid or 0) + abs(t.amount)
+        if d.paid >= (d.amount or 0):
+            d.status = "closed"
+        t.type = "transfer"
+        t.category_id = None
+        t.status = "confirmed"
+    else:
+        raise HTTPException(400, f"unknown kind: {kind}")
+    db.commit()
+    return {"ok": True}
 
 
 class CatIn(BaseModel):

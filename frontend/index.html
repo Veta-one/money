@@ -1666,6 +1666,12 @@ function renderDetail(d){
     rows=`<div class="drow"><div class="mid"><div class="t1">Категория</div></div>${catchipHtml('inccat',d.id,d.category)}</div>
       <div class="drow"><div class="mid"><div class="t1">Источник</div></div>
         <button class="catchip" style="${sn?`border-color:${sc};color:${sc}`:''}" onclick="openSrcPick(${d.id})">${sn?icon('cash',14):''}${sn||'выбрать'}</button></div>`;
+  } else if(d.type==='transfer'){
+    // переводы — раскрыть в блоке «Что это было?» (см. ниже)
+    const cp=(d.accounts_other||[]).find(a=>a.id===d.counterparty_account_id);
+    rows = cp
+      ? `<div class="drow"><div class="mid"><div class="t1">Перевод на счёт</div><div class="t2">${cp.name}${cp.owner!=='me'?' · '+ownerLabel(cp.owner):''}</div></div></div>`
+      : '';
   } else {
     const items=d.items||[];
     rows = items.length
@@ -1673,14 +1679,85 @@ function renderDetail(d){
           ${catchipHtml('item',it.id,it.category)}</div>`).join('')
       : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>${catchipHtml('tx',d.id,d.category)}</div>`;
   }
+  // Блок «Что это было?» — для transfer-операций или любых без категории (review-режим)
+  const reclassifyHtml = d.review || d.type==='transfer'
+    ? renderReclassifyBlock(d) : '';
   const noteHtml=`<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
     <div class="t2" style="color:var(--muted)">Заметка</div>
     <div style="display:flex;gap:8px"><input id="tx-note" class="inp" placeholder="например: для отчёта…" value="${(d.note||'').replace(/"/g,'&quot;')}" style="flex:1">
       <button class="btn" onclick="saveTxNote(${d.id})">OK</button></div></div>`;
   document.getElementById('sheet').innerHTML=`<div class="sheeth">
       <div><div class="t1">${d.merchant||'Операция'}</div><div class="t2">${fmt(Math.abs(d.amount))} ${CUR} · ${new Date(d.dt).toLocaleDateString('ru-RU')}</div></div>
-      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}${noteHtml}`;
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}${reclassifyHtml}${noteHtml}`;
   document.getElementById('ov').style.display='flex';
+}
+let _rcKind=null;
+function renderReclassifyBlock(d){
+  const isIncomeSide = d.amount > 0;   // приход (+) vs списание (−)
+  const kinds = isIncomeSide
+    ? [['purchase','Доход'], ['self_transfer','Перевод от себя'], ['repay_to_me','Вернули мой долг']]
+    : [['purchase','Покупка'], ['self_transfer','Перевод между счетами'], ['give_loan','Я дал в долг'], ['repay_my_debt','Я погасил свой долг']];
+  const chips = kinds.map(([k,l])=>`<button class="chip${_rcKind===k?' on':''}" onclick="setRcKind('${k}')">${l}</button>`).join('');
+  let form = '';
+  if(_rcKind==='purchase'){
+    form = `<div class="drow" style="border-bottom:none"><div class="mid"><div class="t1">Категория</div></div>${catchipHtml(isIncomeSide?'inccat':'tx', d.id, d.category)}</div>`;
+  } else if(_rcKind==='self_transfer'){
+    const opts = (d.accounts_other||[]).map(a=>`<option value="${a.id}"${a.id===d.counterparty_account_id?' selected':''}>${a.name}${a.owner!=='me'?' ('+ownerLabel(a.owner)+')':''}</option>`).join('');
+    form = `<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
+      <div class="t2" style="color:var(--muted)">Счёт-получатель</div>
+      <div style="display:flex;gap:8px">
+        <select id="rc-acc" class="inp" style="flex:1">${opts||'<option>(нет других счетов)</option>'}</select>
+        <button class="btn" onclick="applyRc(${d.id})">OK</button></div></div>`;
+  } else if(_rcKind==='give_loan'){
+    form = `<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
+      <div class="t2" style="color:var(--muted)">Кому дал в долг (имя)</div>
+      <div style="display:flex;gap:8px">
+        <input id="rc-name" class="inp" placeholder="Например: Маме" style="flex:1" value="${(d.merchant||'').replace(/"/g,'&quot;')}">
+        <button class="btn" onclick="applyRc(${d.id})">OK</button></div></div>`;
+  } else if(_rcKind==='repay_to_me' || _rcKind==='repay_my_debt'){
+    const need = _rcKind==='repay_to_me' ? 'owed_to_me' : 'i_owe';
+    const opts = (d.open_debts||[]).filter(x=>x.direction===need).map(x=>`<option value="${x.id}">${x.counterparty} · остаток ${fmt(x.remaining)} ₽</option>`).join('');
+    if(!opts){
+      form = `<div class="drow" style="border-bottom:none"><div class="t2" style="color:var(--muted)">Нет открытых долгов с подходящим направлением. Сначала заведи долг в разделе «Капитал → Долги».</div></div>`;
+    } else {
+      form = `<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
+        <div class="t2" style="color:var(--muted)">Какой долг закрываем?</div>
+        <div style="display:flex;gap:8px">
+          <select id="rc-debt" class="inp" style="flex:1">${opts}</select>
+          <button class="btn" onclick="applyRc(${d.id})">OK</button></div></div>`;
+    }
+  }
+  return `<div class="drow" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div class="t2" style="color:var(--muted)">Что это было?</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div></div>${form}`;
+}
+function setRcKind(k){ _rcKind=(_rcKind===k?null:k); if(_detail) renderDetail(_detail); }
+async function applyRc(id){
+  if(!_rcKind) return;
+  const body = {kind:_rcKind};
+  if(_rcKind==='purchase'){
+    // используем существующий механизм pickCat — он сам сменит type на expense через нашу логику
+    // но сейчас pickCat у нас только меняет category, не type. Вместо этого openPick сразу.
+    const isInc = _detail.amount > 0;
+    openPick(isInc?'inccat':'tx', id);
+    return;
+  }
+  if(_rcKind==='self_transfer'){
+    body.counterparty_account_id = parseInt(document.getElementById('rc-acc').value)||null;
+    if(!body.counterparty_account_id){ toast('Выбери счёт'); return; }
+  }
+  if(_rcKind==='give_loan'){
+    body.counterparty_name = (document.getElementById('rc-name').value||'').trim();
+    if(!body.counterparty_name){ toast('Имя должника'); return; }
+  }
+  if(_rcKind==='repay_to_me' || _rcKind==='repay_my_debt'){
+    body.debt_id = parseInt(document.getElementById('rc-debt').value)||null;
+    if(!body.debt_id){ toast('Выбери долг'); return; }
+  }
+  try{
+    await api('/api/tx/'+id+'/reclassify',{method:'POST',body:JSON.stringify(body)});
+    toast('Готово'); _rcKind=null; closeOv(); refreshActive();
+  }catch(e){ toast('Ошибка'); }
 }
 async function saveTxNote(id){
   try{ await api('/api/tx/'+id+'/note',{method:'POST',body:JSON.stringify({note:document.getElementById('tx-note').value})});
