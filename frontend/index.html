@@ -980,7 +980,7 @@ function openAcc(id){
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
     <input id="ac-n" class="inp" placeholder="Название" style="margin-bottom:8px" value="${ac?(ac.name||'').replace(/"/g,'&quot;'):''}">
     <div style="display:flex;gap:8px;margin-bottom:8px">
-      <input id="ac-b" class="inp" type="number" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
+      <input id="ac-b" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Баланс" style="flex:2" value="${ac?ac.balance:''}">
       <select id="ac-c" class="inp" style="flex:1"><option value="RUB"${ac&&ac.currency==='USD'?'':' selected'}>RUB</option><option value="USD"${ac&&ac.currency==='USD'?' selected':''}>USD</option></select></div>
     <div style="display:flex;gap:8px;align-items:center">
       <span id="ao-chips" style="display:contents">${familyChips(_accOwner,'setAccOwner')}</span>
