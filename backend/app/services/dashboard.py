@@ -14,7 +14,8 @@ from .analytics import _sum_by_category
 from .fx import compute_net_worth
 from .income import expected_income_monthly
 from .planning import (category_forecast, expected_monthly_expense,
-                       goals_monthly_plan, obligatory_monthly)
+                       goals_monthly_plan, obligatory_monthly,
+                       obligatory_remaining_this_month)
 from .trends import category_sparkline
 
 
@@ -110,9 +111,12 @@ def get_dashboard(db: Session) -> dict:
     nw_delta = round(net_worth - snap.total_rub, 2) if snap else None
 
     expected = expected_income_monthly(db)
-    obligatory = obligatory_monthly(db)
+    obligatory = obligatory_monthly(db)                       # для справки/UI (полная мес. сумма)
+    obligatory_left = obligatory_remaining_this_month(db)     # резерв на ещё не прошедшие в этом месяце
     goals_plan = goals_monthly_plan(db)
-    safe_to_spend = round(max(expected - spent - obligatory - goals_plan, 0.0), 2)
+    # spent уже включает регулярные, что прошли в этом месяце → второй раз
+    # вычитаем только ЕЩЁ предстоящие (obligatory_left), иначе двойной счёт
+    safe_to_spend = round(max(expected - spent - obligatory_left - goals_plan, 0.0), 2)
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     days_left = max(days_in_month - now.day + 1, 1)
     per_day = round(safe_to_spend / days_left, 2)
@@ -135,6 +139,7 @@ def get_dashboard(db: Session) -> dict:
         "days_left": days_left,
         "expected_income": round(expected, 2),
         "obligatory": obligatory,
+        "obligatory_remaining": obligatory_left,
         "goals_plan": goals_plan,
         "forecast_total": forecast_total,
         "currency": settings.base_currency,

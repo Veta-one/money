@@ -51,7 +51,7 @@ def avg_monthly_expense(db: Session) -> float:
 
 
 def obligatory_monthly(db: Session) -> float:
-    """Сумма активных регулярных РАСХОДОВ в пересчёте на месяц (для safe-to-spend)."""
+    """Сумма активных регулярных РАСХОДОВ в пересчёте на месяц (для справки/UI)."""
     total = 0.0
     for r in (db.query(models.Recurring)
               .filter(models.Recurring.active.is_(True), models.Recurring.type == "expense").all()):
@@ -61,6 +61,29 @@ def obligatory_monthly(db: Session) -> float:
             total += r.amount * 4.33
         else:
             total += r.amount
+    return round(total, 2)
+
+
+def obligatory_remaining_this_month(db: Session) -> float:
+    """Регулярные расходы, которые в этом месяце ЕЩЁ предстоят (next_date от
+    сегодня до конца месяца), в рублях — резерв для safe-to-spend.
+
+    Прошедшие в этом месяце регулярные уже сидят в факте `spent`, поэтому
+    вычитать всю месячную сумму обязательных нельзя (был двойной счёт). Берём
+    фактическую сумму платежа (не /12 для годовых — резервируем целиком ровно
+    в тот месяц, когда платёж реально предстоит). Регуляры без next_date не
+    резервируем (либо уже прошли, либо нерегулярны) — лёгкая недооценка лучше
+    двойного вычитания.
+    """
+    today = date.today()
+    month_end = (today.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
+    total = 0.0
+    for r in (db.query(models.Recurring)
+              .filter(models.Recurring.active.is_(True),
+                      models.Recurring.type == "expense").all()):
+        nd = r.next_date
+        if nd and today <= nd <= month_end:
+            total += to_rub(r.amount or 0.0, r.currency or "RUB", db)
     return round(total, 2)
 
 
