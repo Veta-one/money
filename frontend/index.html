@@ -666,28 +666,25 @@ function renderFireCard(fr){
   const sc=fr.scenarios||[];
   const safe=sc[0]||{}, base=sc[1]||{}, aggr=sc[2]||{};
   // плитка сценария: hero-число лет + единица + цель/SWR мелким
-  const tile=(s,primary)=>{
-    const bg=primary?'var(--ink)':'var(--bg)';
-    const fg=primary?'#fff':'var(--text)';
-    const mut=primary?'rgba(255,255,255,.6)':'var(--muted)';
+  const tile=(s)=>{
     const v=s.years_to_fi;
     const numTxt=_yrText(v);
     const unit=(v==null||v===0)?'':_plural(v,['год','года','лет']);
     const hero=v===0
       ? `<div style="font-size:14px;font-weight:700;color:var(--green);line-height:1.4;margin-top:10px">достигнут</div>`
       : `<div style="display:flex;align-items:baseline;gap:3px;justify-content:center;margin-top:8px">
-           <span style="font-size:${primary?'32':'26'}px;font-weight:800;letter-spacing:-1px;line-height:1;color:${fg}">${numTxt}</span>
-           <span style="font-size:11px;color:${mut}">${unit}</span></div>`;
+           <span style="font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1;color:var(--text)">${numTxt}</span>
+           <span style="font-size:11px;color:var(--muted)">${unit}</span></div>`;
     const badge=s.progress_pct>0 && s.progress_pct<100
-      ? `<div style="position:absolute;top:7px;right:7px;font-size:9.5px;font-weight:700;color:${mut};letter-spacing:.2px">${s.progress_pct}%</div>`
+      ? `<div style="position:absolute;top:7px;right:7px;font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:.2px">${s.progress_pct}%</div>`
       : (s.progress_pct>=100?`<div style="position:absolute;top:7px;right:7px;background:var(--green);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">${s.progress_pct}%</div>`:'');
-    return `<div style="padding:12px 6px 10px;background:${bg};border-radius:16px;text-align:center;position:relative;min-width:0">
+    return `<div style="padding:12px 6px 10px;background:var(--bg);border-radius:16px;text-align:center;position:relative;min-width:0">
       ${badge}
-      <div style="font-size:10px;color:${mut};text-transform:uppercase;letter-spacing:.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 18px">${s.label}</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 18px">${s.label}</div>
       ${hero}
-      <div style="margin-top:9px;font-size:10px;color:${mut};line-height:1.45">
+      <div style="margin-top:9px;font-size:10px;color:var(--muted);line-height:1.45">
         SWR ${s.swr_pct}% · ${s.multiple}×<br>
-        <span style="color:${fg};font-weight:600">${_fmtBig(s.fi_number)} ₽</span>
+        <span style="color:var(--text);font-weight:600">${_fmtBig(s.fi_number)} ₽</span>
       </div>
     </div>`;
   };
@@ -714,7 +711,7 @@ function renderFireCard(fr){
         <button class="iconbtn" onclick="openFireSettings()" title="Параметры">${icon('gear',18)}</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-        ${tile(safe,false)}${tile(base,true)}${tile(aggr,false)}
+        ${tile(safe)}${tile(base)}${tile(aggr)}
       </div>
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);flex-wrap:wrap">
         <span>Расходы&nbsp;<b style="color:var(--text)">${_fmtBig(fr.annual_expenses)} ₽/год</b></span>
