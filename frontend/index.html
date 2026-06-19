@@ -1436,7 +1436,7 @@ async function loadGoals(){
       <div class="head"><div class="hi">Цели</div></div>
       <div class="hero"><div class="label">Можешь откладывать в месяц</div>
         <div class="big">${fmt(sug.capacity)}<span class="cur">${CUR}</span></div>
-        <div class="sub">доход − обязательные − траты</div></div>
+        <div class="sub">доход ${fmt(sug.expected_income||0)} − траты ${fmt(sug.monthly_spend||0)} (среднее за 3 мес)</div></div>
       <h2>Мои цели</h2>
       ${goals.length?goals.map(go=>{const col=color(go.name);return `<div class="goal">
         <div class="gh"><div class="gn">${go.name}</div><div class="gv">${fmt(go.current_amount)} / ${fmt(go.target_amount)} ${CUR}</div></div>

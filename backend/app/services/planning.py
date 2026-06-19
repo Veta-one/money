@@ -16,12 +16,38 @@ from .fx import to_rub
 from .settings_store import get_setting
 
 
-def avg_monthly_expense(db: Session) -> float:
-    since = datetime.now() - timedelta(days=90)
+def expected_monthly_expense(db: Session, months: int = 3) -> float:
+    """Средний месячный расход по последним N ПОЛНЫМ календарным месяцам.
+
+    Берём именно полные месяцы (без текущего неполного), чтобы цифра не «плыла»
+    каждый день от скользящего окна и не занижалась обрезанным текущим месяцем.
+    Учитываются ВСЕ расходы (в т.ч. без категории), чтобы совпадать с реальностью
+    и с разбивкой на дашборде. Если полных месяцев меньше N — делим на доступное.
+    """
+    now = datetime.now()
+    cur_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    y, m = cur_start.year, cur_start.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    window_start = datetime(y, m, 1)
+    # самый ранний расход — чтобы не делить на месяцы, которых ещё не было
+    earliest = (db.query(func.min(models.Transaction.datetime))
+                .filter(models.Transaction.type == "expense").scalar())
+    if earliest and earliest > window_start:
+        window_start = earliest.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    months_real = max(1, (cur_start.year - window_start.year) * 12
+                      + (cur_start.month - window_start.month))
     total = float(db.query(func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0))
                   .filter(models.Transaction.type == "expense",
-                          models.Transaction.datetime >= since).scalar() or 0.0)
-    return round(total / 3, 2)
+                          models.Transaction.datetime >= window_start,
+                          models.Transaction.datetime < cur_start).scalar() or 0.0)
+    return round(total / months_real, 2)
+
+
+# совместимость: старое имя → новая корректная реализация
+def avg_monthly_expense(db: Session) -> float:
+    return expected_monthly_expense(db)
 
 
 def obligatory_monthly(db: Session) -> float:
@@ -113,7 +139,7 @@ def goal_view(g: models.Goal, db: Session | None = None) -> dict:
 def suggest_goals(db: Session) -> dict:
     from .income import expected_income_monthly
     expected = expected_income_monthly(db)
-    spend = avg_monthly_expense(db)
+    spend = expected_monthly_expense(db)
     capacity = max(round(expected - spend), 0)
     monthly = spend or 50000
     suggestions = [{
@@ -129,4 +155,5 @@ def suggest_goals(db: Session) -> dict:
             "monthly_plan": capacity,
             "why": f"при темпе ~{capacity} ₽/мес за год",
         })
-    return {"capacity": capacity, "monthly_spend": round(spend), "suggestions": suggestions}
+    return {"capacity": capacity, "monthly_spend": round(spend),
+            "expected_income": round(expected), "suggestions": suggestions}
