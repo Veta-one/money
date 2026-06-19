@@ -81,7 +81,8 @@ def subscriptions(db: Session) -> dict:
     for r in rows:
         m = r.amount / 12 if r.period == "yearly" else r.amount * 4.33 if r.period == "weekly" else r.amount
         total += m
-        items.append({"name": r.name, "amount": round(r.amount), "period": r.period})
+        items.append({"name": r.name, "amount": round(r.amount), "period": r.period,
+                      "next_date": r.next_date.isoformat() if r.next_date else None})
     items.sort(key=lambda x: -x["amount"])
     return {"total": round(total), "items": items}
 

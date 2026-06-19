@@ -1194,9 +1194,10 @@ async function loadAnalytics(){
         <div class="mid"><div class="t1">${m.merchant}</div></div><div class="amt">${fmt(m.sum)} ${CUR}</div></div>`}).join(''):`<div class="empty">Нет данных по продавцам.</div>`}
       <h2>Подписки и регулярные</h2>
       <div class="card"><div class="k">В месяц на регулярные</div><div class="v">${fmt(subs.total)}<span class="cur">${CUR}</span></div></div>
-      ${(subs.items||[]).length?`<div style="margin-top:8px">`+subs.items.map(x=>`<div class="row"><div class="sq" style="background:${tint(color(x.name))};color:${color(x.name)}">${icon(catIcon(x.name),20)}</div>
-        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.period==='yearly'?'в год':x.period==='weekly'?'в неделю':'в месяц'}</div></div>
-        <div class="amt">${fmt(x.amount)} ${CUR}</div></div>`).join('')+`</div>`:''}`;
+      ${(subs.items||[]).length?`<div style="margin-top:8px">`+subs.items.map(x=>{const tu=recTimeUntil(x); const extra=tu?` <span style="color:${tu.color};font-weight:600">· ${tu.text}</span>`:'';
+        return `<div class="row"><div class="sq" style="background:${tint(color(x.name))};color:${color(x.name)}">${icon(catIcon(x.name),20)}</div>
+        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.period==='yearly'?'в год':x.period==='weekly'?'в неделю':'в месяц'}${extra}</div></div>
+        <div class="amt">${fmt(x.amount)} ${CUR}</div></div>`}).join('')+`</div>`:''}`;
   }catch(e){ e.message==='AUTH'?authErr('analytics'):document.getElementById('v-analytics').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 function setAnPeriod(p){ _anPeriod=p; loadAnalytics(); }
