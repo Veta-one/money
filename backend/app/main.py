@@ -1218,7 +1218,11 @@ class TxIn(BaseModel):
 @app.post("/api/tx")
 async def create_tx(body: TxIn, user: dict = Depends(current_user),
                     db: Session = Depends(get_session)):
-    """Ручное добавление операции из мини-аппа (напр. доход в крипте)."""
+    """Ручное добавление операции из мини-аппа (напр. доход в крипте).
+    В отличие от импорта выписки — balance затронутых счетов меняется
+    автоматически (пользователь явно говорит «вот пришли деньги»), и
+    сегодняшний snapshot пересчитывается."""
+    ttype = body.type if body.type in ("expense", "income", "transfer") else "expense"
     cur = (body.currency or "RUB").upper()
     amt = abs(body.amount)
     base = to_rub(amt, cur, db)
@@ -1229,8 +1233,7 @@ async def create_tx(body: TxIn, user: dict = Depends(current_user),
         except Exception:  # noqa: BLE001
             pass
     t = models.Transaction(
-        type=body.type if body.type in ("expense", "income", "transfer") else "expense",
-        amount=amt, currency=cur, base_amount_rub=base,
+        type=ttype, amount=amt, currency=cur, base_amount_rub=base,
         fx_rate=(base / amt if amt else 1.0),
         category_id=body.category_id, account_id=body.account_id,
         counterparty_account_id=body.counterparty_account_id,
@@ -1238,7 +1241,24 @@ async def create_tx(body: TxIn, user: dict = Depends(current_user),
         datetime=when, source="manual", status="confirmed",
     )
     db.add(t)
+    # автокоррекция balance счетов
+    if body.account_id:
+        acc = db.get(models.Account, body.account_id)
+        if acc:
+            if ttype == "income":
+                acc.balance = round((acc.balance or 0) + amt, 2)
+            elif ttype == "expense":
+                acc.balance = round((acc.balance or 0) - amt, 2)
+            elif ttype == "transfer":
+                acc.balance = round((acc.balance or 0) - amt, 2)
+                if body.counterparty_account_id:
+                    cp = db.get(models.Account, body.counterparty_account_id)
+                    if cp:
+                        cp.balance = round((cp.balance or 0) + amt, 2)
     db.commit()
+    # обновим сегодняшний snapshot — мы только что изменили balance
+    if body.account_id:
+        take_networth_snapshot(db, force=True)
     return {"id": t.id}
 
 
