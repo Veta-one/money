@@ -646,37 +646,98 @@ function _fmtBig(n){
   if(a>=1000) return Math.round(n/1000)+' тыс';
   return fmt(n);
 }
+// Русское склонение: forms=[«год», «года», «лет»] и т.п.
+function _plural(n, forms){
+  const x=Math.abs(n);
+  if(x!==Math.floor(x)) return forms[1];   // дробное → genitive sg («2,5 года»)
+  const n0=Math.round(x), r100=n0%100, r10=n0%10;
+  if(r100>=11 && r100<=14) return forms[2];
+  if(r10===1) return forms[0];
+  if(r10>=2 && r10<=4) return forms[1];
+  return forms[2];
+}
+function _yrText(v){
+  if(v==null) return '—';
+  if(v===0) return '0';
+  if(v>=10) return String(Math.round(v));
+  return v.toFixed(1).replace('.0','').replace('.',',');
+}
 function renderFireCard(fr){
   const sc=fr.scenarios||[];
-  const base=sc[1]||{}; const safe=sc[0]||{}; const aggr=sc[2]||{};
-  const yrsLabel=v=>v==null?'—':v===0?'достигнут':v>=10?Math.round(v)+' лет':v.toFixed(1).replace('.0','').replace('.',',')+' лет';
-  const scenarioRow=(s,emphasis)=>`<div style="padding:10px 0;${emphasis?'':'border-top:1px solid var(--line);'}display:flex;align-items:center;gap:10px">
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:${emphasis?'800':'600'}">${s.label} <span style="color:var(--muted);font-weight:500">· ${s.multiple}×</span></div>
-      <div class="t2" style="margin-top:2px">SWR ${s.swr_pct}% · цель ${_fmtBig(s.fi_number)} ₽</div></div>
-    <div style="text-align:right">
-      <div style="font-size:14px;font-weight:800;color:${s.progress_pct>=100?'var(--green)':'var(--text)'}">${s.progress_pct}%</div>
-      <div class="t2" style="margin-top:2px">${yrsLabel(s.years_to_fi)}</div></div></div>`;
-  const runwayCol=fr.runway_months==null?'var(--muted)':fr.runway_months>=12?'var(--green)':fr.runway_months>=6?'#ff8a3d':'var(--red)';
+  const safe=sc[0]||{}, base=sc[1]||{}, aggr=sc[2]||{};
+  // плитка сценария: hero-число лет + единица + цель/SWR мелким
+  const tile=(s,primary)=>{
+    const bg=primary?'var(--ink)':'var(--bg)';
+    const fg=primary?'#fff':'var(--text)';
+    const mut=primary?'rgba(255,255,255,.6)':'var(--muted)';
+    const v=s.years_to_fi;
+    const numTxt=_yrText(v);
+    const unit=(v==null||v===0)?'':_plural(v,['год','года','лет']);
+    const hero=v===0
+      ? `<div style="font-size:14px;font-weight:700;color:var(--green);line-height:1.4;margin-top:10px">достигнут</div>`
+      : `<div style="display:flex;align-items:baseline;gap:3px;justify-content:center;margin-top:8px">
+           <span style="font-size:${primary?'32':'26'}px;font-weight:800;letter-spacing:-1px;line-height:1;color:${fg}">${numTxt}</span>
+           <span style="font-size:11px;color:${mut}">${unit}</span></div>`;
+    const badge=s.progress_pct>0 && s.progress_pct<100
+      ? `<div style="position:absolute;top:7px;right:7px;font-size:9.5px;font-weight:700;color:${mut};letter-spacing:.2px">${s.progress_pct}%</div>`
+      : (s.progress_pct>=100?`<div style="position:absolute;top:7px;right:7px;background:var(--green);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">${s.progress_pct}%</div>`:'');
+    return `<div style="padding:12px 6px 10px;background:${bg};border-radius:16px;text-align:center;position:relative;min-width:0">
+      ${badge}
+      <div style="font-size:10px;color:${mut};text-transform:uppercase;letter-spacing:.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 18px">${s.label}</div>
+      ${hero}
+      <div style="margin-top:9px;font-size:10px;color:${mut};line-height:1.45">
+        SWR ${s.swr_pct}% · ${s.multiple}×<br>
+        <span style="color:${fg};font-weight:600">${_fmtBig(s.fi_number)} ₽</span>
+      </div>
+    </div>`;
+  };
+  // Runway
+  const rwm=fr.runway_months;
+  const rwCol=rwm==null?'var(--muted)':rwm>=12?'var(--green)':rwm>=6?'#ff8a3d':'var(--red)';
+  let rwNum='—', rwUnit='';
+  if(rwm!=null){
+    if(rwm>=24){ const y=Math.round(rwm/12); rwNum=String(y); rwUnit=_plural(y,['год','года','лет']); }
+    else { rwNum=String(rwm); rwUnit=_plural(rwm,['месяц','месяца','месяцев']); }
+  }
+  // Coast FI
+  const coastYear=new Date().getFullYear()+(fr.years_to_retire||0);
+  const coastCol=fr.coast_fi_reached?'var(--green)':'var(--text)';
+  // helpers для строки контекста
+  const realCol=fr.real_return_pct>=0?'var(--green)':'var(--red)';
   return `<h2 style="margin-top:18px">Финансовая независимость</h2>
-    <div class="card" style="padding:16px 16px 12px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <div>
-          <div class="t2" style="color:var(--muted)">Годовые расходы (rolling 12 мес)</div>
-          <div style="font-size:18px;font-weight:800;letter-spacing:-.3px">${fmt(fr.annual_expenses)} ₽</div></div>
-        <button class="iconbtn" onclick="openFireSettings()" title="Параметры">${icon('gear',18)}</button></div>
-      <div style="display:flex;gap:4px;font-size:11px;color:var(--muted);margin-top:4px">
-        реал. доходность <b style="color:${fr.real_return_pct>=0?'var(--green)':'var(--red)'}">${fr.real_return_pct>=0?'+':''}${fr.real_return_pct}%</b> ·
-        откладываю <b>${_fmtBig(fr.monthly_savings)} ₽/мес</b></div>
-      <div style="margin-top:14px">${scenarioRow(safe,false)}${scenarioRow(base,true)}${scenarioRow(aggr,false)}</div>
-      <div class="grid2" style="margin-top:12px">
-        <div style="background:var(--bg);border-radius:14px;padding:11px 13px">
-          <div class="t2" style="color:var(--muted)">Runway без дохода</div>
-          <div style="font-size:18px;font-weight:800;color:${runwayCol}">${fr.runway_months==null?'—':fr.runway_months>=24?Math.round(fr.runway_months/12)+' лет':fr.runway_months+' мес'}</div></div>
-        <div style="background:var(--bg);border-radius:14px;padding:11px 13px">
-          <div class="t2" style="color:var(--muted)">Coast FI ${fr.coast_fi_reached?'✓':'(к '+(new Date().getFullYear()+fr.years_to_retire)+')'}</div>
-          <div style="font-size:18px;font-weight:800;color:${fr.coast_fi_reached?'var(--green)':'var(--text)'}">${_fmtBig(fr.coast_fi_today)} ₽</div></div></div>
-      <div class="t2" style="margin-top:10px;color:var(--muted);font-size:11px">Прогноз — не план. Реал. доходность ≠ ожидаемая. Пересматривай раз в год.</div>
+    <div class="card" style="padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:700;letter-spacing:-.2px">Лет до FI</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">по трём стратегиям изъятия</div>
+        </div>
+        <button class="iconbtn" onclick="openFireSettings()" title="Параметры">${icon('gear',18)}</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        ${tile(safe,false)}${tile(base,true)}${tile(aggr,false)}
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+        <span>Расходы&nbsp;<b style="color:var(--text)">${_fmtBig(fr.annual_expenses)} ₽/год</b></span>
+        <span>Откладываю&nbsp;<b style="color:var(--text)">${_fmtBig(fr.monthly_savings)} ₽/мес</b></span>
+        <span>Реал.&nbsp;<b style="color:${realCol}">${fr.real_return_pct>=0?'+':''}${fr.real_return_pct}%</b></span>
+      </div>
+      <div class="grid2" style="margin-top:10px;gap:8px">
+        <div style="background:var(--bg);border-radius:14px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Runway</div>
+          <div style="display:flex;align-items:baseline;gap:4px;margin-top:3px">
+            <span style="font-size:20px;font-weight:800;color:${rwCol};letter-spacing:-.5px">${rwNum}</span>
+            <span style="font-size:11px;color:var(--muted)">${rwUnit}${rwm!=null?' без дохода':''}</span>
+          </div>
+        </div>
+        <div style="background:var(--bg);border-radius:14px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Coast FI</div>
+          <div style="display:flex;align-items:baseline;gap:4px;margin-top:3px">
+            <span style="font-size:20px;font-weight:800;color:${coastCol};letter-spacing:-.5px">${_fmtBig(fr.coast_fi_today)}</span>
+            <span style="font-size:11px;color:var(--muted)">₽ · ${fr.coast_fi_reached?'достигнут':'к '+coastYear}</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--muted);line-height:1.4;opacity:.65">Прогноз ≠ план. Пересматривай раз в год.</div>
     </div>`;
 }
 function renderAllocDrift(al){
