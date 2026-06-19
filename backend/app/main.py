@@ -945,9 +945,11 @@ class CategoryPatch(BaseModel):
 @app.post("/api/categories")
 async def create_category(body: CategoryIn, user: dict = Depends(current_user),
                           db: Session = Depends(get_session)):
+    from .services.category_colors import color_for_new_category
     ctype = body.type if body.type in ("expense", "income", "transfer") else "expense"
+    color = body.color or color_for_new_category(db, body.parent_id)
     c = models.Category(name=body.name[:64], type=ctype, parent_id=body.parent_id,
-                        icon=body.icon, color=body.color)
+                        icon=body.icon, color=color)
     db.add(c)
     db.commit()
     return {"id": c.id}

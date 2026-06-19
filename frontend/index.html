@@ -298,7 +298,8 @@ const CAT_ICON=[
 ];
 function catIcon(name){ const o=_catIcon[name]; if(o) return o; const n=(name||'').toLowerCase(); for(const [keys,ic] of CAT_ICON){ if(keys.some(k=>n.includes(k))) return ic; } return 'tag'; }
 
-const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b'];
+// 24-цветный fallback (Category.color из БД имеет приоритет; этот пул нужен только когда color ещё не назначен)
+const PAL=['#7c5cff','#2f8bff','#18c171','#ff8a3d','#ff5c9d','#10b3c6','#ff4d54','#a855f7','#0ea5e9','#f59e0b','#34d399','#f472b6','#fb7185','#22d3ee','#facc15','#a78bfa','#4ade80','#60a5fa','#fb923c','#e879f9','#14b8a6','#ef4444','#84cc16','#ec4899'];
 // Бренд-цвета РФ-банков — узнавание счёта с первого взгляда.
 const BANK_BRAND=[
   [['тинькоф','t-bank','т-банк','tinkoff'],'#FFDD2D'],
