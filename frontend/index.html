@@ -90,6 +90,9 @@
   .chip{background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:12px;
     padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;flex:none}
   .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip-sm{background:var(--bg);color:var(--muted);border:none;border-radius:9px;
+    padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;flex:none}
+  .chip-sm.on{background:var(--ink);color:#fff}
   .catpick{display:flex;align-items:center;gap:8px;background:var(--bg);border:none;
     border-radius:14px;padding:12px 13px;font-size:13px;font-weight:600;cursor:pointer;width:100%;text-align:left;line-height:1.2}
   .catpick svg{flex:none}
@@ -900,13 +903,14 @@ async function saveFireSettings(){
 }
 function setCapPeriod(p){ _capPeriod=p; loadCapital(); }
 function _periodLabel(p){ return p==='day'?'за сегодня':p==='week'?'за неделю':p==='month'?'за месяц':'за год'; }
+function _periodShort(p){ return p==='day'?'День':p==='week'?'Неделя':p==='month'?'Месяц':'Год'; }
 function _ruDate(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return d+'.'+m+'.'+y.slice(2); }
 async function loadCapital(){
   try{
     const [a,dbt,c,dep,fxh,fr,fc]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital?period='+_capPeriod),api('/api/deposits'),api('/api/fx/history?days=365').catch(()=>({points:[]})), api('/api/fire').catch(()=>null), api('/api/forecast').catch(()=>null)]);
     const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _deps=dep.deposits||[]; _debtDir='owed_to_me';
     const per=_periodLabel(_capPeriod);
-    const periodChips=['day','week','month','year'].map(p=>`<button class="chip${_capPeriod===p?' on':''}" onclick="setCapPeriod('${p}')">${_periodLabel(p).replace('за ','')}</button>`).join('');
+    const periodChips=['day','week','month','year'].map(p=>`<button class="chip-sm${_capPeriod===p?' on':''}" onclick="setCapPeriod('${p}')">${_periodShort(p)}</button>`).join('');
     document.getElementById('v-capital').innerHTML=`
       <div class="head"><div class="hi">Капитал</div></div>
       <div class="hero"><div class="label">Чистый капитал</div>
@@ -915,13 +919,13 @@ async function loadCapital(){
       ${rateChartCard(fxh)}
       ${(c.series||[]).length>=2?`<h2>Динамика капитала</h2><div class="chartcard">${lineChart(c.series)}</div>`:''}
       ${c.delta!=null?`<div class="card" style="margin-top:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
           <div class="k" style="margin:0">Прирост ${per}</div>
-          ${c.period_from?`<div class="t2" style="color:var(--muted);font-size:11px">с ${_ruDate(c.period_from)}</div>`:''}
+          <div style="display:flex;gap:3px">${periodChips}</div>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${periodChips}</div>
         <div class="v" style="color:${c.delta>=0?'var(--green)':'var(--red)'}">${c.delta>=0?'+':'−'}${fmt(Math.abs(c.delta))}<span class="cur">${CUR}</span></div>
-        <div style="margin-top:8px">
+        ${c.period_from?`<div class="t2" style="color:var(--muted);margin-top:2px">с ${_ruDate(c.period_from)}</div>`:''}
+        <div style="margin-top:10px">
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Сбережения</span><span style="font-weight:700;color:${c.savings>=0?'var(--green)':'var(--red)'}">${c.savings>=0?'+':'−'}${fmt(Math.abs(c.savings))} ${CUR}</span></div>
           ${c.fx!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Курс $</span><span style="font-weight:700;color:${c.fx>=0?'var(--green)':'var(--red)'}">${c.fx>=0?'+':'−'}${fmt(Math.abs(c.fx))} ${CUR}</span></div>`:''}
           ${c.other!=null?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span class="muted">Прочее (крипта, правки)</span><span style="font-weight:700">${c.other>=0?'+':'−'}${fmt(Math.abs(c.other))} ${CUR}</span></div>`:''}
