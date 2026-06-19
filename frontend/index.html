@@ -782,11 +782,12 @@ async function loadGoals(){
         <select id="ng-a" class="inp" style="margin-top:8px"><option value="">Без привязки к счёту</option>${accs2.map(ac=>`<option value="${ac.id}">${ac.name}</option>`).join('')}</select>
         <button class="btn full" style="margin-top:10px" onclick="newGoal()">Создать цель</button></div>
       <h2>Регулярные платежи</h2>
-      ${rec.length?rec.map(x=>{const col=color(x.name);return `<div class="row">
+      ${rec.length?rec.map(x=>{const col=color(x.name); const tu=recTimeUntil(x); const extra=tu?` <span style="color:${tu.color};font-weight:600">· ${tu.text}</span>`:'';
+        return `<div class="row">
         <div class="sq" style="background:${tint(col)};color:${col}">${icon(catIcon(x.name),18)}</div>
-        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · ${x.period==='yearly'?'в год':'в месяц'}</div></div>
+        <div class="mid"><div class="t1">${x.name}</div><div class="t2">${x.type==='income'?'доход':'расход'} · ${x.period==='yearly'?'в год':'в месяц'}${extra}</div></div>
         <div class="amt exp">${fmt(x.amount)} ${CUR}</div>
-        <button class="iconbtn" onclick="openRecEdit(${x.id},${x.amount},'${(x.name||'').replace(/'/g,'&#39;')}')">${icon('edit',18)}</button>
+        <button class="iconbtn" onclick='openRecEdit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>${icon('edit',18)}</button>
         <button class="iconbtn" onclick="delRec(${x.id})">${icon('trash',18)}</button></div>`}).join(''):''}
       ${_cands.length?`<div class="muted" style="font-size:12px;margin:12px 4px 6px">Похоже на регулярные:</div>`+_cands.map((c,i)=>`<div class="row">
         <div class="sq" style="background:${tint(color(c.name))};color:${color(c.name)}">${icon('swap',18)}</div>
@@ -796,11 +797,14 @@ async function loadGoals(){
       ${(()=>{const exp=rec.filter(x=>x.type==='expense'); if(!exp.length) return ''; const total=exp.reduce((s,x)=>s+(x.period==='yearly'?x.amount/12:x.period==='weekly'?x.amount*4.33:x.amount),0); return `<div class="card" style="margin-top:12px"><div class="k">В месяц на регулярные</div><div class="v">${fmt(total)}<span class="cur">${CUR}</span></div><div class="t2" style="margin-top:6px;color:var(--muted)">${exp.length} ${exp.length%10===1&&exp.length!==11?'платёж':exp.length%10>=2&&exp.length%10<=4&&!(exp.length%100>=12&&exp.length%100<=14)?'платежа':'платежей'} · приведено к месяцу (год→÷12, неделя→×4.33)</div></div>`;})()}
       <div class="card" style="margin-top:8px">
         <input id="nr-n" class="inp" placeholder="Название (напр. Интернет)" style="margin-bottom:8px">
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
           <input id="nr-a" class="inp" type="number" inputmode="decimal" placeholder="₽" style="flex:1">
           <button id="per-m" class="chip on" onclick="setPer('monthly')">Мес</button>
-          <button id="per-y" class="chip" onclick="setPer('yearly')">Год</button>
-          <button class="btn" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
+          <button id="per-y" class="chip" onclick="setPer('yearly')">Год</button></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="flex:1"><div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">След. платёж (необязательно)</div>
+            <input id="nr-d" class="inp" type="date"></div>
+          <button class="btn" style="align-self:flex-end" onclick="addRec()">${icon('plus',18,'#fff')}</button></div></div>`;
   }catch(e){ e.message==='AUTH'?authErr('goals'):document.getElementById('v-goals').innerHTML='<div class="err">Ошибка: '+e.message+'</div>'; }
 }
 async function newGoal(){ const n=document.getElementById('ng-n').value.trim(),t=parseFloat(document.getElementById('ng-t').value),p=parseFloat(document.getElementById('ng-p').value)||0,acc=document.getElementById('ng-a').value;
@@ -810,21 +814,50 @@ async function addGoal(id,cur){ const v=parseFloat(document.getElementById('ad-'
 async function delGoal(id){ try{ await api('/api/goals/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
 function setPer(p){ _recPer=p; document.getElementById('per-m').className='chip'+(p==='monthly'?' on':''); document.getElementById('per-y').className='chip'+(p==='yearly'?' on':''); }
 async function addRec(){ const n=document.getElementById('nr-n').value.trim(),a=parseFloat(document.getElementById('nr-a').value);
-  if(!n||!a){toast('Имя и сумма');return;} try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
+  const nd=document.getElementById('nr-d')?.value||null;
+  if(!n||!a){toast('Имя и сумма');return;}
+  try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:n,amount:a,type:'expense',period:_recPer,next_date:nd})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function delRec(id){ try{ await api('/api/recurring/'+id,{method:'DELETE'}); toast('Удалено'); loadGoals(); }catch(e){toast('Ошибка');} }
-function openRecEdit(id,amount,name){
+function openRecEdit(x){
+  // x: либо весь объект {id,amount,name,next_date}, либо устаревший вызов (id, amount, name)
+  if(typeof x!=='object'){ x={id:arguments[0], amount:arguments[1], name:arguments[2], next_date:null}; }
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Регулярный платёж</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
-    <input id="re-n" class="inp" placeholder="Название" value="${(name||'').replace(/"/g,'&quot;')}" style="margin-bottom:8px">
-    <div style="display:flex;gap:8px"><input id="re-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽" value="${amount}" style="flex:1">
-      <button class="btn" onclick="saveRec(${id})">Сохранить</button></div>`;
+    <input id="re-n" class="inp" placeholder="Название" value="${(x.name||'').replace(/"/g,'&quot;')}" style="margin-bottom:8px">
+    <input id="re-a" class="inp" type="number" inputmode="decimal" placeholder="Сумма ₽" value="${x.amount}" style="margin-bottom:8px">
+    <div class="t2" style="margin:0 0 4px 2px;color:var(--muted)">След. платёж (необязательно)</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="re-d" class="inp" type="date" value="${x.next_date||''}" style="flex:1">
+      <button class="chip" onclick="document.getElementById('re-d').value=''">Сброс</button></div>
+    <button class="btn full" onclick="saveRec(${x.id})">Сохранить</button>`;
   document.getElementById('ov').style.display='flex';
 }
 async function saveRec(id){
   const name=document.getElementById('re-n').value.trim();
   const v=parseFloat(document.getElementById('re-a').value);
+  const nd=document.getElementById('re-d')?.value||'';
   if(!name||!v){toast('Имя и сумма');return;}
-  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify({name,amount:v})}); toast('Сохранено'); closeOv(); loadGoals(); }catch(e){toast('Ошибка');} }
+  const body={name, amount:v};
+  if(nd) body.next_date=nd; else body.clear_next_date=true;
+  try{ await api('/api/recurring/'+id,{method:'POST',body:JSON.stringify(body)}); toast('Сохранено'); closeOv(); loadGoals(); }catch(e){toast('Ошибка');} }
+// Time-until-payment с цветами (чёрный >7d, оранжевый ≤7d, красный ≤3d/завтра/сегодня).
+function recTimeUntil(x){
+  if(!x.next_date) return null;
+  const target=new Date(x.next_date+'T00:00:00'); const today=new Date(); today.setHours(0,0,0,0);
+  const days=Math.round((target-today)/86400000);
+  if(days<0) return null;  // прошлая дата (auto-advance подтянет бэк)
+  let text;
+  if(days===0) text='Сегодня';
+  else if(days===1) text='Завтра';
+  else if(x.period==='yearly' && days>=30){
+    const m=Math.floor(days/30), d=days-m*30;
+    text=`${m} мес${d>0?' '+d+' дн.':''}`;
+  } else text=`${days} дн.`;
+  let col='var(--text)';
+  if(days<=7) col='#ff8a3d';
+  if(days<=3) col='var(--red)';
+  return {text, color:col};
+}
 async function addRecCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring',{method:'POST',body:JSON.stringify({name:c.name,amount:c.amount,type:'expense',period:'monthly'})}); toast('Добавлено'); loadGoals(); }catch(e){toast('Ошибка');} }
 async function dismissCand(i){ const c=_cands[i]; if(!c)return; try{ await api('/api/recurring/dismiss',{method:'POST',body:JSON.stringify({name:c.name})}); toast('Скрыто'); loadGoals(); }catch(e){toast('Ошибка');} }
 

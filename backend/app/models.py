@@ -140,6 +140,7 @@ class Recurring(Base):
     day: Mapped[int | None] = mapped_column(Integer)
     start_date: Mapped[date | None] = mapped_column(Date)
     end_date: Mapped[date | None] = mapped_column(Date)   # nullable = бессрочно
+    next_date: Mapped[date | None] = mapped_column(Date)  # дата следующего платежа (auto-advance в nudge_job)
     type: Mapped[str] = mapped_column(String(16))         # income|expense
     reminder: Mapped[bool] = mapped_column(Boolean, default=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)

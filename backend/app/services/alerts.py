@@ -8,6 +8,7 @@ import asyncio
 import json
 from datetime import date, datetime, timedelta
 
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -70,14 +71,61 @@ def renewal_nudges(db: Session) -> list[str]:
     return out
 
 
+def _advance_next_date(d: date, period: str) -> date:
+    if period == "yearly":
+        return d + relativedelta(years=1)
+    if period == "weekly":
+        return d + timedelta(days=7)
+    return d + relativedelta(months=1)   # monthly по умолчанию
+
+
+def upcoming_payments(db: Session) -> list[str]:
+    """Регулярные платежи у которых next_date наступает завтра или сегодня.
+    Каждый напоминаем один раз за цикл (ключ = `id:next_date`).
+    Просроченные (next_date < today) — auto-advance до today/завтра."""
+    today = date.today()
+    notified = set(json.loads(get_setting(db, "nudged_payments") or "[]"))
+    keep, out = set(notified), []
+    # авто-сдвиг просроченных
+    for r in db.query(models.Recurring).filter(
+        models.Recurring.active.is_(True),
+        models.Recurring.type == "expense",
+        models.Recurring.next_date.isnot(None),
+        models.Recurring.next_date < today,
+    ).all():
+        d = r.next_date
+        while d < today:
+            d = _advance_next_date(d, r.period or "monthly")
+        r.next_date = d
+    db.commit()
+    # завтрашние и сегодняшние
+    rows = (db.query(models.Recurring)
+            .filter(models.Recurring.active.is_(True),
+                    models.Recurring.type == "expense",
+                    models.Recurring.next_date.isnot(None),
+                    models.Recurring.next_date >= today,
+                    models.Recurring.next_date <= today + timedelta(days=1)).all())
+    for r in rows:
+        key = f"{r.id}:{r.next_date.isoformat()}"
+        if key in notified:
+            continue
+        days = (r.next_date - today).days
+        when = "Сегодня" if days == 0 else "Завтра"
+        out.append(f"{when} платёж: <b>{r.name}</b> — {_fmt(r.amount)} ₽")
+        keep.add(key)
+    if out:
+        set_setting(db, "nudged_payments", json.dumps(list(keep)))
+    return out
+
+
 async def nudge_job() -> None:
-    """Планировщик: ежедневно слать напоминания о продлении."""
+    """Планировщик: ежедневно слать напоминания о продлении срока + предстоящих платежах."""
     from ..bot import bot
     if not bot:
         return
     db = SessionLocal()
     try:
-        msgs = renewal_nudges(db)
+        msgs = renewal_nudges(db) + upcoming_payments(db)
     finally:
         db.close()
     for msg in msgs:

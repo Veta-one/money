@@ -506,6 +506,16 @@ class RecurringIn(BaseModel):
     type: str = "expense"
     period: str = "monthly"
     day: int | None = None
+    next_date: str | None = None
+
+
+def _parse_date(s: str | None):
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(s)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @app.get("/api/recurring")
@@ -514,7 +524,9 @@ async def list_recurring(user: dict = Depends(current_user), db: Session = Depen
             .filter(models.Recurring.active.is_(True),
                     models.Recurring.type == "expense").all())
     return {"recurring": [{"id": r.id, "name": r.name, "amount": r.amount, "type": r.type,
-                           "period": r.period, "day": r.day} for r in rows],
+                           "period": r.period, "day": r.day,
+                           "next_date": r.next_date.isoformat() if r.next_date else None}
+                          for r in rows],
             "candidates": detect_recurring(db)}
 
 
@@ -523,7 +535,8 @@ async def create_recurring(body: RecurringIn, user: dict = Depends(current_user)
                            db: Session = Depends(get_session)):
     r = models.Recurring(name=body.name, amount=body.amount,
                          type=body.type if body.type in ("expense", "income") else "expense",
-                         period=body.period, day=body.day, active=True)
+                         period=body.period, day=body.day, active=True,
+                         next_date=_parse_date(body.next_date))
     db.add(r)
     db.commit()
     return {"id": r.id}
@@ -556,6 +569,8 @@ async def dismiss_recurring(body: DismissIn, user: dict = Depends(current_user),
 class RecPatch(BaseModel):
     amount: float | None = None
     name: str | None = None
+    next_date: str | None = None
+    clear_next_date: bool | None = None
 
 
 @app.post("/api/recurring/{rec_id}")
@@ -568,6 +583,10 @@ async def patch_recurring(rec_id: int, body: RecPatch, user: dict = Depends(curr
         r.amount = body.amount
     if body.name is not None:
         r.name = body.name[:128]
+    if body.clear_next_date:
+        r.next_date = None
+    elif body.next_date is not None:
+        r.next_date = _parse_date(body.next_date)
     db.commit()
     return {"ok": True}
 
