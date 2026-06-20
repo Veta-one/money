@@ -493,7 +493,7 @@ document.addEventListener('click',e=>{
   const [kind,...rest]=d.getAttribute('data-drill').split(':'); const val=rest.join(':');
   if(kind==='day') openOpsForDay(val);
   else if(kind==='month') openOpsForMonth(val);
-  else if(kind==='cat') openCatOps(parseInt(val,10));
+  else if(kind==='cat') openCatTrend(parseInt(val,10));
   else if(kind==='merch') openMerchOps(val);
 });
 // ===== Drill-helpers (используются и из делегированного click, и из карточек) =====
@@ -718,6 +718,28 @@ function lineChart(data, w=330, h=120){
   s+=`<text x="${w-pad}" y="${h-3}" text-anchor="end" font-size="10" fill="#8b909a">${new Date(data[data.length-1].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" data-line='${hover.replace(/'/g,"&#39;")}' data-line-fmt="rub">${s}</svg>`;
 }
+// Стек-площади: структура капитала во времени (рубли / вклады / крипта)
+function stackChart(series){
+  const pts=(series||[]).filter(p=>p.breakdown); if(pts.length<2) return '';
+  const keys=[{k:'rub',c:'#3b82f6',label:'Рубли'},{k:'deposits',c:'#18c171',label:'Вклады'},{k:'usd',c:'#ff8a3d',label:'Крипта/USD'}];
+  const w=330,h=150,padT=10,padB=20,padL=4,padR=4;
+  const tot=p=>keys.reduce((s,kk)=>s+Math.max(0,p.breakdown[kk.k]||0),0);
+  const maxV=Math.max(1,...pts.map(tot));
+  const X=i=>padL+i*(w-padL-padR)/(pts.length-1);
+  const Y=v=>padT+(1-v/maxV)*(h-padT-padB);
+  let svg=''; const cum=pts.map(()=>0);
+  keys.forEach(kk=>{
+    const layer=pts.map((p,i)=>{const base=cum[i]; const val=Math.max(0,p.breakdown[kk.k]||0); cum[i]=base+val; return [X(i),Y(cum[i]),Y(base)];});
+    const up=layer.map(t=>`${t[0].toFixed(1)},${t[1].toFixed(1)}`).join(' ');
+    const down=layer.slice().reverse().map(t=>`${t[0].toFixed(1)},${t[2].toFixed(1)}`).join(' ');
+    svg+=`<polygon points="${up} ${down}" fill="${kk.c}" opacity=".85"/>`;
+  });
+  svg+=`<text x="${padL}" y="${h-5}" font-size="10" fill="#8b909a">${new Date(pts[0].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
+  svg+=`<text x="${w-padR}" y="${h-5}" text-anchor="end" font-size="10" fill="#8b909a">${new Date(pts[pts.length-1].date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</text>`;
+  const legend=keys.map(kk=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)"><span style="width:9px;height:9px;border-radius:2px;background:${kk.c}"></span>${kk.label}</span>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${svg}</svg>
+    <div style="display:flex;gap:12px;justify-content:center;margin-top:6px;flex-wrap:wrap">${legend}</div>`;
+}
 function rateChartCard(fxh, label){
   const pts=(fxh&&fxh.points)||[]; if(pts.length<2) return '';
   const vals=pts.map(p=>p.rate), min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
@@ -781,7 +803,7 @@ async function loadDashboard(){
       ${months.some(m=>m.spent>0)?`<h2>Траты по месяцам</h2><div class="chartcard">${barChart(months)}</div>`:''}
       <h2>По категориям</h2>
       ${cats.length?`<div class="catlist">`+cats.map(c=>{const col=color(c.name);return `
-        <div class="cat" onclick="openCatOps(${c.id})" style="cursor:pointer"><div class="top"><span class="cdot" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),16)}</span>
+        <div class="cat" onclick="openCatTrend(${c.id})" style="cursor:pointer"><div class="top"><span class="cdot" style="background:${tint(col)};color:${col}">${icon(catIcon(c.name),16)}</span>
         <span class="nm">${c.name}</span>${(c.sparkline&&c.sparkline.length>1)?`<span style="margin-right:6px">${spark(c.sparkline,52,16,col)}</span>`:''}<span class="am">${fmt(c.sum)} ${CUR} ${dBadge(c.sum,c.prev,true)}</span></div>
         <div class="track"><i style="width:${Math.round(c.sum/mx*100)}%;background:${col}"></i></div>${c.expected>0?`<div class="t2" style="margin-top:6px;color:var(--muted)">из ≈ ${fmt(c.expected)} ${CUR}/мес</div>`:''}</div>`}).join('')+`</div>`
         :`<div class="empty"><div class="ttl">Трат за месяц ещё нет</div>Пришли боту фото чека, текст («такси 300») или голосовое — он сам распарсит, разложит по категориям и нарисует тут.</div>`}
@@ -1112,6 +1134,7 @@ async function loadCapital(){
         <div class="sub">$1 = ${fmt(c.usd_rate)} ${CUR} (ЦБ)${c.delta!=null?' · '+(c.delta>=0?'↑ +':'↓ −')+fmt(Math.abs(c.delta))+' ₽ '+per:''}</div></div>
       ${rateChartCard(fxh)}
       ${(c.series||[]).length>=2?`<h2>Динамика капитала</h2><div class="chartcard">${lineChart(c.series)}</div>`:''}
+      ${(c.series||[]).filter(p=>p.breakdown).length>=2?`<h2>Структура капитала</h2><div class="chartcard">${stackChart(c.series)}</div>`:''}
       ${c.delta!=null?`<div class="card" style="margin-top:12px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div style="min-width:0">
@@ -1258,8 +1281,17 @@ function openAcc(id){
           </div>
         </div>
       </div>
-      ${ac?`<div style="font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.4">Новая сумма заменит текущую. История операций не пересчитывается.</div>`:''}
+      ${ac?`<div style="font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.4">Прямая правка просто заменит сумму. Чтобы свести с реальным балансом из банка <b style="color:var(--text)">с записью расхождения</b> — используй сверку ниже.</div>`:''}
     </div>
+    ${ac?`<div class="sec-head">Сверка с банком</div>
+    <div class="card">
+      <div style="font-size:10.5px;color:var(--muted);margin:0 0 8px 2px;line-height:1.4">Введи реальный баланс из банка. Разница запишется операцией «Корректировка» — net worth станет точным, а сумма таких правок покажет, сколько уходит мимо учёта.</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="ac-rec" class="inp" type="number" step="0.01" inputmode="decimal" placeholder="Реальный баланс ${_accCur}" style="flex:1" oninput="_recPreview(${ac.balance||0})">
+        <button class="btn" onclick="doReconcile(${ac.id})">Свести</button>
+      </div>
+      <div id="ac-rec-diff" style="font-size:11.5px;margin-top:8px;line-height:1.4"></div>
+    </div>`:''}
 
     <div class="sec-head">Кому принадлежит</div>
     <div class="card">
@@ -1312,6 +1344,23 @@ async function saveAcc(){
     toast('Сохранено'); closeOv(); loadCapital(); }catch(e){ toast('Ошибка'); }
 }
 async function delAcc(id){ try{ await api('/api/accounts/'+id,{method:'DELETE'}); toast('Удалён'); closeOv(); loadCapital(); }catch(e){toast('Ошибка');} }
+function _recPreview(current){
+  const el=document.getElementById('ac-rec-diff'); const inp=document.getElementById('ac-rec'); if(!el||!inp) return;
+  if(inp.value===''){ el.innerHTML=''; return; }
+  const actual=parseFloat(inp.value)||0; const diff=Math.round((actual-current)*100)/100;
+  if(Math.abs(diff)<0.01){ el.innerHTML='<span style="color:var(--green)">Совпадает — расхождения нет</span>'; return; }
+  const sign=diff>0?'+':'−'; const col=diff>0?'var(--green)':'var(--red)';
+  const kind=diff>0?'не учтён доход':'не учтены траты';
+  el.innerHTML=`Расхождение <b style="color:${col}">${sign}${fmt(Math.abs(diff))} ${_accCur}</b> · запишется как «Корректировка» (${kind})`;
+}
+async function doReconcile(id){
+  const inp=document.getElementById('ac-rec'); if(!inp||inp.value===''){ toast('Введи реальный баланс'); return; }
+  const actual=parseFloat(inp.value)||0;
+  try{ const r=await api('/api/accounts/'+id+'/reconcile',{method:'POST',body:JSON.stringify({actual_balance:actual})});
+    if(Math.abs(r.diff)<0.01) toast('Уже совпадает'); else toast((r.diff>0?'+':'−')+fmt(Math.abs(r.diff))+' '+(r.currency||'')+' учтено');
+    closeOv(); loadCapital();
+  }catch(e){ toast('Ошибка'); }
+}
 function openDep(id){
   const d=id?_deps.find(x=>x.id===id):null;
   _depEdit=id; _depOwner=d?d.owner:'me'; _depCap=d?d.capitalization:true;
@@ -1811,7 +1860,42 @@ async function openOpsCat(){
 function opsPickCat(id){ _ops.cat=id; _ops.offset=0; _ops.items=[]; closeOv(); loadOps(); }
 function opsSet(k,v){ _ops[k]=v; loadOps(); }
 function opsMore(){ _ops.offset+=50; loadOps(false); }
-function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', merchant:'', minA:'', maxA:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
+function openCatOps(catId){ _ops={period:'this', type:'expense', cat:String(catId), q:'', merchant:'', minA:'', maxA:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; closeOv(); tab('ops'); }
+const _MON=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+function _monShort(ym){ const m=parseInt(String(ym).split('-')[1],10); return _MON[m-1]||''; }
+async function openCatTrend(catId){
+  document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Динамика</div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div><div class="loader">Загрузка…</div>`;
+  document.getElementById('ov').style.display='flex';
+  let d; try{ d=await api('/api/category/'+catId+'/history?months=12'); }catch(e){
+    document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">Динамика</div><button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div><div class="err">Ошибка</div>`; return; }
+  const col=d.color||color(d.name);
+  const bars=(d.points||[]).map(p=>({spent:p.value, label:_monShort(p.ym), ym:p.ym}));
+  const isExp=d.type!=='income';
+  // для расхода рост — плохо (красный), для дохода рост — хорошо (зелёный)
+  const trendWord=d.trend>0?'растёт':d.trend<0?'снижается':'стабильно';
+  const trendCol=d.trend===0?'var(--muted)':((d.trend>0)===isExp?'var(--red)':'var(--green)');
+  const vsAvg=d.avg>0?Math.round((d.current-d.avg)/d.avg*100):0;
+  const vsCol=vsAvg===0?'var(--muted)':((vsAvg>0)===isExp?'var(--red)':'var(--green)');
+  document.getElementById('sheet').innerHTML=`<div class="sheeth">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <span class="cdot" style="background:${tint(col)};color:${col};flex:none">${icon(catIcon(d.name),16)}</span>
+        <div style="min-width:0"><div class="t1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.name}</div>
+        <div class="t2" style="color:var(--muted)">за ${d.months} мес${d.has_children?' · с подкатегориями':''}</div></div>
+      </div>
+      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>
+    <div class="grid2" style="margin-top:4px">
+      <div class="card"><div class="k">В среднем / мес</div><div class="v">${fmt(d.avg)}<span class="cur">${CUR}</span></div></div>
+      <div class="card"><div class="k">Этот месяц</div><div class="v">${fmt(d.current)}<span class="cur">${CUR}</span></div>
+        ${d.avg>0?`<div style="font-size:11px;color:${vsCol};font-weight:700;margin-top:2px">${vsAvg>=0?'+':''}${vsAvg}% к средней</div>`:''}</div>
+    </div>
+    <div class="card" style="margin-top:10px"><div class="k" style="margin-bottom:6px">По месяцам</div>${barChart(bars)}</div>
+    <div class="card" style="margin-top:10px;display:flex;align-items:center;gap:8px">
+      ${icon(d.trend>0?'arrow':d.trend<0?'arrow':'list',18,trendCol)}
+      <div style="font-size:13px">Тренд: <b style="color:${trendCol}">${trendWord}</b><span class="muted" style="font-size:11px"> · пик ${fmt(d.peak)} ${CUR} · всего ${fmt(d.total)} ${CUR}</span></div>
+    </div>
+    <button class="btn full" style="margin-top:12px" onclick="openCatOps(${d.id})">Все операции категории</button>`;
+}
 function openReviewOps(){ _ops={period:'all', type:'', cat:'', q:'', merchant:'', minA:'', maxA:'', review:1, offset:0, items:[], more:false, count:0, se:0, si:0}; _opsFiltOpen=true; tab('ops'); }
 function openMerchOps(name){ _ops={period:'all', type:'', cat:'', q:'', merchant:name, minA:'', maxA:'', review:0, offset:0, items:[], more:false, count:0, se:0, si:0}; tab('ops'); }
 function opsToggleBulk(){ _opsBulk=!_opsBulk; if(!_opsBulk) _opsSel.clear(); renderOps(); }

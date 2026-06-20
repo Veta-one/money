@@ -41,23 +41,40 @@ def take_networth_snapshot(db, force: bool = False) -> float:
     Создаётся один раз (cron в 00:01) и НЕ перезаписывается операциями/правками
     в течение дня — иначе теряется база для delta-карточки.
     force=True переписывает (используется для одноразовых ретро-коррекций)."""
+    import json
+    from .fx import networth_breakdown
     total = compute_net_worth(db)
+    bj = json.dumps(networth_breakdown(db))
     today = date.today()
     row = db.query(models.NetWorthSnapshot).filter_by(date=today).first()
     if row:
         if force:
             row.total_rub = total
+            row.breakdown_json = bj
+            db.commit()
+        elif not row.breakdown_json:        # дозаполнить старый снимок без разбивки
+            row.breakdown_json = bj
             db.commit()
         return row.total_rub
-    db.add(models.NetWorthSnapshot(date=today, total_rub=total))
+    db.add(models.NetWorthSnapshot(date=today, total_rub=total, breakdown_json=bj))
     db.commit()
     return total
 
 
 def networth_series(db, limit: int = 30) -> list[dict]:
+    import json
     rows = (db.query(models.NetWorthSnapshot)
             .order_by(models.NetWorthSnapshot.date.desc()).limit(limit).all())
-    return [{"date": r.date.isoformat(), "total": round(r.total_rub, 2)} for r in reversed(rows)]
+    out = []
+    for r in reversed(rows):
+        item = {"date": r.date.isoformat(), "total": round(r.total_rub, 2)}
+        if r.breakdown_json:
+            try:
+                item["breakdown"] = json.loads(r.breakdown_json)
+            except Exception:  # noqa: BLE001
+                pass
+        out.append(item)
+    return out
 
 
 def daily_spending(db, days: int = 365) -> list[dict]:

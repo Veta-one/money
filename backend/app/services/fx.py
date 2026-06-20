@@ -119,3 +119,28 @@ def compute_net_worth(db) -> float:
         v = to_rub(remaining, d.currency, db)
         total += v if d.direction == "owed_to_me" else -v
     return round(total, 2)
+
+
+_USD_LIKE = {"USD", "USDT", "USDC", "$"}
+
+
+def networth_breakdown(db) -> dict:
+    """Капитал по компонентам (в рублях): рублёвые счета / валютные (крипта/USD) /
+    вклады / нетто-долги. Для стек-графика «структура капитала во времени»."""
+    rub = 0.0
+    usd = 0.0
+    for a in db.query(models.Account).filter(models.Account.archived.is_(False)).all():
+        v = to_rub(a.balance or 0.0, a.currency, db)
+        if (a.currency or "RUB").upper() in _USD_LIKE:
+            usd += v
+        else:
+            rub += v
+    from .deposits import deposits_total_value
+    deposits = deposits_total_value(db)
+    debts = 0.0
+    for d in db.query(models.Debt).filter(models.Debt.status == "open").all():
+        remaining = max((d.amount or 0) - (d.paid or 0), 0)
+        v = to_rub(remaining, d.currency, db)
+        debts += v if d.direction == "owed_to_me" else -v
+    return {"rub": round(rub, 2), "usd": round(usd, 2),
+            "deposits": round(deposits, 2), "debts": round(debts, 2)}

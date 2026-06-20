@@ -405,6 +405,62 @@ async def set_balance(acc_id: int, body: BalanceIn,
     return {"ok": True}
 
 
+def _ensure_category(db: Session, name: str, ctype: str) -> models.Category:
+    """Найти категорию по имени+типу или создать (для авто-операций сверки)."""
+    c = (db.query(models.Category)
+         .filter(models.Category.name == name, models.Category.type == ctype,
+                 models.Category.archived.is_(False)).first())
+    if c:
+        return c
+    from .services.category_colors import color_for_new_category
+    c = models.Category(name=name[:64], type=ctype, parent_id=None,
+                        icon="adjust", color=color_for_new_category(db, None))
+    db.add(c)
+    db.flush()
+    return c
+
+
+class ReconcileIn(BaseModel):
+    actual_balance: float
+
+
+@app.post("/api/accounts/{acc_id}/reconcile")
+async def reconcile_account(acc_id: int, body: ReconcileIn,
+                            user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """Сверка: пользователь вводит РЕАЛЬНЫЙ баланс счёта из банка. Считаем
+    расхождение с учётом, создаём корректирующую операцию на разницу
+    (категория «Корректировка») и выставляем фактический баланс. Так net worth
+    всегда честный, а сумма корректировок показывает «сколько утекает мимо учёта»."""
+    acc = db.get(models.Account, acc_id)
+    if not acc:
+        raise HTTPException(404, "no account")
+    current = round(acc.balance or 0.0, 2)
+    actual = round(body.actual_balance, 2)
+    diff = round(actual - current, 2)
+    tx_id = None
+    if abs(diff) >= 0.01:
+        cur = (acc.currency or "RUB").upper()
+        ttype = "income" if diff > 0 else "expense"
+        amt = abs(diff)
+        base = to_rub(amt, cur, db)
+        cat = _ensure_category(db, "Корректировка", ttype)
+        t = models.Transaction(
+            type=ttype, amount=amt, currency=cur, base_amount_rub=base,
+            fx_rate=(base / amt if amt else 1.0),
+            category_id=cat.id, account_id=acc.id,
+            merchant="Сверка баланса",
+            note=f"Сверка: учёт {current} → факт {actual} ({'+' if diff > 0 else ''}{diff} {cur})",
+            datetime=datetime.now(), source="reconcile", status="confirmed",
+        )
+        db.add(t)
+        db.flush()
+        tx_id = t.id
+    acc.balance = actual
+    db.commit()
+    take_networth_snapshot(db, force=True)
+    return {"diff": diff, "old": current, "new": actual, "currency": acc.currency, "tx_id": tx_id}
+
+
 class AccIn(BaseModel):
     name: str
     type: str = "card"
@@ -1075,6 +1131,59 @@ async def delete_category(cat_id: int, user: dict = Depends(current_user),
         db.delete(c)
     db.commit()
     return {"ok": True, "archived": bool(used)}
+
+
+@app.get("/api/category/{cat_id}/history")
+async def category_history(cat_id: int, months: int = 12,
+                           user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """Помесячная динамика категории (с подкатегориями) + тренд: средняя за
+    завершённые месяцы, текущий месяц, отклонение. Для drill «эта категория во времени»."""
+    cat = db.get(models.Category, cat_id)
+    if not cat:
+        raise HTTPException(404, "no category")
+    months = max(3, min(int(months), 24))
+    child_ids = [r[0] for r in db.query(models.Category.id)
+                 .filter(models.Category.parent_id == cat_id).all()]
+    ids = [cat_id] + child_ids
+    now = datetime.now()
+    keys: list[tuple[int, int]] = []
+    y, m = now.year, now.month
+    for _ in range(months):
+        keys.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    keys.reverse()
+    start = datetime(keys[0][0], keys[0][1], 1)
+    rows = (db.query(models.Transaction.datetime, models.Transaction.base_amount_rub)
+            .filter(models.Transaction.type == cat.type,
+                    models.Transaction.category_id.in_(ids),
+                    models.Transaction.datetime >= start).all())
+    buckets = {k: 0.0 for k in keys}
+    for dt, amt in rows:
+        k = (dt.year, dt.month)
+        if k in buckets:
+            buckets[k] += amt or 0.0
+    points = [{"ym": f"{k[0]}-{k[1]:02d}", "value": round(buckets[k], 2)} for k in keys]
+    vals = [p["value"] for p in points]
+    completed = vals[:-1]                       # без текущего неполного месяца
+    nonzero = [v for v in completed if v > 0]
+    avg = round(sum(nonzero) / len(nonzero), 2) if nonzero else 0.0
+    current = vals[-1] if vals else 0.0
+    peak = max(vals) if vals else 0.0
+    # тренд: наклон по завершённым месяцам (последняя половина vs первая)
+    trend = 0
+    if len(completed) >= 4:
+        half = len(completed) // 2
+        first = sum(completed[:half]) / max(1, half)
+        last = sum(completed[half:]) / max(1, len(completed) - half)
+        if first > 0:
+            ch = (last - first) / first
+            trend = 1 if ch > 0.12 else (-1 if ch < -0.12 else 0)
+    return {"id": cat.id, "name": cat.name, "color": cat.color, "type": cat.type,
+            "has_children": bool(child_ids), "points": points,
+            "avg": avg, "current": current, "peak": round(peak, 2),
+            "total": round(sum(vals), 2), "months": months, "trend": trend}
 
 
 class KVIn(BaseModel):
