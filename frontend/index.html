@@ -536,12 +536,38 @@ function hmap(data, opts){
     <div class="heat-leg"><span>меньше</span>${[0,1,2,3,4].map(l=>`<span class="heat-leg-sq" style="${l>0?`background:${accent};opacity:${op(l)}`:'background:var(--line)'}"></span>`).join('')}<span>больше</span></div></div>`;
 }
 
+// Кэш GET-ответов на время сессии (данные не риалтайм). Сбрасывается событийно:
+// при любой мутации (POST/DELETE) и при возврате фокуса, если /api/version изменился.
+const _apiCache=new Map();      // path -> data
+const _apiInflight=new Map();   // path -> Promise (дедуп параллельных одинаковых GET)
+function _clone(d){ try{ return structuredClone(d); }catch(e){ try{ return JSON.parse(JSON.stringify(d)); }catch(_){ return d; } } }
+function invalidateAll(){
+  _apiCache.clear(); _apiInflight.clear();
+  try{ TABS.forEach(t=>{ const el=document.getElementById('v-'+t); if(el) delete el.dataset.loaded; }); }catch(e){}
+}
 async function api(path, opts){
-  const o=opts||{}; o.headers=Object.assign({'X-Telegram-Init-Data':tg?.initData||'','Content-Type':'application/json'},o.headers||{});
+  const o=opts||{}; const method=(o.method||'GET').toUpperCase();
+  o.headers=Object.assign({'X-Telegram-Init-Data':tg?.initData||'','Content-Type':'application/json'},o.headers||{});
+  if(method==='GET'){
+    if(_apiCache.has(path)) return _clone(_apiCache.get(path));          // мгновенно из кэша
+    if(_apiInflight.has(path)) return _apiInflight.get(path).then(_clone); // дедуп
+    const p=fetch(path,o).then(r=>{
+      if(r.status===401||r.status===403) throw new Error('AUTH');
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(d=>{ _apiCache.set(path,d); _apiInflight.delete(path); return d; })
+      .catch(e=>{ _apiInflight.delete(path); throw e; });
+    _apiInflight.set(path,p);
+    return p.then(_clone);
+  }
+  // не-GET: выполнить и сбросить кэш (данные могли измениться).
+  // Исключение — /api/ai/ask: это POST, но он ничего не меняет в данных.
   const r=await fetch(path,o);
   if(r.status===401||r.status===403) throw new Error('AUTH');
   if(!r.ok) throw new Error('HTTP '+r.status);
-  return r.json();
+  const d=await r.json().catch(()=>({}));
+  if(!path.startsWith('/api/ai/')) invalidateAll();
+  return d;
 }
 function toast(t){ tap(t.toLowerCase().includes('ошибк')?'medium':'light'); const e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),1400); }
 function authErr(v){ document.getElementById('v-'+v).innerHTML='<div class="err">Доступ только владельцу.<br>Открой приложение из бота.</div>'; }
@@ -561,13 +587,20 @@ function tab(t){
   for(const x of TABS){
     const el=document.getElementById('v-'+x);
     el.style.display=x===t?'block':'none';
-    if(x===t){ el.style.animation='none'; el.offsetHeight; el.style.animation=''; }  // рестарт fade
+    if(x===t){ el.style.animation='none'; el.offsetHeight; el.style.animation=''; }  // рестарт fade/slide
     document.getElementById('t-'+x).classList.toggle('active',x===t);
   }
+  const el=document.getElementById('v-'+t);
+  if(el.dataset.loaded) return;   // уже отрисовано, кэш валиден → мгновенно, без сети и перестройки
   showSkel(t);
-  ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[t]();
+  const fn={dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals}[t];
+  Promise.resolve(fn()).then(()=>{ el.dataset.loaded='1'; }).catch(()=>{});
 }
-function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[_tab](); }
+function refreshActive(){
+  const fn={dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals}[_tab];
+  const r=fn(); const el=document.getElementById('v-'+_tab);
+  Promise.resolve(r).then(()=>{ if(el) el.dataset.loaded='1'; }).catch(()=>{});
+}
 
 // ===== Свайп между вкладками (горизонтальный) =====
 let _swipe=null;
@@ -2714,7 +2747,28 @@ async function saveCat(){
 async function delCat(id){ try{ const r=await api('/api/categories/'+id,{method:'DELETE'});
   toast(r.archived?'Архивирована':'Удалена'); _cats=[]; await loadCats(); openCatMgr(); }catch(e){toast('Ошибка');} }
 
-loadDashboard();
+Promise.resolve(loadDashboard()).then(()=>{ const el=document.getElementById('v-dashboard'); if(el) el.dataset.loaded='1'; });
+
+// ===== Событийная свежесть данных =====
+// Кэш живёт всю сессию. Сбрасывается при мутациях (в api()) и при возврате
+// фокуса, если серверный отпечаток /api/version изменился (правка через бота).
+let _dataVersion=null;
+async function checkVersion(){
+  try{
+    const r=await fetch('/api/version',{headers:{'X-Telegram-Init-Data':tg?.initData||''}});
+    if(!r.ok) return;
+    const d=await r.json();
+    if(_dataVersion!==null && d.version!==_dataVersion){
+      invalidateAll();      // данные изменились вне аппа → сбросить кэш и флаги
+      tab(_tab);            // перезагрузить активную вкладку свежим
+    }
+    _dataVersion=d.version;
+  }catch(e){}
+}
+checkVersion();   // запомнить базовый отпечаток (без перезагрузки)
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkVersion(); });
+try{ tg?.onEvent?.('activated', checkVersion); }catch(e){}
+
 // глубокая ссылка из бота: ?tx=ID → открыть операцию
 const _startTx=new URLSearchParams(location.search).get('tx');
 if(_startTx && /^\d+$/.test(_startTx)){ setTimeout(()=>{ try{ openTx(parseInt(_startTx)); }catch(e){} }, 350); }

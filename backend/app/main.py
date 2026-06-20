@@ -105,6 +105,30 @@ async def health(db: Session = Depends(get_session)):
         raise HTTPException(503, f"db down: {e}")
 
 
+@app.get("/api/version")
+async def data_version(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """Дешёвый отпечаток состояния данных. Мини-апп сравнивает его при возврате
+    фокуса: если изменился (новая операция/счёт/вклад через бота и т.п.) — сбрасывает
+    кэш. Меняется при любой значимой мутации без необходимости трогать endpoints."""
+    def _q(expr):
+        return db.query(expr).scalar()
+    parts = [
+        _q(func.count(models.Transaction.id)) or 0,
+        _q(func.max(models.Transaction.id)) or 0,
+        _q(func.max(models.Transaction.created_at)),
+        round(_q(func.coalesce(func.sum(models.Account.balance), 0.0)) or 0.0, 2),
+        _q(func.count(models.Account.id)) or 0,
+        _q(func.count(models.Deposit.id)) or 0,
+        round(_q(func.coalesce(func.sum(models.Deposit.principal), 0.0)) or 0.0, 2),
+        _q(func.count(models.DepositTopup.id)) or 0,
+        _q(func.count(models.Goal.id)) or 0,
+        _q(func.count(models.Debt.id)) or 0,
+        round(_q(func.coalesce(func.sum(models.Debt.paid), 0.0)) or 0.0, 2),
+        _q(func.count(models.Recurring.id)) or 0,
+    ]
+    return {"version": "|".join(str(p) for p in parts)}
+
+
 @app.get("/api/me")
 async def me(user: dict = Depends(current_user)):
     """Проверка авторизации мини-аппа (только владелец)."""
