@@ -144,6 +144,8 @@
   /* плавная смена табов */
   [id^="v-"]{animation:fadein .18s ease-out}
   @keyframes fadein{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @keyframes slideInL{from{opacity:.3;transform:translateX(26px)}to{opacity:1;transform:none}}
+  @keyframes slideInR{from{opacity:.3;transform:translateX(-26px)}to{opacity:1;transform:none}}
   /* skeleton-loader */
   .skel{background:linear-gradient(90deg,var(--line) 0%,#f7f8fa 50%,var(--line) 100%);
     background-size:200% 100%;animation:shimmer 1.4s linear infinite;border-radius:8px}
@@ -566,6 +568,47 @@ function tab(t){
   ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[t]();
 }
 function refreshActive(){ ({dashboard:loadDashboard,ops:loadOps,analytics:loadAnalytics,income:loadIncome,capital:loadCapital,goals:loadGoals})[_tab](); }
+
+// ===== Свайп между вкладками (горизонтальный) =====
+let _swipe=null;
+function _inHScroller(el){
+  // не листаем, если жест начался на горизонтально-скроллируемом/интерактивном элементе
+  for(let n=el; n && n!==document.body && n!==document.documentElement; n=n.parentElement){
+    if(!n.classList) continue;
+    if(n.classList.contains('filt')||n.classList.contains('heat-wrap')||n.classList.contains('heat')) return true;
+    if(n.tagName==='svg' && n.hasAttribute('data-line')) return true;        // графики с тултипом
+    if(n.tagName==='INPUT'||n.tagName==='SELECT'||n.tagName==='TEXTAREA') return true;
+    try{ const st=getComputedStyle(n);
+      if((st.overflowX==='auto'||st.overflowX==='scroll') && n.scrollWidth>n.clientWidth+4) return true;
+    }catch(e){}
+  }
+  return false;
+}
+function swipeTab(t,dir){
+  tab(t);
+  const el=document.getElementById('v-'+t);
+  if(el){ el.style.animation='none'; el.offsetHeight;
+    el.style.animation=(dir==='left'?'slideInL':'slideInR')+' .22s ease'; }
+}
+document.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1){ _swipe=null; return; }
+  const ov=document.getElementById('ov');
+  if(ov && getComputedStyle(ov).display!=='none'){ _swipe=null; return; }   // открыта шторка
+  if(_inHScroller(e.target)){ _swipe=null; return; }
+  const t=e.touches[0];
+  _swipe={x:t.clientX,y:t.clientY,t:Date.now()};
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(!_swipe) return; const s=_swipe; _swipe=null;
+  const t=e.changedTouches[0];
+  const dx=t.clientX-s.x, dy=t.clientY-s.y, dt=Date.now()-s.t;
+  if(dt>700) return;                            // слишком медленно — не свайп
+  if(Math.abs(dx)<60) return;                   // слишком короткий
+  if(Math.abs(dx)<Math.abs(dy)*1.7) return;     // вертикальная составляющая велика
+  const i=TABS.indexOf(_tab);
+  if(dx<0 && i<TABS.length-1) swipeTab(TABS[i+1],'left');
+  else if(dx>0 && i>0) swipeTab(TABS[i-1],'right');
+},{passive:true});
 
 function barChart(data, w=330, h=144){
   const max=Math.max(1,...data.map(d=>d.spent));
