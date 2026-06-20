@@ -11,6 +11,9 @@
   :root{
     --bg:#f3f4f6; --card:#ffffff; --ink:#1b1c20; --text:#15161a; --muted:#8b909a;
     --line:#eceef1; --green:#18c171; --red:#ff4d54;
+    /* Telegram safe area (fullscreen / иконка на раб. столе): телеграм рисует
+       свои кнопки сверху — отступаем на эту зону. По умолчанию 0 (обычный режим). */
+    --safe-top:0px; --safe-bottom:0px; --safe-left:0px; --safe-right:0px;
   }
   html.dark{
     --bg:#15161a; --card:#1e2026; --ink:#f3f4f6; --text:#f3f4f6; --muted:#8b909a;
@@ -28,7 +31,7 @@
   html,body{margin:0;background:var(--bg);color:var(--text);
     font-family:'Inter',-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
     letter-spacing:-.1px}
-  body{padding:14px 14px 96px}
+  body{padding:calc(14px + var(--safe-top)) calc(14px + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(14px + var(--safe-left))}
   .muted{color:var(--muted)}
   .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
   .head .hi{font-size:15px;font-weight:600}
@@ -73,7 +76,7 @@
   .row.rev{box-shadow:inset 3px 0 0 #ff8a3d}
   .cbx{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;background:#fff}
   .cbx.on{background:var(--ink);border-color:var(--ink);color:#fff}
-  .fab{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:#fff;border:none;border-radius:14px;padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.22);cursor:pointer;z-index:55;display:flex;align-items:center;gap:8px}
+  .fab{position:fixed;left:50%;bottom:calc(80px + var(--safe-bottom));transform:translateX(-50%);background:var(--ink);color:#fff;border:none;border-radius:14px;padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.22);cursor:pointer;z-index:55;display:flex;align-items:center;gap:8px}
   .num{width:118px;background:var(--bg);border:1.5px solid transparent;border-radius:12px;color:var(--text);
     font-size:15px;font-weight:700;text-align:right;padding:9px 11px}
   .num:focus{border-color:var(--ink);outline:none}
@@ -101,7 +104,7 @@
   .empty .ttl{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
   .loader{text-align:center;color:var(--muted);padding:70px 0}
   .err{color:var(--red);text-align:center;padding:40px 16px}
-  .nav{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:2px;
+  .nav{position:fixed;left:50%;bottom:calc(14px + var(--safe-bottom));transform:translateX(-50%);display:flex;gap:2px;
     background:var(--ink);border-radius:20px;padding:5px;box-shadow:0 10px 30px rgba(0,0,0,.22)}
   .nav button{background:none;border:none;color:#9a9ea8;display:flex;flex-direction:column;align-items:center;gap:3px;
     padding:7px 9px;border-radius:14px;cursor:pointer}
@@ -117,11 +120,11 @@
   .srch:focus-within{border-color:var(--ink)}
   .srch input{flex:1;background:none;border:none;padding:11px 0;font-size:15px;color:var(--text);outline:none}
   .srch svg{color:var(--muted);flex:none}
-  .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff;
+  .toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-bottom));transform:translateX(-50%);background:var(--ink);color:#fff;
     padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
   .toast.show{opacity:1}
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;z-index:50}
-  .sheet{background:var(--card);width:100%;border-radius:24px 24px 0 0;padding:18px 16px 30px;max-height:82vh;overflow:auto}
+  .sheet{background:var(--card);width:100%;border-radius:24px 24px 0 0;padding:18px 16px calc(30px + var(--safe-bottom));max-height:calc(82vh - var(--safe-top));overflow:auto}
   .sheeth{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
   .drow{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
   .drow:last-child{border-bottom:none}
@@ -151,7 +154,7 @@
   .skel-row{height:56px;border-radius:16px;margin-bottom:8px}
   .skel-h2{height:14px;width:40%;margin:22px 4px 14px}
   /* глобальный FAB «+» — quick add */
-  .fab-add{position:fixed;right:18px;bottom:84px;width:54px;height:54px;border-radius:18px;border:none;
+  .fab-add{position:fixed;right:calc(18px + var(--safe-right));bottom:calc(84px + var(--safe-bottom));width:54px;height:54px;border-radius:18px;border:none;
     background:var(--ink);color:#fff;box-shadow:0 12px 26px rgba(0,0,0,.25);cursor:pointer;
     display:flex;align-items:center;justify-content:center;z-index:45;transition:transform .22s ease, opacity .22s ease}
   .fab-add:active{transform:scale(.92)}
@@ -202,6 +205,27 @@ function applyTheme(){
 }
 applyTheme();
 try{ tg?.ready(); tg?.expand(); }catch(e){}
+
+// ===== Safe area: в fullscreen (иконка на раб. столе) Telegram рисует свои
+// кнопки поверх верха. Отступаем на device safe area + content safe area. =====
+function applySafeArea(){
+  try{
+    const sa = tg?.safeAreaInset || {};
+    const csa = tg?.contentSafeAreaInset || {};
+    const r = document.documentElement.style;
+    r.setProperty('--safe-top', ((sa.top||0)+(csa.top||0))+'px');
+    r.setProperty('--safe-bottom', ((sa.bottom||0)+(csa.bottom||0))+'px');
+    r.setProperty('--safe-left', ((sa.left||0)+(csa.left||0))+'px');
+    r.setProperty('--safe-right', ((sa.right||0)+(csa.right||0))+'px');
+  }catch(e){}
+}
+applySafeArea();
+try{
+  tg?.onEvent('safeAreaChanged', applySafeArea);
+  tg?.onEvent('contentSafeAreaChanged', applySafeArea);
+  tg?.onEvent('fullscreenChanged', applySafeArea);
+  tg?.onEvent('viewportChanged', applySafeArea);
+}catch(e){}
 
 // ===== Семья: настраиваемый список владельцев счетов/доходов =====
 let _family=[{key:'me',name:'Я',core:true},{key:'wife',name:'Жена',core:true}];
