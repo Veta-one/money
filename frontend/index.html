@@ -983,7 +983,7 @@ function renderFireCard(fr, fc){
               <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:10px 0 2px"><span>Доходность (номинал, %/год)</span><b id="wi-ret-lbl" style="color:var(--text)">${fc.nominal_return_pct}%</b></div>
               <input id="wi-ret" type="range" min="0" max="25" step="0.5" value="${fc.nominal_return_pct}" oninput="whatIf()" style="width:100%">
               <div id="wi-note" style="font-size:12.5px;margin-top:10px;line-height:1.4"></div>
-              <button class="chip" style="margin-top:10px" onclick="whatIfReset()">Сбросить к текущему</button>
+              <button class="btn" style="margin-top:10px" onclick="whatIfReset()">Сбросить к текущему</button>
             </div>
           </details>
         </div>`;
