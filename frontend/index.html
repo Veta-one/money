@@ -740,6 +740,31 @@ function stackChart(series){
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${svg}</svg>
     <div style="display:flex;gap:12px;justify-content:center;margin-top:6px;flex-wrap:wrap">${legend}</div>`;
 }
+// Норма сбережений по месяцам: бары (% отложено) + пунктир средней
+function savingsRateChart(sv){
+  const pts=sv.points||[]; if(pts.filter(p=>p.rate!=null).length<2) return '';
+  const w=330,h=140,padT=16,padB=22,padL=6,padR=6;
+  const rs=pts.map(p=>p.rate==null?0:p.rate);
+  const maxR=Math.max(40,...rs), minR=Math.min(0,...rs), rng=(maxR-minR)||1;
+  const n=pts.length, gap=4, bw=(w-padL-padR-gap*(n-1))/n;
+  const Y=v=>padT+(1-(v-minR)/rng)*(h-padT-padB);
+  const zeroY=Y(0);
+  let s='';
+  pts.forEach((p,i)=>{
+    const x=padL+i*(bw+gap), mLbl=_monShort(p.ym);
+    if(p.rate==null){ s+=`<rect x="${x.toFixed(1)}" y="${(zeroY-1).toFixed(1)}" width="${bw.toFixed(1)}" height="2" fill="var(--line)"/>`;
+      s+=`<text x="${(x+bw/2).toFixed(1)}" y="${h-7}" text-anchor="middle" font-size="9" fill="#8b909a">${mLbl}</text>`; return; }
+    const y=Y(p.rate), top=p.rate>=0?y:zeroY, barH=Math.max(2,Math.abs(zeroY-y));
+    const col=p.rate>=30?'#18c171':p.rate>=10?'var(--ink)':p.rate>=0?'#ff8a3d':'var(--red)';
+    const tip=`<div style="color:#a9adb6;font-size:11px">${mLbl}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${p.rate}% отложено</div><div style="color:#a9adb6;font-size:11px;margin-top:2px">+${fmt(p.income)} − ${fmt(p.expense)} = ${p.saved>=0?'+':'−'}${fmt(Math.abs(p.saved))} ₽</div>`;
+    s+=`<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${col}" data-tip='${tip.replace(/'/g,"&#39;")}'/>`;
+    s+=`<text x="${(x+bw/2).toFixed(1)}" y="${h-7}" text-anchor="middle" font-size="9" fill="#8b909a">${mLbl}</text>`;
+  });
+  const avgY=Y(sv.avg||0);
+  s+=`<line x1="${padL}" y1="${avgY.toFixed(1)}" x2="${w-padR}" y2="${avgY.toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4 3" opacity=".55"/>`;
+  s+=`<text x="${w-padR-2}" y="${(avgY-3).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--muted)" font-weight="700">среднее ${sv.avg}%</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">${s}</svg>`;
+}
 function rateChartCard(fxh, label){
   const pts=(fxh&&fxh.points)||[]; if(pts.length<2) return '';
   const vals=pts.map(p=>p.rate), min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
@@ -934,15 +959,28 @@ function renderFireCard(fr, fc){
         </div>`;
       })()}
       ${fc&&(fc.points||[]).length>=2?(()=>{
+        window._fc=fc;
         const endYear=new Date().getFullYear()+fc.years;
         const isPension=fr.years_to_retire>0 && Math.abs(fc.years - (fr.years_to_retire+5))<=1;
         const sub=isPension?`до пенсии (${endYear})`:`до ${endYear}`;
+        const maxSave=Math.max(150000, Math.round((fc.monthly_savings||0)*3/10000)*10000);
         return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
           <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
             <div style="font-size:14px;font-weight:700;letter-spacing:-.2px">Прогноз капитала</div>
             <div style="font-size:11px;color:var(--muted)">${fc.years} ${_plural(fc.years,['год','года','лет'])} · ${sub}</div>
           </div>
-          ${forecastChart(fc)}
+          <div id="fc-wrap">${forecastChart(fc)}</div>
+          <details style="margin-top:10px" ontoggle="if(this.open)whatIfReset()">
+            <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:4px 2px">Что если… — поиграть с цифрами</summary>
+            <div style="padding:8px 2px 2px">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:2px"><span>Откладываю</span><b id="wi-save-lbl" style="color:var(--text)">${_fmtBig(fc.monthly_savings)} ₽/мес</b></div>
+              <input id="wi-save" type="range" min="0" max="${maxSave}" step="5000" value="${fc.monthly_savings||0}" oninput="whatIf()" style="width:100%">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:8px 0 2px"><span>Доходность (номинал)</span><b id="wi-ret-lbl" style="color:var(--text)">${fc.nominal_return_pct}%</b></div>
+              <input id="wi-ret" type="range" min="0" max="25" step="0.5" value="${fc.nominal_return_pct}" oninput="whatIf()" style="width:100%">
+              <div id="wi-note" style="font-size:12px;margin-top:8px;line-height:1.4"></div>
+              <button class="chip" style="margin-top:8px" onclick="whatIfReset()">Сбросить к текущему</button>
+            </div>
+          </details>
         </div>`;
       })():''}
       <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.4;opacity:.65">Прогноз ≠ план. Пересматривай раз в год.</div>
@@ -956,6 +994,43 @@ function renderAllocDrift(al){
       <span>цель: <b style="color:var(--text);font-weight:600">${al.target_rub}% / ${al.target_usd}%</b></span>
       <span>факт: <b style="color:var(--text);font-weight:600">${al.actual_rub}% / ${al.actual_usd}%</b></span></div>
     <div style="margin-top:6px;color:${col};font-size:11px;line-height:1.35">${al.drift_pct>=0?'+':''}${al.drift_pct}% по USD · ${al.advice}</div></div>`;
+}
+// What-if: пересчёт прогноза на фронте (формула FV аннуитета, помесячно)
+function _recalcPoints(cap0, monthly, realPct, years){
+  const r_m=realPct/100/12; let cap=cap0; const base=new Date(); const out=[];
+  for(let m=0;m<=years*12;m++){
+    if(m===0||m%12===0){ const d=new Date(base.getFullYear(), base.getMonth()+m, 1);
+      out.push({month:m, year_offset:Math.round(m/12), value:Math.round(cap), date:d.toISOString().slice(0,10)}); }
+    cap=cap*(1+r_m)+monthly;
+  }
+  return out;
+}
+function whatIf(){
+  const fc=window._fc; if(!fc) return;
+  const monthly=+(document.getElementById('wi-save')||{}).value||0;
+  const nominal=+(document.getElementById('wi-ret')||{}).value||0;
+  const real=nominal-(fc.inflation_pct||0);
+  const cap0=(fc.points[0]||{}).value||0;
+  const fcMod=Object.assign({}, fc);
+  fcMod.points=_recalcPoints(cap0, monthly, real, fc.years);
+  fcMod.points_fact=_recalcPoints(cap0, monthly, (fc.fact_real_return_pct!=null?fc.fact_real_return_pct:real), fc.years);
+  fcMod.real_return_pct=Math.round(real*10)/10;
+  fcMod.monthly_savings=monthly;
+  const wrap=document.getElementById('fc-wrap'); if(wrap) wrap.innerHTML=forecastChart(fcMod);
+  const sl=document.getElementById('wi-save-lbl'); if(sl) sl.textContent=_fmtBig(monthly)+' ₽/мес';
+  const rl=document.getElementById('wi-ret-lbl'); if(rl) rl.textContent=nominal+'%';
+  const endBase=(fc.points[fc.points.length-1]||{}).value||0;
+  const endNew=(fcMod.points[fcMod.points.length-1]||{}).value||0;
+  const diff=endNew-endBase;
+  const note=document.getElementById('wi-note');
+  if(note) note.innerHTML=`Через ${fc.years} ${_plural(fc.years,['год','года','лет'])}: <b>${_fmtBig(endNew)} ₽</b>`+
+    (Math.abs(diff)>=1000?` <span style="color:${diff>0?'var(--green)':'var(--red)'};font-weight:700">${diff>0?'+':'−'}${_fmtBig(Math.abs(diff))} к текущему плану</span>`:' <span class="muted">= текущий план</span>');
+}
+function whatIfReset(){
+  const fc=window._fc; if(!fc) return;
+  const s=document.getElementById('wi-save'), r=document.getElementById('wi-ret');
+  if(s) s.value=fc.monthly_savings||0; if(r) r.value=fc.nominal_return_pct||0;
+  whatIf();
 }
 function forecastChart(fc){
   const pts=(fc.points||[]).filter(p=>p.year_offset!==undefined); if(pts.length<2) return '';
@@ -1983,7 +2058,7 @@ async function saveTx(){
 // ---- аналитика ----
 async function loadAnalytics(){
   try{
-    const [d,b,ch,hm,fr]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup'), api('/api/heatmap?days=180').catch(()=>({points:[]})), api('/api/fire').catch(()=>null)]);
+    const [d,b,ch,hm,fr,sv,mr]=await Promise.all([api('/api/analytics?period='+_anPeriod), api('/api/budgets'), api('/api/checkup'), api('/api/heatmap?days=180').catch(()=>({points:[]})), api('/api/fire').catch(()=>null), api('/api/savings/history?months=12').catch(()=>null), api('/api/month-review').catch(()=>null)]);
     _bud=b.items||[];
     const t=d.totals||{}, cf=d.cashflow||[], cmp=d.compare||[], bc=d.by_category||[], tm=d.top_merchants||[], subs=d.subscriptions||{items:[]};
     const pc=(v,l)=>`<button class="chip${_anPeriod===v?' on':''}" onclick="setAnPeriod('${v}')">${l}</button>`;
@@ -2018,10 +2093,31 @@ async function loadAnalytics(){
     const insIcon={anomaly:'flame',velocity:'chart',biggest:'coin',sub_stale:'tv',sub_hike:'tv',goal_pace:'target',bills:'receipt'};
     const insHtml=(ch.insights||[]).length?`<h2>Что я заметил</h2>`+(ch.insights||[]).map(it=>{const col=it.l==='bad'?'var(--red)':it.l==='good'?'var(--green)':it.l==='warn'?'#ff8a3d':'#2f8bff';return `<div class="row" style="align-items:flex-start;padding:14px"><div class="sq" style="background:${tint(col)};color:${col}">${icon(insIcon[it.kind]||'tag',20)}</div>
       <div class="mid"><div class="t1">${it.title}</div><div class="t2" style="white-space:normal;line-height:1.45">${it.text}</div></div></div>`}).join(''):'';
+    const reviewHtml = mr ? (()=>{
+      const mname=new Date(mr.month+'-01').toLocaleDateString('ru-RU',{month:'long'});
+      const expCol=mr.exp_delta_pct==null?'var(--muted)':mr.exp_delta_pct>0?'var(--red)':'var(--green)';
+      return `<div class="card" style="margin-top:6px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:14px;font-weight:700">Разбор месяца</div>
+          <div class="t2" style="color:var(--muted)">${mname}, к ${mr.day}-му</div></div>
+        <div class="grid2" style="margin-top:10px;gap:8px">
+          <div style="background:var(--bg);border-radius:12px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Отложено</div>
+            <div style="display:flex;align-items:baseline;gap:4px;margin-top:3px"><span style="font-size:19px;font-weight:800;color:${mr.saved>=0?'var(--green)':'var(--red)'}">${mr.saved>=0?'+':'−'}${_fmtBig(Math.abs(mr.saved))}</span><span style="font-size:11px;color:var(--muted)">${CUR}${mr.rate!=null?' · '+mr.rate+'%':''}</span></div></div>
+          <div style="background:var(--bg);border-radius:12px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Расход</div>
+            <div style="display:flex;align-items:baseline;gap:4px;margin-top:3px"><span style="font-size:19px;font-weight:800">${_fmtBig(mr.expense)}</span><span style="font-size:11px;color:${expCol}">${CUR}${mr.exp_delta_pct!=null?' · '+(mr.exp_delta_pct>0?'+':'')+mr.exp_delta_pct+'%':''}</span></div></div>
+        </div>
+        ${(mr.top_cat||mr.biggest)?`<div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.5">${mr.top_cat?`Больше всего на <b style="color:var(--text)">${mr.top_cat.name}</b> — ${_fmtBig(mr.top_cat.sum)} ${CUR}. `:''}${mr.biggest?`Крупнейшая: <b style="color:var(--text)">${mr.biggest.merchant}</b> ${_fmtBig(mr.biggest.sum)} ${CUR}.`:''}</div>`:''}
+        ${mr.exp_delta_pct!=null?`<div style="margin-top:6px;font-size:12px;color:${expCol};font-weight:600">${mr.exp_delta_pct>0?'Темп трат выше прошлого месяца на эту дату':mr.exp_delta_pct<0?'Темп трат ниже прошлого месяца — хорошо':'Темп как в прошлом месяце'}</div>`:''}
+      </div>`;
+    })() : '';
     document.getElementById('v-analytics').innerHTML=`
       <div class="head"><div class="hi">Аналитика</div></div>
+      ${reviewHtml}
       <h2 style="margin-top:6px">Финансовое здоровье</h2>
       ${chHtml}
+      ${(sv&&(sv.points||[]).filter(p=>p.rate!=null).length>=2)?`<h2>Норма сбережений по месяцам</h2><div class="chartcard">${savingsRateChart(sv)}</div>`:''}
       ${(hm.points||[]).length?`<h2>Календарь трат</h2>${hmap(hm,{days:180})}`:''}
       ${insHtml}
       <h2>Бюджет · ${new Date(b.month+'-01').toLocaleDateString('ru-RU',{month:'long'})}</h2>

@@ -25,9 +25,9 @@ from .migrations import run_migrations
 from .security import current_user
 from .services.ai_chat import ask as ai_ask
 from .services.alerts import fns_refresh_job, nudge_job
-from .services.analytics import analytics_overview
+from .services.analytics import analytics_overview, month_review
 from .services.fire import (allocation_target, fire_metrics, net_worth_forecast,
-                             rolling_savings_rate)
+                             rolling_savings_rate, savings_rate_series)
 from .services.backup import make_and_send_backup
 from .services.budget import budget_overview
 from .services.capital import capital_overview
@@ -150,6 +150,12 @@ async def trends(user: dict = Depends(current_user), db: Session = Depends(get_s
 async def analytics(period: str = "month", user: dict = Depends(current_user),
                     db: Session = Depends(get_session)):
     return analytics_overview(db, period)
+
+
+@app.get("/api/month-review")
+async def month_review_ep(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    """Итоги текущего месяца для карточки «Разбор месяца»."""
+    return month_review(db)
 
 
 @app.get("/api/checkup")
@@ -294,6 +300,13 @@ async def forecast(years: int | None = None, user: dict = Depends(current_user),
                     db: Session = Depends(get_session)):
     """Прогноз net worth на N лет. Если years не задан — горизонт = до пенсии + 5 (≥20)."""
     return net_worth_forecast(db, years)
+
+
+@app.get("/api/savings/history")
+async def savings_history(months: int = 12, user: dict = Depends(current_user),
+                          db: Session = Depends(get_session)):
+    """Помесячная норма сбережений (для графика дисциплины во времени)."""
+    return savings_rate_series(db, months)
 
 
 class AskIn(BaseModel):

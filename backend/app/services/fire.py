@@ -335,6 +335,42 @@ def rolling_savings_rate(db: Session) -> dict:
     return out
 
 
+def savings_rate_series(db: Session, months: int = 12) -> dict:
+    """Помесячная норма сбережений: за каждый месяц (доход−расход)/доход.
+
+    Для графика дисциплины во времени. Норма от ФАКТА (по транзакциям); месяцы
+    без дохода в выписке (доход минует банк) дают rate=null — на графике пропуск.
+    """
+    months = max(3, min(int(months), 24))
+    now = datetime.now()
+    keys: list[tuple[int, int]] = []
+    y, m = now.year, now.month
+    for _ in range(months):
+        keys.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    keys.reverse()
+    pts = []
+    for (yy, mm) in keys:
+        start = datetime(yy, mm, 1)
+        end = start + relativedelta(months=1)
+        inc = float(db.query(func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0))
+                    .filter(models.Transaction.type == "income",
+                            models.Transaction.datetime >= start,
+                            models.Transaction.datetime < end).scalar() or 0.0)
+        exp = float(db.query(func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0))
+                    .filter(models.Transaction.type == "expense",
+                            models.Transaction.datetime >= start,
+                            models.Transaction.datetime < end).scalar() or 0.0)
+        rate = round((inc - exp) / inc * 100) if inc > 0 else None
+        pts.append({"ym": f"{yy}-{mm:02d}", "income": round(inc), "expense": round(exp),
+                    "saved": round(inc - exp), "rate": rate})
+    rated = [p["rate"] for p in pts if p["rate"] is not None]
+    avg = round(sum(rated) / len(rated)) if rated else 0
+    return {"points": pts, "avg": avg, "months": months}
+
+
 def allocation_target(db: Session) -> dict:
     """Дрейф фактической валютной аллокации от целевой."""
     target_rub = float(get_setting(db, "target_alloc_rub") or 70.0)

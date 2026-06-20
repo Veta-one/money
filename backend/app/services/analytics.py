@@ -50,6 +50,56 @@ def _totals(db: Session, start: datetime, end: datetime) -> dict:
             "savings_rate": round(net / inc * 100) if inc > 0 else 0}
 
 
+def month_review(db: Session) -> dict:
+    """Итоги текущего месяца + честное сравнение с прошлым «к этому же дню».
+
+    Текущий месяц неполный, поэтому прошлый берём по тот же день месяца —
+    сравнение темпа, а не полного объёма. Топ-категория, крупнейшая трата,
+    норма сбережений, дельта расхода к прошлому.
+    """
+    now = datetime.now()
+    day = now.day
+    cur_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    prev_start = cur_start - relativedelta(months=1)
+    prev_cut = min(prev_start + relativedelta(days=day), cur_start)   # тот же день прошлого месяца
+
+    def s(t: str, a: datetime, b: datetime) -> float:
+        return float(db.query(func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0))
+                     .filter(models.Transaction.type == t,
+                             models.Transaction.datetime >= a,
+                             models.Transaction.datetime < b).scalar() or 0.0)
+
+    cur_inc, cur_exp = s("income", cur_start, now), s("expense", cur_start, now)
+    prev_exp = s("expense", prev_start, prev_cut)
+    saved = round(cur_inc - cur_exp, 2)
+    rate = round((cur_inc - cur_exp) / cur_inc * 100) if cur_inc > 0 else None
+    exp_delta_pct = round((cur_exp - prev_exp) / prev_exp * 100) if prev_exp > 0 else None
+
+    # топ-категория расходов месяца
+    top_rows = (db.query(models.Category.name,
+                         func.coalesce(func.sum(models.Transaction.base_amount_rub), 0.0).label("s"))
+                .join(models.Transaction, models.Transaction.category_id == models.Category.id)
+                .filter(models.Transaction.type == "expense",
+                        models.Transaction.datetime >= cur_start,
+                        models.Transaction.datetime < now)
+                .group_by(models.Category.name).order_by(func.sum(models.Transaction.base_amount_rub).desc())
+                .limit(1).all())
+    top_cat = ({"name": top_rows[0][0], "sum": round(float(top_rows[0][1]), 2)} if top_rows else None)
+
+    # крупнейшая трата месяца
+    big = (db.query(models.Transaction)
+           .filter(models.Transaction.type == "expense",
+                   models.Transaction.datetime >= cur_start,
+                   models.Transaction.datetime < now)
+           .order_by(models.Transaction.base_amount_rub.desc()).first())
+    biggest = ({"merchant": (big.merchant or "—"), "sum": round(big.base_amount_rub or 0, 2)} if big else None)
+
+    return {"month": cur_start.strftime("%Y-%m"), "day": day,
+            "income": round(cur_inc, 2), "expense": round(cur_exp, 2),
+            "saved": saved, "rate": rate, "exp_delta_pct": exp_delta_pct,
+            "top_cat": top_cat, "biggest": biggest}
+
+
 def cashflow_series(db: Session, months: int) -> list[dict]:
     now = datetime.now()
     cur = datetime(now.year, now.month, 1)
