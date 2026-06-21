@@ -37,19 +37,20 @@
     body{max-width:480px;margin-left:auto;margin-right:auto}
     .fab-add{right:calc(50vw - 240px + 18px)}
   }
-  /* ≥900px — блоки в 2 колонки (masonry через CSS multi-column), меньше скролла */
+  /* ≥900px — секции (заголовок+карточки) раскладываются в колонки masonry-стилем
+     (multi-column по секциям: целые блоки, заголовки не рвутся, нет дыр по высоте).
+     Группировка в .secwrap>.block делается в JS (gridify), CSS только раскладывает. */
   @media(min-width:900px){
-    body{max-width:940px}
-    [id^="v-"]{column-count:2;column-gap:16px}
-    [id^="v-"]>*{break-inside:avoid;-webkit-column-break-inside:avoid}
-    [id^="v-"]>h2{break-after:avoid-column}
-    .head{column-span:all;-webkit-column-span:all}
+    body{max-width:980px}
+    .secwrap{column-count:2;column-gap:18px}
+    .secwrap>.block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px}
+    .secwrap>.block>h2{margin-top:4px}
     .fab-add{right:24px}
   }
-  /* ≥1300px — три колонки */
-  @media(min-width:1300px){
-    body{max-width:1280px}
-    [id^="v-"]{column-count:3}
+  /* ≥1320px — три колонки */
+  @media(min-width:1320px){
+    body{max-width:1320px}
+    .secwrap{column-count:3}
   }
   .muted{color:var(--muted)}
   .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
@@ -624,6 +625,33 @@ function refreshActive(){
   const r=fn(); const el=document.getElementById('v-'+_tab);
   Promise.resolve(r).then(()=>{ if(el) el.dataset.loaded='1'; }).catch(()=>{});
 }
+
+// ===== Десктоп-раскладка: группировка плоского рендера в секции (.secwrap>.block) =====
+// Каждый loadXxx ставит плоский innerHTML (head + h2 + карточки). Перехватываем
+// через MutationObserver и оборачиваем секции, чтобы CSS multi-column разложил их
+// в колонки на широком экране. На мобиле (<900px) .secwrap не имеет column-count —
+// выглядит идентично плоскому потоку, поэтому группируем всегда.
+function gridify(el){
+  if(!el || el._gridding) return;
+  // уже сгруппировано (есть .secwrap и нет «голых» секционных детей) — пропускаем
+  if([...el.children].some(k=>k.classList&&k.classList.contains('secwrap'))) return;
+  const kids=[...el.children]; if(!kids.length) return;
+  el._gridding=true;
+  const head=kids.find(k=>k.classList&&k.classList.contains('head'));
+  const rest=kids.filter(k=>k!==head);
+  const blocks=[]; let cur=null;
+  for(const k of rest){
+    if(k.tagName==='H2'){ cur=document.createElement('section'); cur.className='block'; blocks.push(cur); }
+    if(!cur){ cur=document.createElement('section'); cur.className='block'; blocks.push(cur); }
+    cur.appendChild(k);
+  }
+  if(head) el.insertBefore(head, el.firstChild);
+  const wrap=document.createElement('div'); wrap.className='secwrap';
+  blocks.forEach(b=>wrap.appendChild(b)); el.appendChild(wrap);
+  el._gridding=false;
+}
+const _gridMO=new MutationObserver(ms=>{ for(const m of ms){ const el=m.target; if(el&&el.id&&/^v-/.test(el.id)&&!el._gridding) gridify(el); } });
+TABS.forEach(t=>{ const el=document.getElementById('v-'+t); if(el) _gridMO.observe(el,{childList:true}); });
 
 // ===== Свайп между вкладками (горизонтальный) =====
 let _swipe=null;
