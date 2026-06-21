@@ -207,11 +207,19 @@
     /* шторки снизу → центрированная модалка */
     .ov{align-items:center;justify-content:center;padding:24px}
     .sheet{max-width:460px;border-radius:20px;max-height:86vh}
+    /* Операции: master-detail (список + панель деталей справа) */
+    #v-ops .ops-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
+    #v-ops .ops-detail{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto}
+    #v-ops .ops-detail-empty{color:var(--muted);text-align:center;padding:48px 16px;font-size:14px;background:var(--card);border-radius:18px}
+    #v-ops .ops-detail .dcard{background:var(--card);border-radius:18px;padding:16px}
+    #v-ops .row.opsel{outline:2px solid var(--ink);outline-offset:-2px}
   }
   @media(min-width:1320px){
     body{max-width:1040px}
     .secwrap{column-count:3}
   }
+  /* на мобиле панель деталей не нужна — детали открываются модалкой */
+  @media(max-width:899px){ #v-ops .ops-detail{display:none} }
 </style>
 </head>
 <body>
@@ -647,6 +655,7 @@ function refreshActive(){
 // выглядит идентично плоскому потоку, поэтому группируем всегда.
 function gridify(el){
   if(!el || el._gridding) return;
+  if(el.id==='v-ops') return;   // у Операций своя раскладка (master-detail), не группируем
   // уже сгруппировано (есть .secwrap и нет «голых» секционных детей) — пропускаем
   if([...el.children].some(k=>k.classList&&k.classList.contains('secwrap'))) return;
   const kids=[...el.children]; if(!kids.length) return;
@@ -1933,7 +1942,8 @@ function txRow(x){
       <div class="mid"><div class="t1">${x.merchant||(x.type==='income'?'Доход':'Операция')}</div><div class="t2">${sub}</div></div>
       <div class="amt ${inn?'inc':'exp'}">${inn?'+':'−'}${fmt(Math.abs(x.amount))} ${x.currency==='RUB'?CUR:x.currency}</div></div>`;
   }
-  return `<div class="row${x.review?' rev':''}" onclick="openTx(${x.id})" style="cursor:pointer">
+  const sel=(typeof _detail!=='undefined'&&_detail&&_detail.id===x.id)?' opsel':'';
+  return `<div class="row${x.review?' rev':''}${sel}" data-txid="${x.id}" onclick="openTx(${x.id})" style="cursor:pointer">
     <div class="sq" style="background:${tint(col)};color:${col}">${icon(ic,20)}</div>
     <div class="mid"><div class="t1">${merchHtml}</div>
     <div class="t2">${sub}</div></div>
@@ -1974,19 +1984,26 @@ function renderOps(){
   const listHtml=o.items.length?groupedTx(o.items):`<div class="empty"><div class="ttl">По фильтрам ничего нет</div>Попробуй сбросить условия или поменять период наверху.</div>`;
   document.getElementById('v-ops').innerHTML=`
     <div class="head"><div class="hi">Операции</div><div class="sub">${o.count} шт.</div></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="chip${_opsFiltOpen?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleFilt()">${icon('filter',16)} Фильтр${nActive?' · '+nActive:''}</button>
-      <button class="chip${_opsBulk?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleBulk()">${icon('list',16)} ${_opsBulk?'Готово':'Выделить'}</button></div>
-    ${drillTag}${merchTag}${panel}
-    <div class="grid2" style="margin-top:0">
-      <div class="card"><div class="k">Расходы</div><div class="v">${fmt(o.se)}<span class="cur">${CUR}</span></div></div>
-      <div class="card"><div class="k">Доходы</div><div class="v" style="color:var(--green)">${fmt(o.si)}<span class="cur">${CUR}</span></div></div></div>
-    ${listHtml}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-bottom:${_opsBulk&&_opsSel.size?'60px':'0'}">
-      ${o.more?`<button class="btn full" onclick="opsMore()">Показать ещё</button>`:''}
-      <button class="btn full" onclick="openTxForm()">Добавить операцию</button></div>
+    <div class="ops-grid">
+     <div class="ops-main">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="chip${_opsFiltOpen?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleFilt()">${icon('filter',16)} Фильтр${nActive?' · '+nActive:''}</button>
+        <button class="chip${_opsBulk?' on':''}" style="display:inline-flex;align-items:center;gap:6px" onclick="opsToggleBulk()">${icon('list',16)} ${_opsBulk?'Готово':'Выделить'}</button></div>
+      ${drillTag}${merchTag}${panel}
+      <div class="grid2" style="margin-top:0">
+        <div class="card"><div class="k">Расходы</div><div class="v">${fmt(o.se)}<span class="cur">${CUR}</span></div></div>
+        <div class="card"><div class="k">Доходы</div><div class="v" style="color:var(--green)">${fmt(o.si)}<span class="cur">${CUR}</span></div></div></div>
+      ${listHtml}
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-bottom:${_opsBulk&&_opsSel.size?'60px':'0'}">
+        ${o.more?`<button class="btn full" onclick="opsMore()">Показать ещё</button>`:''}
+        <button class="btn full" onclick="openTxForm()">Добавить операцию</button></div>
+     </div>
+     <div class="ops-detail" id="ops-detail"><div class="ops-detail-empty">Выбери операцию слева — детали появятся здесь</div></div>
+    </div>
     ${_opsBulk&&_opsSel.size?`<button class="fab" onclick="opsBulkPick()">Назначить категорию · ${_opsSel.size}</button>`:''}`;
+  if(_isDesktop() && _detail) renderDetail(_detail);   // восстановить открытую деталь в панели
 }
+function _isDesktop(){ return window.innerWidth>=900; }
 function opsToggleFilt(){ _opsFiltOpen=!_opsFiltOpen; renderOps(); }
 function applyCatMaps(cats){ for(const c of (cats||[])){ if(c.color) _catColor[c.name]=c.color; if(c.icon) _catIcon[c.name]=c.icon; } }
 async function loadCats(){ const r=await api('/api/categories'); _cats=r.categories||[]; applyCatMaps(_cats); return _cats; }
@@ -2373,10 +2390,27 @@ function renderDetail(d){
     <div class="t2" style="color:var(--muted)">Заметка</div>
     <div style="display:flex;gap:8px"><input id="tx-note" class="inp" placeholder="например: для отчёта…" value="${(d.note||'').replace(/"/g,'&quot;')}" style="flex:1">
       <button class="btn" onclick="saveTxNote(${d.id})">OK</button></div></div>`;
-  document.getElementById('sheet').innerHTML=`<div class="sheeth">
+  // Десктоп + вкладка Операций → детали в боковую панель (master-detail).
+  // Иначе (мобайл или другая вкладка, напр. deep-link) → модалка.
+  const panel = (_isDesktop() && _tab==='ops') ? document.getElementById('ops-detail') : null;
+  const closeBtn = panel
+    ? `<button class="iconbtn" onclick="clearOpsDetail()">${icon('x',18)}</button>`
+    : `<button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button>`;
+  const inner=`<div class="sheeth">
       <div><div class="t1">${d.merchant||'Операция'}</div><div class="t2">${fmt(Math.abs(d.amount))} ${CUR} · ${new Date(d.dt).toLocaleDateString('ru-RU')}</div></div>
-      <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${rows}${reclassifyHtml}${noteHtml}`;
-  document.getElementById('ov').style.display='flex';
+      ${closeBtn}</div>${rows}${reclassifyHtml}${noteHtml}`;
+  if(panel){
+    panel.innerHTML=`<div class="dcard">${inner}</div>`;
+    document.querySelectorAll('#v-ops .row[data-txid]').forEach(r=>r.classList.toggle('opsel', +r.dataset.txid===d.id));
+  } else {
+    document.getElementById('sheet').innerHTML=inner;
+    document.getElementById('ov').style.display='flex';
+  }
+}
+function clearOpsDetail(){
+  _detail=null;
+  const p=document.getElementById('ops-detail');
+  if(p) p.innerHTML=`<div class="ops-detail-empty">Выбери операцию слева — детали появятся здесь</div>`;
 }
 let _rcKind=null;
 function renderReclassifyBlock(d){
