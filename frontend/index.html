@@ -32,10 +32,24 @@
     font-family:'Inter',-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
     letter-spacing:-.1px}
   body{padding:calc(14px + var(--safe-top)) calc(14px + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(14px + var(--safe-left))}
-  /* десктоп/широкий экран (сайт в браузере) — контент колонкой по центру, без спец-вёрстки */
+  /* десктоп/широкий экран (сайт в браузере) — адаптивные колонки, без спец-вёрстки */
   @media(min-width:600px){
     body{max-width:480px;margin-left:auto;margin-right:auto}
     .fab-add{right:calc(50vw - 240px + 18px)}
+  }
+  /* ≥900px — блоки в 2 колонки (masonry через CSS multi-column), меньше скролла */
+  @media(min-width:900px){
+    body{max-width:940px}
+    [id^="v-"]{column-count:2;column-gap:16px}
+    [id^="v-"]>*{break-inside:avoid;-webkit-column-break-inside:avoid}
+    [id^="v-"]>h2{break-after:avoid-column}
+    .head{column-span:all;-webkit-column-span:all}
+    .fab-add{right:24px}
+  }
+  /* ≥1300px — три колонки */
+  @media(min-width:1300px){
+    body{max-width:1280px}
+    [id^="v-"]{column-count:3}
   }
   .muted{color:var(--muted)}
   .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
