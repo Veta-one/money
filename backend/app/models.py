@@ -152,6 +152,22 @@ class Recurring(Base):
     owner: Mapped[str] = mapped_column(String(16), default="me")  # me|wife (для доходов)
 
 
+class IncomeRaise(Base):
+    """Событие изменения зарплаты/дохода по источнику — для калькулятора индексации.
+
+    Хранит историю повышений: дата + новая сумма (в валюте источника). Текущая
+    сумма источника (Recurring.amount) синхронизируется с суммой самого свежего
+    по дате повышения. Калькулятор сравнивает текущую сумму с «инфляционным полом»
+    от даты последнего повышения (валюта берёт свою инфляцию)."""
+    __tablename__ = "income_raises"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recurring_id: Mapped[int] = mapped_column(ForeignKey("recurring.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    amount: Mapped[float] = mapped_column(Float)   # новая сумма ПОСЛЕ повышения, в валюте источника
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Deposit(Base):
     __tablename__ = "deposits"
     id: Mapped[int] = mapped_column(primary_key=True)

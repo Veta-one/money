@@ -818,6 +818,42 @@ async def delete_income(rec_id: int, user: dict = Depends(current_user),
     return {"ok": True}
 
 
+# ---------- калькулятор индексации дохода ----------
+
+class RaiseIn(BaseModel):
+    date: str
+    amount: float
+    note: str | None = None
+
+
+@app.get("/api/income/raises")
+async def income_raises(user: dict = Depends(current_user), db: Session = Depends(get_session)):
+    from .services.salary import income_raises_overview
+    return income_raises_overview(db)
+
+
+@app.post("/api/income/{rec_id}/raise")
+async def income_add_raise(rec_id: int, body: RaiseIn, user: dict = Depends(current_user),
+                           db: Session = Depends(get_session)):
+    from .services.salary import add_raise
+    try:
+        on = date.fromisoformat(body.date)
+    except ValueError:
+        raise HTTPException(400, "bad date")
+    try:
+        return add_raise(db, rec_id, on, body.amount, body.note)
+    except ValueError:
+        raise HTTPException(404, "no source")
+
+
+@app.delete("/api/income/raise/{raise_id}")
+async def income_del_raise(raise_id: int, user: dict = Depends(current_user),
+                           db: Session = Depends(get_session)):
+    from .services.salary import delete_raise
+    delete_raise(db, raise_id)
+    return {"ok": True}
+
+
 # ---------- бюджет по категориям ----------
 
 class BudgetIn(BaseModel):
