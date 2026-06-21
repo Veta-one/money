@@ -41,15 +41,26 @@
      (multi-column по секциям: целые блоки, заголовки не рвутся, нет дыр по высоте).
      Группировка в .secwrap>.block делается в JS (gridify), CSS только раскладывает. */
   @media(min-width:900px){
-    body{max-width:980px}
+    body{max-width:900px;margin-left:236px;margin-right:auto}
     .secwrap{column-count:2;column-gap:18px}
     .secwrap>.block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px}
     .secwrap>.block>h2{margin-top:4px}
-    .fab-add{right:24px}
+    /* нижний таб-бар → боковой sidebar слева */
+    .nav{left:0;top:0;bottom:0;right:auto;transform:none;flex-direction:column;
+      width:212px;border-radius:0;padding:18px 12px;gap:3px;justify-content:flex-start;
+      box-shadow:1px 0 0 var(--line);background:var(--card)}
+    html.dark .nav{background:var(--card)}
+    .nav button{flex-direction:row;justify-content:flex-start;gap:12px;padding:11px 13px;border-radius:12px;color:var(--muted)}
+    .nav button.active{background:var(--bg);color:var(--text)}
+    html.dark .nav button.active{background:#2c2e35}
+    .nav button .lbl{font-size:14px;font-weight:600;letter-spacing:-.1px}
+    .nav button svg{width:21px;height:21px}
+    .nav::before{content:'MONEY';display:block;font-size:18px;font-weight:800;letter-spacing:-.5px;padding:6px 13px 14px;color:var(--text)}
+    .fab-add{right:32px;bottom:32px}
   }
-  /* ≥1320px — три колонки */
+  /* ≥1320px — три колонки контента */
   @media(min-width:1320px){
-    body{max-width:1320px}
+    body{max-width:1040px}
     .secwrap{column-count:3}
   }
   .muted{color:var(--muted)}
