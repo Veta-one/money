@@ -224,7 +224,7 @@ SPEC.md                # исходная спецификация
 
 ## Безопасность
 
-- Аутентификация мини-аппа — Telegram `initData` (HMAC токеном бота, `app/security.py`), **вайтлист одного `OWNER_TG_ID`**; чужим — 401/403.
+- Аутентификация — два пути, оба пускают **только `OWNER_TG_ID`**: (1) Mini App — Telegram `initData` (HMAC токеном бота); (2) браузер на money.vetaone.site — **Telegram Login Widget** (подпись = SHA256(bot_token)) → httponly-cookie с подписанным сессионным токеном (HMAC + срок 30 дней). Всё в `app/security.py`; чужим — 401/403. Для Login Widget домен привязан к боту в @BotFather (`/setdomain`).
 - Webhook — секрет `WEBHOOK_SECRET` (заголовок Telegram).
 - Секреты в `.env` (gitignored). `tokens.json`, БД, фото чеков, референсы — не в гите.
 - Бэкап БД — зашифрован (Fernet, ключ из `BACKUP_PASSPHRASE`), уходит в личку владельца.
