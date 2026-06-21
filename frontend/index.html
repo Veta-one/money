@@ -139,7 +139,7 @@
   .setlist{display:flex;flex-direction:column;gap:4px}
   .setrow{display:flex;align-items:center;gap:12px;background:var(--card);border:none;border-radius:14px;padding:11px 12px;cursor:pointer;width:100%;text-align:left;color:var(--text)}
   .setrow:active{background:var(--bg)}
-  .setrow .ic{width:34px;height:34px;border-radius:10px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:none;color:var(--ink)}
+  .setrow .icbox{width:30px;height:30px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:none;color:var(--ink)}
   .setrow .mid{flex:1;min-width:0}
   .setrow .ttl{font-size:14px;font-weight:600;line-height:1.25}
   .setrow .sub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -329,6 +329,7 @@ const P = {
   bell:'<path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6M9 17v1a3 3 0 0 0 6 0v-1"/>',
   info:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 9h.01M11 12h1v4h1"/>',
   chevright:'<path d="M9 6l6 6l-6 6"/>',
+  chevleft:'<path d="M15 6l-6 6l6 6"/>',
   flag:'<path d="M5 5l0 16M5 5a5 5 0 0 1 7 0a5 5 0 0 0 7 0v9a5 5 0 0 1 -7 0a5 5 0 0 0 -7 0"/>',
   download:'<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2M7 11l5 5l5 -5M12 4l0 12"/>',
   rub:'<path d="M9 4h5.5a4.5 4.5 0 0 1 0 9h-7.5"/><path d="M7 18h7.5"/><path d="M9 20v-16"/>',
@@ -2551,14 +2552,14 @@ let _setCtx={};   // кешируем данные для саб-страниц
 function setNav(p){ _setPath=p; openSettings(); }
 function setHeader(title, sub, back){
   return `<div class="sheeth">
-    ${back?`<button class="iconbtn" onclick="setNav('root')">${icon('chev',18)}</button>`:''}
+    ${back?`<button class="iconbtn" onclick="setNav('root')">${icon('chevleft',18)}</button>`:''}
     <div style="flex:1;min-width:0"><div class="t1">${title}</div>${sub?`<div class="t2" style="color:var(--muted);margin-top:2px">${sub}</div>`:''}</div>
     <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button>
   </div>`;
 }
 function navRow(ic, ttl, sub, fn){
   return `<button class="setrow" onclick="${fn}">
-    <div class="ic">${icon(ic,18)}</div>
+    <div class="icbox">${icon(ic,17)}</div>
     <div class="mid"><div class="ttl">${ttl}</div><div class="sub">${sub||''}</div></div>
     <div class="chev">${icon('chevright',16)}</div></button>`;
 }
@@ -2622,7 +2623,7 @@ async function openSettings(){
   } else if(_setPath==='theme'){
     sheet.innerHTML=setHeader('Тема','Светлая, тёмная или авто', true)+`
       <div class="setlist">
-        ${['auto','Авто (по системе)','light','Светлая','dark','Тёмная'].reduce((a,_,i,r)=>{ if(i%2)return a; const v=r[i],l=r[i+1]; return a+`<button class="setrow" onclick="setTheme('${v}');setNav('theme')"><div class="ic">${icon('sparkle',18)}</div><div class="mid"><div class="ttl">${l}</div></div>${_themePref===v?'<div style="color:var(--green);font-weight:800">✓</div>':''}</button>`; },'')}
+        ${['auto','Авто (по системе)','light','Светлая','dark','Тёмная'].reduce((a,_,i,r)=>{ if(i%2)return a; const v=r[i],l=r[i+1]; return a+`<button class="setrow" onclick="setTheme('${v}');setNav('theme')"><div class="icbox">${icon('sparkle',17)}</div><div class="mid"><div class="ttl">${l}</div></div>${_themePref===v?'<div style="color:var(--green);font-weight:800">✓</div>':''}</button>`; },'')}
       </div>`;
   } else if(_setPath==='data'){
     sheet.innerHTML=setHeader('Данные','Чеки, экспорт, бэкап', true)+`
