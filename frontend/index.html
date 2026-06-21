@@ -2827,8 +2827,9 @@ async function renderSetGoals(){
   try{ fire=await api('/api/fire'); cap=await api('/api/capital'); }catch(e){}
   const tgt=cap.target||0, em=cap.emergency||{};
   const inflGet=async k=>{try{return (await api('/api/kv/'+k)).value||''}catch(e){return ''}};
-  const [inf,nom,exp,alc,yrs] = await Promise.all([
-    inflGet('fire_inflation'),inflGet('fire_nominal_return'),inflGet('fire_fi_expenses'),
+  const [inf,nom,infUsd,nomUsd,exp,alc,yrs] = await Promise.all([
+    inflGet('fire_inflation'),inflGet('fire_nominal_return'),
+    inflGet('fire_inflation_usd'),inflGet('fire_nominal_usd'),inflGet('fire_fi_expenses'),
     inflGet('target_alloc_rub'),inflGet('fire_years_to_retire')]);
   const emTgt=await inflGet('emergency_target_months');
   sheet.innerHTML=setHeader('Финансовые цели','Капитал, FIRE, подушка', true)+`
@@ -2840,10 +2841,14 @@ async function renderSetGoals(){
     <div class="sec-head">Параметры FIRE</div>
     <div class="card">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Инфляция %</div>
-          <input id="g-inf" class="inp" type="number" step="0.1" inputmode="decimal" value="${inf}"></div>
-        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Доходность ном. %</div>
-          <input id="g-nom" class="inp" type="number" step="0.1" inputmode="decimal" value="${nom}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Инфляция ₽ %</div>
+          <input id="g-inf" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="8" value="${inf}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Доходность ₽ ном. %</div>
+          <input id="g-nom" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="12" value="${nom}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Инфляция $ %</div>
+          <input id="g-infusd" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="2.5" value="${infUsd}"></div>
+        <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Доходность $ ном. %</div>
+          <input id="g-nomusd" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="7" value="${nomUsd}"></div>
         <div><div class="t2" style="color:var(--muted);margin-bottom:4px">FI-расход ₽/год</div>
           <input id="g-exp" class="inp" type="number" inputmode="decimal" placeholder="из факта" value="${exp}"></div>
         <div><div class="t2" style="color:var(--muted);margin-bottom:4px">Лет до пенсии</div>
@@ -2858,7 +2863,7 @@ async function renderSetGoals(){
       <div style="display:flex;gap:8px"><input id="g-em" class="inp" type="number" inputmode="decimal" value="${emTgt||'6'}" style="flex:1">
         <button class="btn" onclick="saveGoalsAll()">Сохранить всё</button></div>
       <div class="t2" style="color:var(--muted);margin-top:8px">Сейчас: <b>${em.months||'—'}</b> мес ликвидных средств</div></div>
-    <div class="sethint">Инфляция 8% и номинал. 12% дают реальную доходность 4% — РФ-сценарий. Сценарии в карточке FIRE считаются как годовые_расходы / SWR (2/3/4%).</div>`;
+    <div class="sethint">Реальная доходность считается отдельно по валютам: рублёвая часть капитала под ₽-инфляцию (~8%) и ₽-номинал (~12%) = 4% real, долларовая (USDT/крипта) под $-инфляцию (~2.5%) и $-номинал (~7%) = 4.5% real. Итог взвешивается по долям — доллары больше не «штрафуются» рублёвой инфляцией. Сценарии FIRE = годовые_расходы / SWR (2/3/4%).</div>`;
 }
 async function saveGoalTarget(){
   try{ const v=parseFloat(document.getElementById('g-tgt').value)||0;
@@ -2871,6 +2876,7 @@ async function saveGoalsAll(){
     await api('/api/capital/target',{method:'POST',body:JSON.stringify({target:tgt})});
     const pairs=[
       ['fire_inflation','g-inf'],['fire_nominal_return','g-nom'],
+      ['fire_inflation_usd','g-infusd'],['fire_nominal_usd','g-nomusd'],
       ['fire_fi_expenses','g-exp'],['target_alloc_rub','g-alc'],
       ['fire_years_to_retire','g-yrs'],['emergency_target_months','g-em']];
     for(const [k,id] of pairs){

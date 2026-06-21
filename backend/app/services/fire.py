@@ -131,6 +131,11 @@ def _params(db: Session) -> dict:
     return {
         "inflation": float(get_setting(db, "fire_inflation") or 8.0) / 100.0,
         "nominal": float(get_setting(db, "fire_nominal_return") or 12.0) / 100.0,
+        # отдельные параметры для долларовой части капитала (USDT/крипта):
+        # доллар обесценивается медленнее рубля (~2.5%), и «честный» номинал по
+        # долларовым активам тоже ниже рублёвого (≈7% против 12%).
+        "inflation_usd": float(get_setting(db, "fire_inflation_usd") or 2.5) / 100.0,
+        "nominal_usd": float(get_setting(db, "fire_nominal_usd") or 7.0) / 100.0,
         "custom_expenses": float(get_setting(db, "fire_fi_expenses") or 0),
         "target_alloc_rub": float(get_setting(db, "target_alloc_rub") or 70.0),
         "years_to_retire": years_to_retire,
@@ -138,6 +143,64 @@ def _params(db: Session) -> dict:
         "gender": gender or None,
         "pension_age": pension_age,
         "years_to_retire_auto": birth_date and pension_age is not None and not explicit,
+    }
+
+
+def _currency_shares(db: Session) -> tuple[float, float]:
+    """Доли активов (по рыночной стоимости в рублях) в USD-подобных и рублёвых.
+
+    Нужны, чтобы инфляцию и доходность считать в той валюте, в которой деньги
+    реально лежат: рублёвую часть «съедает» рублёвая инфляция (~8%), долларовую
+    (USDT/крипта) — долларовая (~2.5%), а не общая рублёвая. Раньше из всего
+    капитала вычитались одни и те же 8%, из-за чего долларовая «факт»-линия
+    выглядела несправедливо убыточной. Возвращает (usd_share, rub_share),
+    сумма = 1.0; если активов нет — (0.0, 1.0).
+    """
+    usd = rub = 0.0
+    for a in db.query(models.Account).filter(models.Account.archived.is_(False)).all():
+        v = to_rub(a.balance or 0.0, a.currency, db)
+        if v <= 0:
+            continue
+        if (a.currency or "RUB").upper() in _USD_LIKE:
+            usd += v
+        else:
+            rub += v
+    from .deposits import deposit_view
+    for d in db.query(models.Deposit).all():
+        view = deposit_view(d, db)
+        if not view:
+            continue
+        val = float(view.get("value_now") or 0.0)
+        if val <= 0:
+            continue
+        cur = (getattr(d, "currency", None) or "RUB").upper()
+        v = to_rub(val, cur, db)
+        if cur in _USD_LIKE:
+            usd += v
+        else:
+            rub += v
+    total = usd + rub
+    if total <= 0:
+        return 0.0, 1.0
+    return usd / total, rub / total
+
+
+def _blended_rates(p: dict, usd_share: float, rub_share: float) -> dict:
+    """Валютно-взвешенные ставки: реальная доходность, инфляция, номинал.
+
+    real_rub = ном_rub − инфл_rub, real_usd = ном_usd − инфл_usd; затем
+    взвешиваем по долям капитала. Реальная доходность валютно-инвариантна
+    (под PPP), поэтому смешиваем именно реальные ставки, а не «номинал − одна
+    инфляция». При дефолтах: всё в ₽ → 4%, всё в $ → 4.5%, микс — между ними.
+    """
+    real_rub = p["nominal"] - p["inflation"]
+    real_usd = p["nominal_usd"] - p["inflation_usd"]
+    return {
+        "real": usd_share * real_usd + rub_share * real_rub,
+        "inflation": usd_share * p["inflation_usd"] + rub_share * p["inflation"],
+        "nominal": usd_share * p["nominal_usd"] + rub_share * p["nominal"],
+        "usd_share": usd_share,
+        "rub_share": rub_share,
     }
 
 
@@ -178,7 +241,9 @@ def _years_to_fi(net_worth: float, fi_target: float,
 def fire_metrics(db: Session) -> dict:
     """Полный FIRE-снимок: 3 сценария, Years to FI, Coast FI, Runway, прогресс."""
     p = _params(db)
-    real_return = p["nominal"] - p["inflation"]
+    usd_share, rub_share = _currency_shares(db)
+    b = _blended_rates(p, usd_share, rub_share)
+    real_return = b["real"]
     annual_exp = p["custom_expenses"] if p["custom_expenses"] > 0 else _annual_expenses(db)
     monthly_savings = _monthly_savings(db)
     net_worth = compute_net_worth(db)
@@ -212,7 +277,7 @@ def fire_metrics(db: Session) -> dict:
     # фактическая средневзвешенная доходность портфеля (под какую ставку лежат деньги)
     py = portfolio_yield(db)
     fact_nominal = py["actual_pct"] / 100.0
-    fact_real = fact_nominal - p["inflation"]
+    fact_real = fact_nominal - b["inflation"]   # вычитаем смешанную инфляцию, не только рублёвую
     # «недополучаешь в год» = (план − факт) × капитал, в рублях
     yield_gap_rub = round((real_return - fact_real) * net_worth, 0) if net_worth > 0 else 0
 
@@ -221,9 +286,14 @@ def fire_metrics(db: Session) -> dict:
         "annual_expenses": round(annual_exp),
         "monthly_savings": round(monthly_savings),
         "monthly_expenses": round(monthly_exp),
-        "inflation_pct": round(p["inflation"] * 100, 1),
-        "nominal_return_pct": round(p["nominal"] * 100, 1),
+        "inflation_pct": round(b["inflation"] * 100, 1),       # смешанная (по долям валют)
+        "nominal_return_pct": round(b["nominal"] * 100, 1),     # смешанный номинал
         "real_return_pct": round(real_return * 100, 1),
+        # прозрачность: из чего сложена смешанная инфляция/доходность
+        "inflation_rub_pct": round(p["inflation"] * 100, 1),
+        "inflation_usd_pct": round(p["inflation_usd"] * 100, 1),
+        "usd_share_pct": round(usd_share * 100, 1),
+        "rub_share_pct": round(rub_share * 100, 1),
         "scenarios": scenarios,
         "coast_fi_today": round(coast_today),
         "coast_fi_reached": net_worth >= coast_today,
@@ -256,7 +326,9 @@ def net_worth_forecast(db: Session, years: int | None = None) -> dict:
     if years is None:
         years = max(20, int(p.get("years_to_retire") or 0) + 5)
     years = max(1, min(years, 50))
-    real_return = p["nominal"] - p["inflation"]
+    usd_share, rub_share = _currency_shares(db)
+    b = _blended_rates(p, usd_share, rub_share)
+    real_return = b["real"]
     r_m = real_return / 12.0
     annual_exp = p["custom_expenses"] if p["custom_expenses"] > 0 else _annual_expenses(db)
     monthly_savings = _monthly_savings(db)
@@ -266,7 +338,7 @@ def net_worth_forecast(db: Session, years: int | None = None) -> dict:
     # фактическая доходность портфеля (по реальным ставкам счетов/вкладов)
     py = portfolio_yield(db)
     fact_nominal = py["actual_pct"] / 100.0
-    fact_real = fact_nominal - p["inflation"]
+    fact_real = fact_nominal - b["inflation"]   # смешанная инфляция (не штрафуем доллары рублёвой)
     r_m_fact = fact_real / 12.0
 
     # FI-цели для отметок на графике
@@ -300,8 +372,9 @@ def net_worth_forecast(db: Session, years: int | None = None) -> dict:
         "years": years,
         "monthly_savings": round(monthly_savings),
         "real_return_pct": round(real_return * 100, 1),
-        "nominal_return_pct": round(p["nominal"] * 100, 1),
-        "inflation_pct": round(p["inflation"] * 100, 1),
+        "nominal_return_pct": round(b["nominal"] * 100, 1),     # смешанный номинал (для what-if слайдера)
+        "inflation_pct": round(b["inflation"] * 100, 1),         # смешанная инфляция (what-if: real=nom−infl)
+        "usd_share_pct": round(usd_share * 100, 1),
         "annual_expenses": round(annual_exp),
         "points": points,
         "points_fact": points_fact,
