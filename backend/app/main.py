@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -22,7 +22,8 @@ from . import models  # noqa: F401  — регистрируем таблицы 
 from .config import settings
 from .db import Base, SessionLocal, engine, get_session
 from .migrations import run_migrations
-from .security import current_user
+from .security import (SESSION_COOKIE, current_user, make_session_token,
+                       validate_login_widget)
 from .services.ai_chat import ask as ai_ask
 from .services.alerts import fns_refresh_job, nudge_job
 from .services.analytics import analytics_overview, month_review
@@ -127,6 +128,30 @@ async def data_version(user: dict = Depends(current_user), db: Session = Depends
         _q(func.count(models.Recurring.id)) or 0,
     ]
     return {"version": "|".join(str(p) for p in parts)}
+
+
+@app.post("/api/auth/telegram")
+async def auth_telegram(request: Request, response: Response):
+    """Вход на сайте через Telegram Login Widget (браузер, вне Mini App).
+    Проверяем подпись, что это владелец, ставим сессионную cookie."""
+    try:
+        data = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(400, "bad payload")
+    u = validate_login_widget(data)
+    if int(u["id"]) != settings.owner_tg_id:
+        raise HTTPException(403, "not the owner")
+    token = make_session_token(u["id"], u.get("first_name") or "")
+    secure = settings.public_url.startswith("https")
+    response.set_cookie(SESSION_COOKIE, token, max_age=30 * 86400,
+                        httponly=True, secure=secure, samesite="lax")
+    return {"ok": True, "first_name": u.get("first_name") or ""}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE)
+    return {"ok": True}
 
 
 @app.get("/api/me")

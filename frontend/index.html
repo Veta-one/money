@@ -32,6 +32,11 @@
     font-family:'Inter',-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
     letter-spacing:-.1px}
   body{padding:calc(14px + var(--safe-top)) calc(14px + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(14px + var(--safe-left))}
+  /* десктоп/широкий экран (сайт в браузере) — контент колонкой по центру, без спец-вёрстки */
+  @media(min-width:600px){
+    body{max-width:480px;margin-left:auto;margin-right:auto}
+    .fab-add{right:calc(50vw - 240px + 18px)}
+  }
   .muted{color:var(--muted)}
   .head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 14px}
   .head .hi{font-size:15px;font-weight:600}
@@ -2932,7 +2937,34 @@ async function saveCat(){
 async function delCat(id){ try{ const r=await api('/api/categories/'+id,{method:'DELETE'});
   toast(r.archived?'Архивирована':'Удалена'); _cats=[]; await loadCats(); openCatMgr(); }catch(e){toast('Ошибка');} }
 
-Promise.resolve(loadDashboard()).then(()=>{ const el=document.getElementById('v-dashboard'); if(el) el.dataset.loaded='1'; });
+function boot(){
+  Promise.resolve(loadDashboard()).then(()=>{ const el=document.getElementById('v-dashboard'); if(el) el.dataset.loaded='1'; });
+}
+// Вход: в Telegram Mini App — сразу; в браузере — проверяем сессию, иначе Login Widget
+window.onTgAuth=async function(u){
+  try{
+    const r=await fetch('/api/auth/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
+    if(!r.ok) throw 0; location.reload();
+  }catch(e){ const m=document.getElementById('lg-err'); if(m) m.textContent='Не удалось войти. Это аккаунт владельца?'; }
+};
+function showLoginGate(){
+  document.body.innerHTML=`<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center">
+    <div style="font-size:26px;font-weight:800;letter-spacing:-.5px">MONEY</div>
+    <div style="font-size:14px;color:var(--muted);max-width:280px;line-height:1.5">Личный финансовый помощник. Вход только для владельца через Telegram.</div>
+    <div id="tg-login" style="margin-top:6px"></div>
+    <div id="lg-err" style="font-size:12px;color:var(--red);min-height:16px"></div>
+  </div>`;
+  const s=document.createElement('script');
+  s.async=true; s.src='https://telegram.org/js/telegram-widget.js?22';
+  s.setAttribute('data-telegram-login','money_veta_bot');
+  s.setAttribute('data-size','large');
+  s.setAttribute('data-onauth','onTgAuth(user)');
+  s.setAttribute('data-request-access','write');
+  document.getElementById('tg-login').appendChild(s);
+}
+const _inTelegram = !!(tg && tg.initData);
+if(_inTelegram){ boot(); }
+else { fetch('/api/me').then(r=>{ if(r.ok) boot(); else showLoginGate(); }).catch(()=>showLoginGate()); }
 
 // ===== Событийная свежесть данных =====
 // Кэш живёт всю сессию. Сбрасывается при мутациях (в api()) и при возврате
