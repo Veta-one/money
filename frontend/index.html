@@ -186,8 +186,10 @@
     .fab-add{right:calc(50vw - 240px + 18px)}
   }
   @media(min-width:900px){
-    /* контент после sidebar; колонки-секции (gridify → .secwrap>.block) */
-    body{max-width:900px;margin-left:236px;margin-right:auto}
+    /* контент после sidebar; колонки-секции (gridify → .secwrap>.block).
+       Контент тянется на всю ширину справа от сайдбара (правый зазор — базовый
+       padding body 14px); max-width лишь не даёт колонкам разрастись на ультравайде. */
+    body{max-width:1040px;margin-left:236px;margin-right:auto}
     .secwrap{column-count:2;column-gap:18px}
     .secwrap>.block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px}
     .secwrap>.block>h2{margin-top:4px}
@@ -214,9 +216,13 @@
     #v-ops .ops-detail .dcard{background:var(--card);border-radius:18px;padding:16px}
     #v-ops .row.opsel{outline:2px solid var(--ink);outline-offset:-2px}
   }
-  @media(min-width:1320px){
-    body{max-width:1040px}
+  @media(min-width:1240px){
+    body{max-width:1560px}
     .secwrap{column-count:3}
+  }
+  @media(min-width:1900px){
+    body{max-width:1860px}
+    .secwrap{column-count:4}
   }
   /* на мобиле панель деталей не нужна — детали открываются модалкой */
   @media(max-width:899px){ #v-ops .ops-detail{display:none} }
