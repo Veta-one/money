@@ -255,6 +255,7 @@ cd deploy && docker compose up -d --build
 - Caddy: блок `money.vetaone.site → money_app:8000` в `/home/your_user/my_server/caddy_config/Caddyfile`
   (см. `deploy/caddy-money.conf`), reload: `docker exec caddy_dispatcher caddy reload --config /etc/caddy/Caddyfile`.
 - Контейнер ограничен `mem_limit 512m` (защита соседних сервисов на VPS).
+- Время контейнера — `TZ=Europe/Moscow` (docker-compose + tzdata в образе): снапшоты капитала, крон, `date.today()` и границы суток/месяцев считаются по Москве, как живёт пользователь. На UTC дневная точка капитала появлялась на сутки позже.
 - Webhook ставится автоматически на старте (по `PUBLIC_URL`).
 - Сидинг при первом запуске: `docker compose exec app python -m app.seed_categories` и `python -m app.seed_accounts`.
 - Автодеплой (GitHub Actions, `.github/workflows/deploy.yml`) готов, но **не активен** — нужен `gh auth refresh -h github.com -s workflow` + секреты репозитория.
