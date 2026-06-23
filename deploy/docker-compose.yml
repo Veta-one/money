@@ -8,6 +8,8 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: money_app
     env_file: ../backend/.env
+    environment:
+      - TZ=Europe/Moscow                 # весь сервис живёт по Москве: снапшоты, крон, date.today()
     volumes:
       - ../backend/data:/app/data        # SQLite + токены ФНС (эту папку бэкапим)
     expose:
