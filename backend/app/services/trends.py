@@ -61,6 +61,32 @@ def take_networth_snapshot(db, force: bool = False) -> float:
     return total
 
 
+def ensure_startup_snapshot(db) -> None:
+    """Снимок на старте сервиса — БЕЗ затирания «начала дня» текущим значением.
+
+    Если снимок за сегодня уже есть — не трогаем (он неприкосновенен: рестарт не
+    должен двигать базу дня). Если сегодняшнего ещё нет, НЕ берём текущий капитал:
+    при рестарте среди дня в «начало дня» попало бы уже изменившееся за день
+    значение (напр. подросший курс), и «прирост за сегодня» обнулился бы. Вместо
+    этого переносим значение последнего снимка (вчерашнее «закрытие» ≈ сегодняшнее
+    «открытие»). Точную точку начала суток поставит крон в 00:01 МСК."""
+    import json
+    today = date.today()
+    if db.query(models.NetWorthSnapshot).filter_by(date=today).first():
+        return
+    prev = (db.query(models.NetWorthSnapshot)
+            .filter(models.NetWorthSnapshot.date < today)
+            .order_by(models.NetWorthSnapshot.date.desc()).first())
+    if prev is not None:
+        db.add(models.NetWorthSnapshot(date=today, total_rub=prev.total_rub,
+                                       breakdown_json=prev.breakdown_json))
+    else:  # первый запуск, истории нет — берём текущий капитал
+        from .fx import networth_breakdown
+        db.add(models.NetWorthSnapshot(date=today, total_rub=compute_net_worth(db),
+                                       breakdown_json=json.dumps(networth_breakdown(db))))
+    db.commit()
+
+
 def networth_series(db, limit: int = 30) -> list[dict]:
     import json
     rows = (db.query(models.NetWorthSnapshot)

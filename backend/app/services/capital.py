@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from math import ceil
 
@@ -12,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
-from .fx import compute_net_worth, get_usd_rub, to_rub
+from .fx import compute_net_worth, get_usd_rub, networth_breakdown, to_rub
 from .income import expected_income_monthly
 from .planning import avg_monthly_expense
 from .settings_store import get_setting
@@ -61,6 +62,16 @@ def capital_overview(db: Session, period: str = "day") -> dict:
     usd_now = get_usd_rub(db)
     series = networth_series(db, 60)
 
+    # последняя точка графика = «сейчас» (живой капитал): внутридневной рост (курс)
+    # виден сразу и совпадает с «приростом за сегодня»; не зависит от рестартов.
+    today_iso = today.isoformat()
+    if series and series[-1]["date"] == today_iso:
+        series[-1]["total"] = net_now
+        series[-1]["breakdown"] = networth_breakdown(db)
+    elif series:
+        series.append({"date": today_iso, "total": net_now,
+                       "breakdown": networth_breakdown(db)})
+
     base = _base_snapshot(db, period)
     delta = delta_days = savings = fx = other = None
     if base is not None:
@@ -68,14 +79,28 @@ def capital_overview(db: Session, period: str = "day") -> dict:
         delta = round(net_now - base.total_rub, 2)
         delta_days = (today - base.date).days
         savings = round(_sum_tx(db, "income", since) - _sum_tx(db, "expense", since), 2)
-        rate_base = (db.query(models.FxRate)
-                     .filter(models.FxRate.currency == "USD", models.FxRate.date <= base.date)
-                     .order_by(models.FxRate.date.desc()).first())
-        if rate_base:
-            usd_bal = sum(a.balance for a in db.query(models.Account)
-                          .filter(models.Account.archived.is_(False)).all()
-                          if (a.currency or "").upper() in _USD_LIKE)
-            fx = round(usd_bal * (usd_now - rate_base.rate_rub), 2)
+        usd_bal = sum(a.balance for a in db.query(models.Account)
+                      .filter(models.Account.archived.is_(False)).all()
+                      if (a.currency or "").upper() in _USD_LIKE)
+        # курс на момент базового снимка берём «вшитым» в его breakdown
+        # (usd-доля в ₽ / кол-во USDT). Это устойчиво к рассинхрону FxRate и
+        # рестартам: эффект курса считается от того курса, по которому реально
+        # была зафиксирована база. Фолбэк — курс ЦБ на дату базы.
+        rate0 = None
+        if base.breakdown_json and usd_bal:
+            try:
+                bd0 = json.loads(base.breakdown_json)
+                if bd0.get("usd"):
+                    rate0 = bd0["usd"] / usd_bal
+            except Exception:  # noqa: BLE001
+                rate0 = None
+        if rate0 is None:
+            rb = (db.query(models.FxRate)
+                  .filter(models.FxRate.currency == "USD", models.FxRate.date <= base.date)
+                  .order_by(models.FxRate.date.desc()).first())
+            rate0 = rb.rate_rub if rb else usd_now
+        if usd_bal:
+            fx = round(usd_bal * (usd_now - rate0), 2)
         other = round(delta - savings - (fx or 0.0), 2)
     from_month_start = base is not None and base.date <= month_start.date()
 

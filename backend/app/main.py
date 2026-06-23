@@ -38,8 +38,8 @@ from .services.dashboard import get_dashboard, needs_review
 from .services.deposits import deposits_overview
 from .services.digests import send_digest
 from .services.income import income_overview, learn_income_alias
-from .services.trends import (daily_spending, monthly_spending, networth_series,
-                              snapshot_job, take_networth_snapshot)
+from .services.trends import (daily_spending, ensure_startup_snapshot, monthly_spending,
+                              networth_series, snapshot_job, take_networth_snapshot)
 from .services.fx import compute_net_worth, get_usd_rub, to_rub, usd_history
 from .services.planning import detect_recurring, goal_view, suggest_goals
 from .services.settings_store import get_setting, set_setting
@@ -54,7 +54,7 @@ async def lifespan(_app: FastAPI):
     run_migrations(engine)
     _db0 = SessionLocal()
     try:
-        take_networth_snapshot(_db0)   # стартовый снимок капитала
+        ensure_startup_snapshot(_db0)   # стартовый снимок — без затирания базы дня
     except Exception:  # noqa: BLE001
         pass
     finally:
