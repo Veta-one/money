@@ -1313,7 +1313,7 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
 
 
 class ReclassifyIn(BaseModel):
-    kind: str   # purchase | self_transfer | give_loan | repay_to_me | repay_my_debt
+    kind: str   # purchase | self_transfer | give_loan | take_loan | repay_to_me | repay_my_debt
     category_id: int | None = None
     counterparty_account_id: int | None = None
     counterparty_name: str | None = None
@@ -1361,6 +1361,20 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
         if not name:
             raise HTTPException(400, "counterparty name required")
         d = models.Debt(counterparty=name, direction="owed_to_me",
+                        amount=abs(t.amount), currency=t.currency or "RUB",
+                        date=t.datetime.date(), status="open")
+        db.add(d)
+        t.type = "transfer"
+        t.category_id = None
+        t.status = "confirmed"
+    elif kind == "take_loan":
+        # мне дали в долг (приход) — создаём Debt с direction='i_owe'.
+        # Зеркало give_loan: деньги пришли (+), но это не доход, а обязательство,
+        # поэтому операция — transfer (net worth не меняется: +кэш и −долг).
+        name = (body.counterparty_name or t.merchant or "").strip()[:128]
+        if not name:
+            raise HTTPException(400, "counterparty name required")
+        d = models.Debt(counterparty=name, direction="i_owe",
                         amount=abs(t.amount), currency=t.currency or "RUB",
                         date=t.datetime.date(), status="open")
         db.add(d)

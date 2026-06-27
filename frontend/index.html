@@ -2497,6 +2497,7 @@ function renderReclassifyBlock(d){
     ['income','Доход'],
     ['self_transfer','Перевод между счетами'],
     ['give_loan','Я дал в долг'],
+    ['take_loan','Мне дали в долг'],
     ['repay_to_me','Вернули мой долг'],
     ['repay_my_debt','Я погасил долг'],
   ];
@@ -2515,11 +2516,13 @@ function renderReclassifyBlock(d){
       <div style="display:flex;gap:8px">
         <select id="rc-acc" class="inp" style="flex:1">${opts||'<option>(нет других счетов)</option>'}</select>
         <button class="btn" onclick="applyRc(${d.id})">OK</button></div></div>`;
-  } else if(_rcKind==='give_loan'){
+  } else if(_rcKind==='give_loan' || _rcKind==='take_loan'){
+    const lbl = _rcKind==='take_loan' ? 'Кто дал в долг (имя)' : 'Кому дал в долг (имя)';
+    const ph = _rcKind==='take_loan' ? 'Например: Сестра' : 'Например: Маме';
     form = `<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
-      <div class="t2" style="color:var(--muted)">Кому дал в долг (имя)</div>
+      <div class="t2" style="color:var(--muted)">${lbl}</div>
       <div style="display:flex;gap:8px">
-        <input id="rc-name" class="inp" placeholder="Например: Маме" style="flex:1" value="${(d.merchant||'').replace(/"/g,'&quot;')}">
+        <input id="rc-name" class="inp" placeholder="${ph}" style="flex:1" value="${(d.merchant||'').replace(/"/g,'&quot;')}">
         <button class="btn" onclick="applyRc(${d.id})">OK</button></div></div>`;
   } else if(_rcKind==='repay_to_me' || _rcKind==='repay_my_debt'){
     const need = _rcKind==='repay_to_me' ? 'owed_to_me' : 'i_owe';
@@ -2553,9 +2556,9 @@ async function applyRc(id){
     body.counterparty_account_id = parseInt(document.getElementById('rc-acc').value)||null;
     if(!body.counterparty_account_id){ toast('Выбери счёт'); return; }
   }
-  if(_rcKind==='give_loan'){
+  if(_rcKind==='give_loan' || _rcKind==='take_loan'){
     body.counterparty_name = (document.getElementById('rc-name').value||'').trim();
-    if(!body.counterparty_name){ toast('Имя должника'); return; }
+    if(!body.counterparty_name){ toast('Укажи имя'); return; }
   }
   if(_rcKind==='repay_to_me' || _rcKind==='repay_my_debt'){
     body.debt_id = parseInt(document.getElementById('rc-debt').value)||null;
