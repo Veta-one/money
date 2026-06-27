@@ -156,7 +156,7 @@ SPEC.md                # исходная спецификация
 
 `accounts` (счета: card/cash/deposit/crypto/external, валюта, владелец me/wife/m1/…, баланс; `interest_rate`/`interest_compound`/`interest_note` — dead-code после отката концепции «ставка на счёте») ·
 `categories` (expense/income/transfer, иерархия parent_id; `color` назначается по golden ratio для корней + HSL-вариация для детей) ·
-`transactions` (сумма+валюта+`base_amount_rub`, тип, категория, продавец, источник, `dedup_key`, counterparty_account_id для трансферов) ·
+`transactions` (сумма+валюта+`base_amount_rub`, тип, категория, продавец, источник, `dedup_key`, counterparty_account_id для трансферов, `debt_id` — связь операции с долгом при реклассификации; для долговых переводов `base_amount_rub` несёт знак направления денег: приход «взял/вернули мне» +, расход «дал/погасил» −) ·
 `transaction_items` (позиции чека, своя категория) ·
 `receipts` (фискальные данные: fn/fd/fp, JSON ответа ФНС) ·
 `category_rules` (выученные правила) · `recurring` (регулярные доходы/расходы = источники дохода, period, owner me/wife, next_date с auto-advance) · `income_raises` (история повышений по источнику: date + amount; Recurring.amount синхронизируется с самым свежим — для калькулятора индексации) ·
