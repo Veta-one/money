@@ -2631,21 +2631,26 @@ function openPick(kind,id,parentId,rcKind){ _pickKind=kind; _pickId=id; if(rcKin
   }
   document.getElementById('sheet').innerHTML=`<div class="sheeth"><div class="t1">${head}</div>
       <button class="iconbtn" onclick="closeOv()">${icon('x',18)}</button></div>${back}<div class="catgrid">${cells}</div>`;
+  document.getElementById('ov').style.display='flex';   // пикер-модалка (на десктопе деталь в панели, модалка скрыта)
 }
 let _pickRcKind=null;
 async function pickCat(cid){
+  const desk=_isDesktop()&&_tab==='ops';   // на десктопе деталь живёт в боковой панели
   try{
     if(_pickRcKind){
       // выбор категории — это часть reclassify (переключение type + категория одной операцией)
       await api('/api/tx/'+_pickId+'/reclassify',{method:'POST',
         body:JSON.stringify({kind:_pickRcKind, category_id:cid})});
       _pickRcKind=null; _rcKind=null;
-      toast('Сохранено'); closeOv(); refreshActive(); return;
+      toast('Сохранено'); closeOv(); refreshActive();
+      if(desk) openTx(_pickId);            // обновить панель деталей свежими данными
+      return;
     }
     const url=_pickKind==='item'?'/api/items/'+_pickId:'/api/tx/'+_pickId;
     await api(url,{method:'POST',body:JSON.stringify({category_id:cid})});
     toast('Сохранено');
-    if(_pickKind==='inccat'){ refreshActive(); openTx(_pickId); }
+    if(desk){ closeOv(); refreshActive(); openTx(_pickId); }   // закрыть пикер + обновить список + панель
+    else if(_pickKind==='inccat'){ refreshActive(); openTx(_pickId); }
     else { closeOv(); refreshActive(); }
   }catch(e){ toast('Ошибка'); }
 }
@@ -2658,17 +2663,18 @@ function openSrcPick(id){ _pickId=id;
       <input id="ns-n" class="inp" placeholder="Новый источник" style="flex:1">
       <button class="btn" onclick="createSrcFromTx()">Создать</button></div>
     ${_detail&&_detail.recurring_id?`<button class="chip" style="margin-top:10px" onclick="pickSrc(null)">Отвязать</button>`:''}`;
+  document.getElementById('ov').style.display='flex';   // пикер-модалка (на десктопе деталь в панели)
 }
 async function pickSrc(rid){
   try{ await api('/api/tx/'+_pickId+'/source',{method:'POST',body:JSON.stringify({recurring_id:rid})});
-    toast(rid?'Привязано':'Отвязано'); refreshActive(); openTx(_pickId); }catch(e){ toast('Ошибка'); }
+    toast(rid?'Привязано':'Отвязано'); if(_isDesktop()&&_tab==='ops') closeOv(); refreshActive(); openTx(_pickId); }catch(e){ toast('Ошибка'); }
 }
 async function createSrcFromTx(){
   const n=document.getElementById('ns-n').value.trim(); if(!n){toast('Имя');return;}
   try{
     const r=await api('/api/income',{method:'POST',body:JSON.stringify({name:n,amount:Math.abs(_detail.amount)||0,currency:_detail.currency||'RUB',period:'monthly',owner:'me'})});
     await api('/api/tx/'+_pickId+'/source',{method:'POST',body:JSON.stringify({recurring_id:r.id})});
-    toast('Создано и привязано'); refreshActive(); openTx(_pickId);
+    toast('Создано и привязано'); if(_isDesktop()&&_tab==='ops') closeOv(); refreshActive(); openTx(_pickId);
   }catch(e){ toast('Ошибка'); }
 }
 function closeOv(){ document.getElementById('ov').style.display='none'; toggleFab(true); tgBackSync(); }
