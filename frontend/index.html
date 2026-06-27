@@ -1285,6 +1285,7 @@ async function loadCapital(){
   try{
     const [a,dbt,c,dep,fxh,fr,fc]=await Promise.all([api('/api/accounts'),api('/api/debts'),api('/api/capital?period='+_capPeriod),api('/api/deposits'),api('/api/fx/history?days=365').catch(()=>({points:[]})), api('/api/fire').catch(()=>null), api('/api/forecast').catch(()=>null)]);
     const accs=a.accounts||[], debts=dbt.debts||[]; _accs=accs; _deps=dep.deposits||[]; _debtDir='owed_to_me';
+    window._dbtAct=dbt.activity||null;
     const per=_periodLabel(_capPeriod);
     const periodChips=['day','week','month','year'].map(p=>`<button class="chip-sm${_capPeriod===p?' on':''}" onclick="setCapPeriod('${p}')">${_periodShort(p)}</button>`).join('');
     document.getElementById('v-capital').innerHTML=`
@@ -1347,6 +1348,7 @@ async function loadCapital(){
           <input class="inp" type="number" inputmode="decimal" placeholder="${d.direction==='owed_to_me'?'вернули ₽':'погасить ₽'}" id="dpay-${d.id}" style="flex:1">
           <button class="btn" onclick="payDebt(${d.id})">${d.direction==='owed_to_me'?'Получил':'Отдал'}</button>
           <button class="iconbtn" onclick="closeDebt(${d.id})">${icon('x',18)}</button></div></div>`}).join('')}
+      <div id="debt-activity">${debtActivityHtml(dbt.activity, _debtPer)}</div>
       <div class="card" style="margin-top:8px">
         <div style="display:flex;gap:8px;margin-bottom:8px">
           <button id="dir-owed" class="chip on" onclick="setDir('owed_to_me')">Мне должны</button>
@@ -1737,6 +1739,37 @@ async function closeDebt(id){ try{ await api('/api/debts/'+id+'/close',{method:'
 async function payDebt(id){ const v=parseFloat(document.getElementById('dpay-'+id).value); if(!v){toast('Сумма');return;}
   try{ await api('/api/debts/'+id+'/pay',{method:'POST',body:JSON.stringify({amount:v})}); toast('Записано'); loadCapital(); }catch(e){toast('Ошибка');} }
 
+// ---- активность по долгам (взял/погасил/дал/вернули мне) за период ----
+let _debtPer='month';
+function _debtSince(per){ const d=new Date();
+  if(per==='week'){ const x=new Date(); x.setDate(x.getDate()-7); return x; }
+  if(per==='year') return new Date(d.getFullYear(),0,1);
+  return new Date(d.getFullYear(),d.getMonth(),1); }
+function debtActivityHtml(act, per){
+  if(!act || !(act.ops||[]).length) return '';
+  per=per||'month'; const b=act[per]||{borrowed:0,repaid:0,lent:0,got_back:0};
+  const since=_debtSince(per);
+  const ops=(act.ops||[]).filter(o=> new Date(o.dt)>=since);
+  const chip=(p,l)=>`<button class="chip${per===p?' on':''}" onclick="setDebtPer('${p}')">${l}</button>`;
+  const cell=(label,val)=>`<div style="flex:1;background:var(--bg);border-radius:12px;padding:9px 11px;min-width:0">
+    <div class="t2" style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+    <div style="font-size:15px;font-weight:800;letter-spacing:-.3px">${fmt(val)} ${CUR}</div></div>`;
+  const rows=ops.length? ops.map(o=>`<div class="row" data-txid="${o.id}" onclick="openTx(${o.id})" style="cursor:pointer">
+      <div class="sq" style="background:${tint(o.incoming?'#18c171':'#ff4d54')};color:${o.incoming?'#18c171':'#ff4d54'}">${icon('swap',18)}</div>
+      <div class="mid"><div class="t1">${o.label}</div><div class="t2">${o.counterparty} · ${new Date(o.dt).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}${o.debt_status==='closed'?' · закрыт':''}</div></div>
+      <div class="amt ${o.incoming?'inc':'exp'}">${o.incoming?'+':'−'}${fmt(o.amount)} ${CUR}</div></div>`).join('')
+    : '<div class="empty" style="padding:14px">За период операций по долгам не было</div>';
+  return `<div class="card" style="margin-top:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="t1">Активность по долгам</div>
+      <div style="display:flex;gap:6px">${chip('week','Нед')}${chip('month','Мес')}${chip('year','Год')}</div></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">${cell('Взял в долг',b.borrowed)}${cell('Погасил',b.repaid)}</div>
+    <div style="display:flex;gap:8px">${cell('Дал в долг',b.lent)}${cell('Вернули мне',b.got_back)}</div>
+    <div style="margin-top:10px">${rows}</div></div>`;
+}
+function setDebtPer(p){ _debtPer=p; const el=document.getElementById('debt-activity');
+  if(el) el.innerHTML=debtActivityHtml(window._dbtAct, p); }
+
 async function loadGoals(){
   try{
     const [g,r,a]=await Promise.all([api('/api/goals'),api('/api/recurring'),api('/api/accounts')]);
@@ -1942,7 +1975,8 @@ function txRow(x){
   const debtIn=x.type==='transfer'&&x.debt_id&&(x.base_rub||0)>0;
   const inn=x.type==='income'||isRefund||debtIn;
   const ic=isRefund?'swap':x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);
-  const tags=[x.category?x.category:null, isRefund?'<span style="color:var(--green);font-weight:700">↩ возврат</span>':null, x.review?'<span style="color:#ff8a3d;font-weight:700">разобрать</span>':null].filter(Boolean).join(' · ');
+  const debtTag=x.debt?`<span style="color:${x.debt.incoming?'var(--green)':'var(--red)'};font-weight:700">${x.debt.label}</span>`:null;
+  const tags=[debtTag, x.category?x.category:null, isRefund?'<span style="color:var(--green);font-weight:700">↩ возврат</span>':null, x.review?'<span style="color:#ff8a3d;font-weight:700">разобрать</span>':null].filter(Boolean).join(' · ');
   const sub=new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+(tags?' · '+tags:'');
   const merchEsc=(x.merchant||'').replace(/'/g,'&#39;');
   const merchHtml=x.merchant?`<span onclick="event.stopPropagation();openMerchOps('${merchEsc}')" style="cursor:pointer">${x.merchant}</span>`:(x.type==='income'?'Доход':'Операция');
@@ -2442,7 +2476,12 @@ function catchipHtml(kind,id,name){
 function renderDetail(d){
   _detail=d;
   let rows;
-  if(d.type==='income'){
+  if(d.debt){
+    const dc=d.debt.incoming?'#18c171':'#ff4d54';
+    rows=`<div class="drow"><div class="mid"><div class="t1" style="color:${dc}">${d.debt.label}</div>
+      <div class="t2">${d.debt.counterparty} · ${d.debt.debt_status==='closed'?'долг закрыт':'долг открыт'} · ${d.debt.incoming?'деньги пришли':'деньги ушли'}</div></div>
+      <span class="sq" style="background:${tint(dc)};color:${dc}">${icon('swap',18)}</span></div>`;
+  } else if(d.type==='income'){
     const cur=(d.sources||[]).find(s=>s.id===d.recurring_id);
     const sn=cur?cur.name:null, sc=sn?color(sn):'var(--muted)';
     rows=`<div class="drow"><div class="mid"><div class="t1">Категория</div></div>${catchipHtml('inccat',d.id,d.category)}</div>
@@ -2462,7 +2501,7 @@ function renderDetail(d){
       : `<div class="drow"><div class="mid"><div class="t1">Категория операции</div></div>${catchipHtml('tx',d.id,d.category)}</div>`;
   }
   // Блок «Что это было?» — для transfer-операций или любых без категории (review-режим)
-  const reclassifyHtml = d.review || d.type==='transfer'
+  const reclassifyHtml = (d.review || d.type==='transfer' || d.debt)
     ? renderReclassifyBlock(d) : '';
   const noteHtml=`<div class="drow" style="border-bottom:none;flex-direction:column;align-items:stretch;gap:6px">
     <div class="t2" style="color:var(--muted)">Заметка</div>

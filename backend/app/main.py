@@ -255,13 +255,15 @@ async def list_transactions(
     page = rows[offset:offset + limit]
 
     cat_map = {c.id: c.name for c in db.query(models.Category).all()}
+    from .services.debts import debt_map_for
+    dmap = debt_map_for(db, page)
     out = [{
         "id": t.id, "dt": t.datetime.isoformat(), "amount": round(t.amount, 2),
         "currency": t.currency, "base_rub": round(t.base_amount_rub or 0.0, 2),
         "type": t.type, "merchant": t.merchant or "",
         "category": cat_map.get(t.category_id), "category_id": t.category_id,
         "account_id": t.account_id, "source": t.source, "status": t.status,
-        "review": needs_review(t), "debt_id": t.debt_id,
+        "review": needs_review(t), "debt_id": t.debt_id, "debt": dmap.get(t.id),
     } for t in page]
     return {
         "transactions": out, "count": count,
@@ -1047,10 +1049,12 @@ async def list_debts(user: dict = Depends(current_user), db: Session = Depends(g
 
     owed = sum(to_rub(_rem(d), d.currency, db) for d in rows if d.direction == "owed_to_me")
     iowe = sum(to_rub(_rem(d), d.currency, db) for d in rows if d.direction == "i_owe")
+    from .services.debts import debt_activity
     return {"debts": [{"id": d.id, "counterparty": d.counterparty, "direction": d.direction,
                        "amount": round(d.amount or 0), "paid": round(d.paid or 0),
                        "remaining": round(_rem(d)), "currency": d.currency} for d in rows],
-            "owed_to_me": round(owed, 2), "i_owe": round(iowe, 2)}
+            "owed_to_me": round(owed, 2), "i_owe": round(iowe, 2),
+            "activity": debt_activity(db)}
 
 
 @app.post("/api/debts")
@@ -1301,6 +1305,7 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
                    "remaining": round(max((d.amount or 0) - (d.paid or 0), 0), 2),
                    "currency": d.currency}
                   for d in db.query(models.Debt).filter(models.Debt.status == "open").all()]
+    from .services.debts import op_meta
     return {"id": t.id, "merchant": t.merchant, "amount": t.amount, "currency": t.currency,
             "dt": t.datetime.isoformat(), "type": t.type, "source": t.source, "note": t.note,
             "category_id": t.category_id, "category": cname(t.category_id), "items": items,
@@ -1311,6 +1316,7 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
                            (t.type in ("expense", "income") and not t.category_id) or
                            (t.type == "transfer" and not t.counterparty_account_id)))),
             "debt_id": t.debt_id,
+            "debt": (op_meta(t, db.get(models.Debt, t.debt_id)) if t.debt_id else None),
             "accounts_other": accs_other, "open_debts": open_debts}
 
 
