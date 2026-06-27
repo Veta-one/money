@@ -49,6 +49,9 @@ def run_migrations(engine: Engine) -> None:
         _add_column(conn, "deposits", "kind", "kind VARCHAR(16) DEFAULT 'deposit'")
         _add_column(conn, "deposit_topups", "source_account_id", "source_account_id INTEGER")
 
+        # --- Связь операции с долгом (реклассификация в долг: дал/взял/вернул/погасил) ---
+        _add_column(conn, "transactions", "debt_id", "debt_id INTEGER")
+
         # индексы под выборки операций/доходов (datetime уже индексирован моделью)
         for name, ddl in (
             ("ix_tx_type", "CREATE INDEX IF NOT EXISTS ix_tx_type ON transactions(type)"),

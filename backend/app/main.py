@@ -261,7 +261,7 @@ async def list_transactions(
         "type": t.type, "merchant": t.merchant or "",
         "category": cat_map.get(t.category_id), "category_id": t.category_id,
         "account_id": t.account_id, "source": t.source, "status": t.status,
-        "review": needs_review(t),
+        "review": needs_review(t), "debt_id": t.debt_id,
     } for t in page]
     return {
         "transactions": out, "count": count,
@@ -1307,8 +1307,10 @@ async def tx_detail(tx_id: int, user: dict = Depends(current_user), db: Session 
             "recurring_id": t.recurring_id, "sources": src_list,
             "account_id": t.account_id, "counterparty_account_id": t.counterparty_account_id,
             "review": ((t.status == "needs_review") or
-                       (t.type in ("expense", "income") and not t.category_id) or
-                       (t.type == "transfer" and not t.counterparty_account_id)),
+                       (not t.debt_id and (
+                           (t.type in ("expense", "income") and not t.category_id) or
+                           (t.type == "transfer" and not t.counterparty_account_id)))),
+            "debt_id": t.debt_id,
             "accounts_other": accs_other, "open_debts": open_debts}
 
 
@@ -1335,6 +1337,8 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
             t.category_id = body.category_id
             learn_rule(db, body.category_id, inn=None, pattern=t.merchant)
         t.counterparty_account_id = None
+        t.debt_id = None
+        t.base_amount_rub = abs(t.base_amount_rub or t.amount or 0.0)
         t.status = "confirmed"
     elif kind == "income":
         # это был доход (зарплата, кешбэк, возврат от продавца)
@@ -1343,6 +1347,8 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
             t.category_id = body.category_id
             learn_rule(db, body.category_id, inn=None, pattern=t.merchant)
         t.counterparty_account_id = None
+        t.debt_id = None
+        t.base_amount_rub = abs(t.base_amount_rub or t.amount or 0.0)
         t.status = "confirmed"
     elif kind == "self_transfer":
         # перевод между нашими счетами (свой счёт или счёт жены)
@@ -1354,6 +1360,7 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
         t.type = "transfer"
         t.counterparty_account_id = body.counterparty_account_id
         t.category_id = None
+        t.debt_id = None
         t.status = "confirmed"
     elif kind == "give_loan":
         # я кому-то дал в долг (transfer + создание Debt с direction='owed_to_me')
@@ -1364,8 +1371,11 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
                         amount=abs(t.amount), currency=t.currency or "RUB",
                         date=t.datetime.date(), status="open")
         db.add(d)
+        db.flush()                       # получить d.id для связи
         t.type = "transfer"
         t.category_id = None
+        t.debt_id = d.id
+        t.base_amount_rub = -abs(t.base_amount_rub or t.amount or 0.0)   # деньги ушли (−)
         t.status = "confirmed"
     elif kind == "take_loan":
         # мне дали в долг (приход) — создаём Debt с direction='i_owe'.
@@ -1378,8 +1388,11 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
                         amount=abs(t.amount), currency=t.currency or "RUB",
                         date=t.datetime.date(), status="open")
         db.add(d)
+        db.flush()                       # получить d.id для связи
         t.type = "transfer"
         t.category_id = None
+        t.debt_id = d.id
+        t.base_amount_rub = abs(t.base_amount_rub or t.amount or 0.0)    # деньги пришли (+)
         t.status = "confirmed"
     elif kind == "repay_to_me":
         # мне вернули долг (приход) — закрываем существующий Debt 'owed_to_me'
@@ -1393,6 +1406,8 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
             d.status = "closed"
         t.type = "income"
         t.category_id = None
+        t.debt_id = d.id
+        t.base_amount_rub = abs(t.base_amount_rub or t.amount or 0.0)    # деньги пришли (+)
         t.status = "confirmed"
     elif kind == "repay_my_debt":
         # я погасил свой долг (расход) — закрываем существующий Debt 'i_owe'
@@ -1406,6 +1421,8 @@ async def reclassify_tx(tx_id: int, body: ReclassifyIn, user: dict = Depends(cur
             d.status = "closed"
         t.type = "transfer"
         t.category_id = None
+        t.debt_id = d.id
+        t.base_amount_rub = -abs(t.base_amount_rub or t.amount or 0.0)   # деньги ушли (−)
         t.status = "confirmed"
     else:
         raise HTTPException(400, f"unknown kind: {kind}")

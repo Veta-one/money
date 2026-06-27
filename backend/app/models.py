@@ -70,6 +70,7 @@ class Transaction(Base):
     merchant: Mapped[str | None] = mapped_column(String(256))
     counterparty_account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
     recurring_id: Mapped[int | None] = mapped_column(ForeignKey("recurring.id"))  # источник дохода
+    debt_id: Mapped[int | None] = mapped_column(ForeignKey("debts.id"))  # связь с долгом (реклассификация)
     source: Mapped[str] = mapped_column(String(16))        # receipt|statement|text|voice|photo
     note: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="confirmed")  # confirmed|needs_review

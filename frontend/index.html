@@ -31,7 +31,7 @@
   html.dark .fab{background:#3a3d45;color:#fff}
   html.dark .cbx.on{background:#3a3d45;border-color:#3a3d45}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;background:var(--bg);color:var(--text);overflow-x:hidden;
+  html,body{margin:0;background:var(--bg);color:var(--text);overflow-x:clip;
     font-family:'Inter',-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
     letter-spacing:-.1px}
   body{padding:calc(14px + var(--safe-top)) calc(14px + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(14px + var(--safe-left))}
@@ -214,7 +214,7 @@
     .sheet{max-width:460px;border-radius:20px;max-height:86vh}
     /* Операции: master-detail (список + панель деталей справа) */
     #v-ops .ops-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
-    #v-ops .ops-detail{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto}
+    #v-ops .ops-detail{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 36px);overflow:auto}
     #v-ops .ops-detail-empty{color:var(--muted);text-align:center;padding:48px 16px;font-size:14px;background:var(--card);border-radius:18px}
     #v-ops .ops-detail .dcard{background:var(--card);border-radius:18px;padding:16px}
     #v-ops .row.opsel{outline:2px solid var(--ink);outline-offset:-2px}
@@ -1937,7 +1937,10 @@ async function loadOps(reset){
 function txRow(x){
   const key=x.category||x.merchant||'op', col=color(key);
   const isRefund=x.type==='expense'&&x.amount<0;
-  const inn=x.type==='income'||isRefund;
+  // долговой перевод несёт знак в base_rub: взял в долг / вернули мне = приход (+),
+  // дал в долг / погасил = расход (−). Обычные переводы без долга — как раньше (−).
+  const debtIn=x.type==='transfer'&&x.debt_id&&(x.base_rub||0)>0;
+  const inn=x.type==='income'||isRefund||debtIn;
   const ic=isRefund?'swap':x.type==='income'?'wallet':x.type==='transfer'?'swap':catIcon(x.category||x.merchant);
   const tags=[x.category?x.category:null, isRefund?'<span style="color:var(--green);font-weight:700">↩ возврат</span>':null, x.review?'<span style="color:#ff8a3d;font-weight:700">разобрать</span>':null].filter(Boolean).join(' · ');
   const sub=new Date(x.dt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+(tags?' · '+tags:'');

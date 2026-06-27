@@ -27,6 +27,8 @@ def needs_review(t) -> bool:
       жене, в долг — пока не классифицированы)."""
     if t.status == "needs_review":
         return True
+    if getattr(t, "debt_id", None):     # привязана к долгу — операция уже разобрана
+        return False
     if t.type in ("expense", "income") and not t.category_id:
         return True
     if t.type == "transfer" and not t.counterparty_account_id:
@@ -36,10 +38,11 @@ def needs_review(t) -> bool:
 
 _REVIEW_FILTER = or_(
     models.Transaction.status == "needs_review",
-    and_(models.Transaction.type.in_(("expense", "income")),
-         models.Transaction.category_id.is_(None)),
-    and_(models.Transaction.type == "transfer",
-         models.Transaction.counterparty_account_id.is_(None)),
+    and_(models.Transaction.debt_id.is_(None),
+         or_(and_(models.Transaction.type.in_(("expense", "income")),
+                  models.Transaction.category_id.is_(None)),
+             and_(models.Transaction.type == "transfer",
+                  models.Transaction.counterparty_account_id.is_(None)))),
 )
 
 
