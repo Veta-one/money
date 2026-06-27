@@ -205,7 +205,7 @@ SPEC.md                # исходная спецификация
 | GET/POST `/api/recurring` · POST `/api/recurring/{id}` · DELETE · `/dismiss` | регулярные расходы: список/создать/править/удалить/скрыть |
 | GET/POST `/api/income` · POST `/api/income/{id}` · DELETE | источники дохода: свод (план-факт, разбивка, нуджи) + CRUD |
 | GET `/api/income/raises` · POST `/api/income/{id}/raise` · DELETE `/api/income/raise/{id}` | калькулятор индексации: свод по источникам + запись/удаление повышений |
-| GET/POST `/api/debts` · POST `/api/debts/{id}/pay` · `/close` · DELETE | долги: список/создать/частичное погашение/закрыть/удалить |
+| GET/POST `/api/debts` · POST `/api/debts/{id}/pay` · `/close` · DELETE | долги: список/создать/частичное погашение/закрыть/удалить. GET также отдаёт `activity` — суммы взял/погасил/дал/вернули-мне за нед/мес/год + последние долговые операции |
 | POST | `/webhook` | приём Telegram (проверка `WEBHOOK_SECRET`) |
 
 Бот-команды: `/start`, `/report`, `/week`, `/month`, `/backup`.
